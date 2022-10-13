@@ -11,6 +11,25 @@ import (
 	"golang.org/x/crypto/ed25519"
 )
 
+const (
+	EmbeddedReservedUntil = 15
+	MaxNumEmbeddedShort   = 64
+	FirstEmbeddedLongFun  = MaxNumEmbeddedShort
+	MaxNumEmbeddedLong    = 256
+	FirstExtendedFun      = FirstEmbeddedLongFun + MaxNumEmbeddedLong
+	MaxFunCode            = 1023
+	MaxNumExtended        = MaxFunCode - FirstExtendedFun
+
+	MaxParameters = 15
+)
+
+type Expression struct {
+	Args     []*Expression
+	EvalFunc EvalFunction
+}
+
+type EvalFunction func(glb *CallParams) []byte
+
 type funDescriptor struct {
 	sym               string
 	funCode           uint16
@@ -22,6 +41,14 @@ type funDescriptor struct {
 type libraryData struct {
 	funByName    map[string]*funDescriptor
 	funByFunCode map[uint16]*funDescriptor
+}
+
+type funInfo struct {
+	Sym        string
+	FunCode    uint16
+	IsEmbedded bool
+	IsShort    bool
+	NumParams  int
 }
 
 var (
@@ -157,7 +184,7 @@ func makeEvalFunForExpressions(expr *Expression) EvalFunction {
 			p := NewCallParams(par.ctx, par.args[i].Args)
 			varScope[i] = NewCall(par.args[i].EvalFunc, p)
 		}
-		nextCtx := NewEvalContext(varScope, par.ctx.glb, par.ctx.prev)
+		nextCtx := NewEvalContext(varScope, par.ctx.glb)
 		nextParams := NewCallParams(nextCtx, expr.Args)
 		call := NewCall(expr.EvalFunc, nextParams)
 		return call.Eval()
@@ -218,7 +245,7 @@ func mustUniqueName(sym string) {
 }
 
 func ExtendMany(source string) error {
-	parsed, err := ParseFunctions(source)
+	parsed, err := parseFunctions(source)
 	if err != nil {
 		return err
 	}

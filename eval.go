@@ -10,7 +10,6 @@ import (
 type EvalContext struct {
 	glb      interface{}
 	varScope []*Call
-	prev     *EvalContext
 }
 
 // CallParams is a structure through which the function accesses its evaluation context and call arguments
@@ -19,16 +18,16 @@ type CallParams struct {
 	args []*Expression
 }
 
+// Call is EvalFunction with params
 type Call struct {
 	f      EvalFunction
 	params *CallParams
 }
 
-func NewEvalContext(varScope []*Call, glb interface{}, prev *EvalContext) *EvalContext {
+func NewEvalContext(varScope []*Call, glb interface{}) *EvalContext {
 	return &EvalContext{
 		varScope: varScope,
 		glb:      glb,
-		prev:     prev,
 	}
 }
 
@@ -46,18 +45,22 @@ func NewCall(f EvalFunction, params *CallParams) *Call {
 	}
 }
 
+// Eval evaluates the expression by calling it eval function with the parameter
 func (c *Call) Eval() []byte {
 	return c.f(c.params)
 }
 
+// DataContext accesses the data context inside the embedded function
 func (ctx *CallParams) DataContext() interface{} {
 	return ctx.ctx.glb
 }
 
+// Arity return actual number of call parameters
 func (ctx *CallParams) Arity() byte {
 	return byte(len(ctx.args))
 }
 
+// Arg evaluates argument if the call inside embedded function
 func (ctx *CallParams) Arg(n byte) []byte {
 	if traceYN {
 		fmt.Printf("Arg(%d) -- IN\n", n)
@@ -90,17 +93,20 @@ func (ctx *EvalContext) DataContext() interface{} {
 }
 
 func evalExpression(glb interface{}, f *Expression, varScope []*Call) []byte {
-	ctx := NewEvalContext(varScope, glb, nil)
+	ctx := NewEvalContext(varScope, glb)
 	par := NewCallParams(ctx, f.Args)
 	call := NewCall(f.EvalFunc, par)
 	return call.Eval()
 }
 
+// EvalExpression evaluates expression, in the context of any data context and given values of parameters
 func EvalExpression(glb interface{}, f *Expression, args ...[]byte) []byte {
 	argsForData := dataCalls(args...)
 	return evalExpression(glb, f, argsForData)
 }
 
+// EvalFromSource compiles source of the expression and evaluates it
+// Never panics
 func EvalFromSource(glb interface{}, source string, args ...[]byte) ([]byte, error) {
 	var ret []byte
 	err := easyutxo.CatchPanicOrError(func() error {
@@ -120,6 +126,7 @@ func EvalFromSource(glb interface{}, source string, args ...[]byte) ([]byte, err
 	return ret, nil
 }
 
+// MustEvalFromSource evaluates the source of the expression and panics on any error
 func MustEvalFromSource(glb interface{}, source string, args ...[]byte) []byte {
 	ret, err := EvalFromSource(glb, source, args...)
 	if err != nil {
@@ -128,6 +135,7 @@ func MustEvalFromSource(glb interface{}, source string, args ...[]byte) []byte {
 	return ret
 }
 
+// MustEvalFromBinary interprets expression in the binary form. Will panic on any compile and runtime error
 func MustEvalFromBinary(glb interface{}, code []byte, args ...[]byte) []byte {
 	expr, err := ExpressionFromBinary(code)
 	if err != nil {
@@ -136,6 +144,7 @@ func MustEvalFromBinary(glb interface{}, code []byte, args ...[]byte) []byte {
 	return EvalExpression(glb, expr, args...)
 }
 
+// EvalFromBinary evaluates expression, never panics but return an error
 func EvalFromBinary(glb interface{}, code []byte, args ...[]byte) ([]byte, error) {
 	var ret []byte
 	err := easyutxo.CatchPanicOrError(func() error {

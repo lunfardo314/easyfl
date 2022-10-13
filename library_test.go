@@ -17,12 +17,12 @@ const formula1 = "func unlockBlock: concat(concat(0x0000, slice(0x01020304050607
 
 func TestCompile(t *testing.T) {
 	t.Run("1", func(t *testing.T) {
-		ret, err := ParseFunctions(formula1)
+		ret, err := parseFunctions(formula1)
 		require.NoError(t, err)
 		require.NotNil(t, ret)
 	})
 	t.Run("3", func(t *testing.T) {
-		ret, err := ParseFunctions(formula1)
+		ret, err := parseFunctions(formula1)
 		require.NoError(t, err)
 		require.EqualValues(t, 1, len(ret))
 
@@ -32,7 +32,7 @@ func TestCompile(t *testing.T) {
 		t.Logf("code len: %d", len(code))
 	})
 	t.Run("4", func(t *testing.T) {
-		parsed, err := ParseFunctions(formula1)
+		parsed, err := parseFunctions(formula1)
 		require.NoError(t, err)
 		require.EqualValues(t, 1, len(parsed))
 

@@ -13,13 +13,19 @@ import (
 	"unicode"
 )
 
+type funParsed struct {
+	Sym        string
+	SourceCode string
+}
+
+// parsedExpression interim representation of the parsed expression
 type parsedExpression struct {
 	sym    string
 	params []*parsedExpression
 }
 
-// ParseFunctions parses many function definitions
-func ParseFunctions(s string) ([]*FunParsed, error) {
+// parseFunctions parses many function definitions
+func parseFunctions(s string) ([]*funParsed, error) {
 	lines := splitLinesStripComments(s)
 	ret, err := parseDefs(lines)
 	if err != nil {
@@ -38,9 +44,9 @@ func splitLinesStripComments(s string) []string {
 	return lines
 }
 
-func parseDefs(lines []string) ([]*FunParsed, error) {
-	ret := make([]*FunParsed, 0)
-	var current *FunParsed
+func parseDefs(lines []string) ([]*funParsed, error) {
+	ret := make([]*funParsed, 0)
+	var current *funParsed
 	for lineno, line := range lines {
 		if strings.HasPrefix(line, "func ") {
 			if current != nil {
@@ -51,7 +57,7 @@ func parseDefs(lines []string) ([]*FunParsed, error) {
 			if !found {
 				return nil, fmt.Errorf("':' expectected @ line %d", lineno)
 			}
-			current = &FunParsed{
+			current = &funParsed{
 				Sym:        strings.TrimSpace(sym),
 				SourceCode: body,
 			}
@@ -177,6 +183,7 @@ const (
 	Uint16LongCallCodeMask     = ^(uint16(FirstByteDataMask|FirstByteLongCallMask|FirstByteLongCallArityMask) << 8)
 )
 
+// binaryFromParsedExpression takes parsed expression and generates binary code of it
 func (f *parsedExpression) binaryFromParsedExpression(w io.Writer) (int, error) {
 	numArgs := 0
 	if len(f.params) == 0 {
@@ -322,6 +329,7 @@ func (f *parsedExpression) binaryFromParsedExpression(w io.Writer) (int, error) 
 	return numArgs, nil
 }
 
+// ExpressionSourceToBinary compile expression from source form into binary for embedding into transaction
 func ExpressionSourceToBinary(formulaSource string) ([]byte, int, error) {
 	f, err := parseExpression(formulaSource)
 	if err != nil {
@@ -336,6 +344,7 @@ func ExpressionSourceToBinary(formulaSource string) ([]byte, int, error) {
 	return buf.Bytes(), numArgs, nil
 }
 
+// ExpressionFromBinary creates evaluation form of the expression
 func ExpressionFromBinary(code []byte) (*Expression, error) {
 	ret, remaining, err := expressionFromBinary(code)
 	if err != nil {
@@ -414,6 +423,7 @@ func expressionFromBinary(code []byte) (*Expression, []byte, error) {
 	return ret, code, nil
 }
 
+// CompileExpression compiles from sources directly into the evaluation form
 func CompileExpression(source string) (*Expression, int, []byte, error) {
 	src := strings.Join(splitLinesStripComments(source), "")
 	code, numParams, err := ExpressionSourceToBinary(stripSpaces(src))
