@@ -6,12 +6,14 @@ import (
 	"github.com/lunfardo314/easyutxo"
 )
 
+// EvalContext is the structure through which the EasyFL script accesses data structure it is validating
 type EvalContext struct {
 	glb      interface{}
 	varScope []*Call
 	prev     *EvalContext
 }
 
+// CallParams is a structure through which the function accesses its evaluation context and call arguments
 type CallParams struct {
 	ctx  *EvalContext
 	args []*Expression
