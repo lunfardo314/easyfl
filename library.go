@@ -487,11 +487,14 @@ func evalLessThan(par *CallParams) []byte {
 		panic("evalLessThan: operands must be equal length")
 	}
 	for i := range a0 {
-		if a0[i] < a1[i] {
+		switch {
+		case a0[i] < a1[i]:
 			return []byte{0xff} // true
+		case a0[i] > a1[i]:
+			return nil //false
 		}
 	}
-	return nil
+	return nil // equal -> false
 }
 
 func evalValidSigED25519(ctx *CallParams) []byte {
