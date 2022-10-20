@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"reflect"
 
 	"golang.org/x/crypto/blake2b"
 	"golang.org/x/crypto/ed25519"
@@ -298,49 +299,81 @@ func functionByCode(funCode uint16) (EvalFunction, int, error) {
 	return libData.evalFun, libData.requiredNumParams, nil
 }
 
+func isNil(p interface{}) bool {
+	return p == nil || (reflect.ValueOf(p).Kind() == reflect.Ptr && reflect.ValueOf(p).IsNil())
+}
+
+func Trace(par *CallParams, format string, args ...interface{}) {
+	if isNil(par.ctx.glb) || !par.ctx.glb.Trace() {
+		return
+	}
+	par.ctx.glb.PutTrace(fmt.Sprintf(format, args...))
+}
+
+func TracePanic(par *CallParams, format string, args ...interface{}) {
+	Trace(par, "panic: "+format, args...)
+	panic(fmt.Sprintf("panic: "+format, args...))
+}
+
 // slices first argument 'from' 'to' inclusive 'to'
 func evalSlice(par *CallParams) []byte {
 	data := par.Arg(0)
 	from := par.Arg(1)
 	to := par.Arg(2)
 	if from[0] > to[0] {
-		panic("wrong slice bounds")
+		TracePanic(par, "evalSlice:: data: %v, from: %v, to: %v -- wrong slice bounds. ", data, from, to)
 	}
 	upper := int(to[0]) + 1
 	if upper > len(data) {
-		panic("slice out of bounds")
+		TracePanic(par, "evalSlice:: data: %v, from: %v, to: %v -- slice out of bounds. ", data, from, to)
 	}
-	return data[from[0]:upper]
+	ret := data[from[0]:upper]
+	Trace(par, "evalSlice:: data: %v, from: %v, to: %v -> %v", data, from, to, ret)
+	return ret
 }
 
 func evalTail(par *CallParams) []byte {
 	data := par.Arg(0)
 	from := par.Arg(1)
-	return data[from[0]:]
+	if len(from) != 1 || int(from[0]) >= len(data) {
+		TracePanic(par, "evalTail:: data: %v, from: %v -- index out of bounds. ", data, from)
+	}
+	ret := data[from[0]:]
+	Trace(par, "evalTail:: data: %v, from: %v -> %v", data, from, ret)
+	return ret
 }
 
 func evalEqual(par *CallParams) []byte {
-	if bytes.Equal(par.Arg(0), par.Arg(1)) {
-		return []byte{0xff}
+	var ret []byte
+	p0 := par.Arg(0)
+	p1 := par.Arg(1)
+	if bytes.Equal(p0, p1) {
+		ret = []byte{0xff}
 	}
+	Trace(par, "evalEqual:: %v, %v -> %v", p0, p1, ret)
 	return nil
 }
 
 func evalLen8(par *CallParams) []byte {
-	sz := len(par.Arg(0))
+	arg := par.Arg(0)
+	sz := len(arg)
 	if sz > math.MaxUint8 {
-		panic("len8: size of the data > 255")
+		TracePanic(par, "len8:: size of the data > 255: %v", arg)
 	}
-	return []byte{byte(sz)}
+	ret := []byte{byte(sz)}
+	Trace(par, "len8:: %v -> %v", arg, ret)
+	return ret
 }
 
 func evalLen16(par *CallParams) []byte {
 	data := par.Arg(0)
 	if len(data) > math.MaxUint16 {
+		TracePanic(par, "len16:: size of the data > uint16: %v", data)
 		panic("len16: size of the data > uint16")
 	}
 	var ret [2]byte
 	binary.BigEndian.PutUint16(ret[:], uint16(len(data)))
+	Trace(par, "len16:: %v -> %v", data, ret[:])
 	return ret[:]
 }
 

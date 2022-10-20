@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lunfardo314/easyutxo"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/blake2b"
 )
@@ -170,7 +169,7 @@ func TestEval(t *testing.T) {
 	})
 	t.Run("22", func(t *testing.T) {
 		_, err := EvalFromSource(nil, "sum8($0, $1)", []byte{160}, []byte{160})
-		easyutxo.RequireErrorWith(t, err, "arithmetic overflow")
+		requireErrorWith(t, err, "arithmetic overflow")
 	})
 	var blake2bInvokedNum int
 	EmbedLong("blake2b-test", 1, func(par *CallParams) []byte {
@@ -233,9 +232,9 @@ func TestExtendLib(t *testing.T) {
 
 	d := func(i byte) []byte { return []byte{i} }
 	compl := func(d0, d1, d2 []byte) []byte {
-		c0 := easyutxo.Concat(d0, d1)
-		c1 := easyutxo.Concat(d0, d2)
-		c3 := easyutxo.Concat(c0, c1)
+		c0 := concat(d0, d1)
+		c1 := concat(d0, d2)
+		c3 := concat(c0, c1)
 		return c3
 	}
 	t.Run("ext-4", func(t *testing.T) {
@@ -370,7 +369,7 @@ func TestSigED25519(t *testing.T) {
 	})
 	t.Run("validSignatureED25519-wrong-pubkey", func(t *testing.T) {
 		signature := ed25519.Sign(privKey, []byte(msg))
-		pk := easyutxo.Concat([]byte(pubKey))
+		pk := concat([]byte(pubKey))
 		pk[3]++
 		res, err := EvalFromSource(nil, "validSignatureED25519($0,$1,$2)", []byte(msg), signature, pk)
 		require.NoError(t, err)
@@ -379,6 +378,80 @@ func TestSigED25519(t *testing.T) {
 	})
 	t.Run("validSignatureED25519-wrong-pubkey", func(t *testing.T) {
 		_, err := EvalFromSource(nil, "validSignatureED25519($0,$1,$2)", nil, nil, nil)
-		easyutxo.RequireErrorWith(t, err, "bad public key length")
+		requireErrorWith(t, err, "bad public key length")
+	})
+}
+
+type trace struct {
+	log []string
+}
+
+func newTrace() *trace {
+	return &trace{log: make([]string, 0)}
+}
+
+func (t *trace) Data() interface{} {
+	panic("implement me")
+}
+
+func (t *trace) Trace() bool {
+	return true
+}
+
+func (t *trace) PutTrace(s string) {
+	t.log = append(t.log, s)
+}
+
+func (t *trace) print() {
+	fmt.Printf("--- trace begin ---\n")
+	for i, s := range t.log {
+		fmt.Printf("%d: %s\n", i, s)
+	}
+	fmt.Printf("--- trace end ---\n")
+}
+
+func TestTracing(t *testing.T) {
+	t.Run("no panic 0", func(t *testing.T) {
+		tr := newTrace()
+		ret, err := EvalFromSource(tr, "slice(concat(concat(1,2),concat(3,4,5)),2,3)")
+		require.NoError(t, err)
+		require.EqualValues(t, []byte{3, 4}, ret)
+		tr.print()
+	})
+	t.Run("with panic 1", func(t *testing.T) {
+		tr := newTrace()
+		_, err := EvalFromSource(tr, "slice(0x0102,2,3)")
+		require.Error(t, err)
+		tr.print()
+	})
+	t.Run("no panic 2", func(t *testing.T) {
+		tr := newTrace()
+		_, err := EvalFromSource(tr, "slice(tail(0x0102030405,2),1,2)")
+		require.NoError(t, err)
+		tr.print()
+	})
+	t.Run("with panic 3", func(t *testing.T) {
+		tr := newTrace()
+		_, err := EvalFromSource(tr, "slice(tail(0x0102030405,2),1,5)")
+		require.Error(t, err)
+		tr.print()
+	})
+	t.Run("no panic 4", func(t *testing.T) {
+		tr := newTrace()
+		_, err := EvalFromSource(tr, "equal(slice(tail(0x0102030405,2),1,2), slice(tail(0x0102030405,2),2,2))")
+		require.NoError(t, err)
+		tr.print()
+	})
+	t.Run("no panic 5", func(t *testing.T) {
+		tr := newTrace()
+		_, err := EvalFromSource(tr, "equal(len8(slice(tail(0x0102030405,2),1,2)), 2)")
+		require.NoError(t, err)
+		tr.print()
+	})
+	t.Run("no panic 6", func(t *testing.T) {
+		tr := newTrace()
+		_, err := EvalFromSource(tr, "equal(len16(slice(tail(0x0102030405,2),1,2)), u16/2)")
+		require.NoError(t, err)
+		tr.print()
 	})
 }
