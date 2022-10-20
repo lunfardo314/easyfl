@@ -8,8 +8,8 @@ import (
 // which offers some tracing options
 type GlobalData interface {
 	Data() interface{} // return data being evaluated. It is interpreted by the transaction host
-	Trace() bool       // should return if the caller wants tracing of evaluation
-	PutTrace(string)   // hook for tracing messages. Called only if Trace() =  true
+	Trace() bool       // should return true if tracing enabled
+	PutTrace(string)   // hook for tracing messages. Called only if enabled
 }
 
 // EvalContext is the structure through which the EasyFL script accesses data structure it is validating
@@ -57,21 +57,21 @@ func (c *Call) Eval() []byte {
 }
 
 // DataContext accesses the data context inside the embedded function
-func (ctx *CallParams) DataContext() interface{} {
-	return ctx.ctx.glb
+func (p *CallParams) DataContext() interface{} {
+	return p.ctx.glb
 }
 
 // Arity return actual number of call parameters
-func (ctx *CallParams) Arity() byte {
-	return byte(len(ctx.args))
+func (p *CallParams) Arity() byte {
+	return byte(len(p.args))
 }
 
 // Arg evaluates argument if the call inside embedded function
-func (ctx *CallParams) Arg(n byte) []byte {
+func (p *CallParams) Arg(n byte) []byte {
 	if traceYN {
 		fmt.Printf("Arg(%d) -- IN\n", n)
 	}
-	call := NewCall(ctx.args[n].EvalFunc, NewCallParams(ctx.ctx, ctx.args[n].Args))
+	call := NewCall(p.args[n].EvalFunc, NewCallParams(p.ctx, p.args[n].Args))
 	ret := call.Eval()
 
 	if traceYN {
@@ -80,13 +80,25 @@ func (ctx *CallParams) Arg(n byte) []byte {
 	return ret
 }
 
+func (p *CallParams) Trace(format string, args ...interface{}) {
+	if isNil(p.ctx.glb) || !p.ctx.glb.Trace() {
+		return
+	}
+	p.ctx.glb.PutTrace(fmt.Sprintf(format, args...))
+}
+
+func (p *CallParams) TracePanic(format string, args ...interface{}) {
+	p.Trace("panic: "+format, args...)
+	panic(fmt.Sprintf("panic: "+format, args...))
+}
+
 // evalParam used by $0-$15 functions
-func (ctx *CallParams) evalParam(n byte) []byte {
+func (p *CallParams) evalParam(n byte) []byte {
 	if traceYN {
 		fmt.Printf("evalParam $%d -- IN\n", n)
 	}
 
-	ret := ctx.ctx.varScope[n].Eval()
+	ret := p.ctx.varScope[n].Eval()
 
 	if traceYN {
 		fmt.Printf("evalParam $%d -- OUT, ret: %v\n", n, ret)
@@ -95,7 +107,7 @@ func (ctx *CallParams) evalParam(n byte) []byte {
 }
 
 func (ctx *EvalContext) DataContext() interface{} {
-	return ctx.glb
+	return ctx.glb.Data()
 }
 
 func evalExpression(glb GlobalData, f *Expression, varScope []*Call) []byte {
@@ -107,7 +119,7 @@ func evalExpression(glb GlobalData, f *Expression, varScope []*Call) []byte {
 
 // EvalExpression evaluates expression, in the context of any data context and given values of parameters
 func EvalExpression(glb GlobalData, f *Expression, args ...[]byte) []byte {
-	argsForData := dataCalls(args...)
+	argsForData := dataCalls(glb, args...)
 	return evalExpression(glb, f, argsForData)
 }
 

@@ -439,18 +439,16 @@ func CompileExpression(source string) (*Expression, int, []byte, error) {
 
 func dataFunction(data []byte) EvalFunction {
 	d := data
-	return func(_ *CallParams) []byte {
-		if traceYN {
-			fmt.Printf("return data: %v\n", d)
-		}
+	return func(par *CallParams) []byte {
+		par.Trace("-> %v", d)
 		return data
 	}
 }
 
-func dataCalls(data ...[]byte) []*Call {
+func dataCalls(glb GlobalData, data ...[]byte) []*Call {
 	ret := make([]*Call, len(data))
 	for i, d := range data {
-		ret[i] = NewCall(dataFunction(d), nil)
+		ret[i] = NewCall(dataFunction(d), NewCallParams(NewEvalContext(nil, glb), nil))
 	}
 	return ret
 }
