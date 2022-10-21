@@ -2,13 +2,14 @@ package easyfl
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-func concat(data ...interface{}) []byte {
+func Concat(data ...interface{}) []byte {
 	var buf bytes.Buffer
 	for _, d := range data {
 		switch d := d.(type) {
@@ -19,13 +20,13 @@ func concat(data ...interface{}) []byte {
 		case interface{ Bytes() []byte }:
 			buf.Write(d.Bytes())
 		default:
-			panic("must be byte or []byte")
+			panic("must be 'byte', '[]byte' or 'interface{ Bytes() []byte }'")
 		}
 	}
 	return buf.Bytes()
 }
 
-func catchPanicOrError(f func() error) error {
+func CatchPanicOrError(f func() error) error {
 	var err error
 	func() {
 		defer func() {
@@ -43,21 +44,29 @@ func catchPanicOrError(f func() error) error {
 	return err
 }
 
-func requireErrorWith(t *testing.T, err error, s string) {
+func RequireErrorWith(t *testing.T, err error, s string) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), s)
 }
 
-func requirePanicOrErrorWith(t *testing.T, f func() error, s string) {
-	requireErrorWith(t, catchPanicOrError(f), s)
+func RequirePanicOrErrorWith(t *testing.T, f func() error, s string) {
+	RequireErrorWith(t, CatchPanicOrError(f), s)
 }
 
-func assert(cond bool, format string, args ...interface{}) {
+func Assert(cond bool, format string, args ...interface{}) {
 	if !cond {
 		panic(fmt.Sprintf("assertion failed:: "+format, args...))
 	}
 }
 
-func assertNoError(err error) {
-	assert(err == nil, "error: %v", err)
+func AssertNoError(err error) {
+	Assert(err == nil, "error: %v", err)
+}
+
+func Hex(data []byte) string {
+	return fmt.Sprintf("%dx%s", len(data), hex.EncodeToString(data))
+}
+
+func Fmt(data []byte) string {
+	return Hex(data)
 }

@@ -127,7 +127,7 @@ func EvalExpression(glb GlobalData, f *Expression, args ...[]byte) []byte {
 // Never panics
 func EvalFromSource(glb GlobalData, source string, args ...[]byte) ([]byte, error) {
 	var ret []byte
-	err := catchPanicOrError(func() error {
+	err := CatchPanicOrError(func() error {
 		f, requiredNumArgs, _, err := CompileExpression(source)
 		if err != nil {
 			return err
@@ -165,7 +165,7 @@ func MustEvalFromBinary(glb GlobalData, code []byte, args ...[]byte) []byte {
 // EvalFromBinary evaluates expression, never panics but return an error
 func EvalFromBinary(glb GlobalData, code []byte, args ...[]byte) ([]byte, error) {
 	var ret []byte
-	err := catchPanicOrError(func() error {
+	err := CatchPanicOrError(func() error {
 		ret = MustEvalFromBinary(glb, code, args...)
 		return nil
 	})

@@ -3,7 +3,6 @@ package easyfl
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"math"
@@ -79,8 +78,8 @@ func init() {
 	EmbedShort("if", 3, evalIf)
 	EmbedShort("isZero", 1, evalIsZero)
 	// stateless varargs
-	// 'concat' concatenates variable number of arguments. concat() is empty byte array
-	EmbedLong("concat", -1, evalConcat)
+	// 'Concat' concatenates variable number of arguments. Concat() is empty byte array
+	EmbedLong("Concat", -1, evalConcat)
 	EmbedLong("and", -1, evalAnd)
 	EmbedLong("or", -1, evalOr)
 
@@ -312,14 +311,14 @@ func evalSlice(par *CallParams) []byte {
 	from := par.Arg(1)
 	to := par.Arg(2)
 	if from[0] > to[0] {
-		par.TracePanic("slice:: data: %v, from: %v, to: %v -- wrong slice bounds. ", data, from, to)
+		par.TracePanic("slice:: data: %s, from: %s, to: %s -- wrong slice bounds. ", Fmt(data), Fmt(from), Fmt(to))
 	}
 	upper := int(to[0]) + 1
 	if upper > len(data) {
-		par.TracePanic("slice:: data: %v, from: %v, to: %v -- slice out of bounds. ", data, from, to)
+		par.TracePanic("slice:: data: %s, from: %s, to: %s -- slice out of bounds. ", Fmt(data), Fmt(from), Fmt(to))
 	}
 	ret := data[from[0]:upper]
-	par.Trace("slice:: data: %v, from: %v, to: %v -> %v", data, from, to, ret)
+	par.Trace("slice:: data: %s, from: %s, to: %s -> %s", Fmt(data), Fmt(from), Fmt(to), Fmt(ret))
 	return ret
 }
 
@@ -327,10 +326,10 @@ func evalTail(par *CallParams) []byte {
 	data := par.Arg(0)
 	from := par.Arg(1)
 	if len(from) != 1 || int(from[0]) >= len(data) {
-		par.TracePanic("tail:: data: %v, from: %v -- index out of bounds. ", data, from)
+		par.TracePanic("tail:: data: %s, from: %s -- index out of bounds. ", Fmt(data), Fmt(from))
 	}
 	ret := data[from[0]:]
-	par.Trace("tail:: data: %v, from: %v -> %v", data, from, ret)
+	par.Trace("tail:: data: %s, from: %s -> %s", Fmt(data), Fmt(from), Fmt(ret))
 	return ret
 }
 
@@ -341,7 +340,7 @@ func evalEqual(par *CallParams) []byte {
 	if bytes.Equal(p0, p1) {
 		ret = []byte{0xff}
 	}
-	par.Trace("equal:: %v, %v -> %v", p0, p1, ret)
+	par.Trace("equal:: %s, %s -> %s", Fmt(p0), Fmt(p1), Fmt(ret))
 	return ret
 }
 
@@ -349,22 +348,21 @@ func evalLen8(par *CallParams) []byte {
 	arg := par.Arg(0)
 	sz := len(arg)
 	if sz > math.MaxUint8 {
-		par.TracePanic("len8:: size of the data > 255: %v", arg)
+		par.TracePanic("len8:: size of the data > 255: %s", Fmt(arg))
 	}
 	ret := []byte{byte(sz)}
-	par.Trace("len8:: %v -> %v", arg, ret)
+	par.Trace("len8:: %s -> %s", Fmt(arg), Fmt(ret))
 	return ret
 }
 
 func evalLen16(par *CallParams) []byte {
 	data := par.Arg(0)
 	if len(data) > math.MaxUint16 {
-		par.TracePanic("len16:: size of the data > uint16: %v", data)
-		panic("len16:: size of the data > uint16")
+		par.TracePanic("len16:: size of the data > uint16: %s", Fmt(data))
 	}
 	var ret [2]byte
 	binary.BigEndian.PutUint16(ret[:], uint16(len(data)))
-	par.Trace("len16:: %v -> %v", data, ret[:])
+	par.Trace("len16:: %s -> %s", Fmt(data), Fmt(ret[:]))
 	return ret[:]
 }
 
@@ -372,11 +370,11 @@ func evalIf(par *CallParams) []byte {
 	cond := par.Arg(0)
 	if len(cond) != 0 {
 		yes := par.Arg(1)
-		par.Trace("if:: %v -> %v", cond, yes)
+		par.Trace("if:: %s -> %s", Fmt(cond), Fmt(yes))
 		return yes
 	}
 	no := par.Arg(2)
-	par.Trace("if:: %v -> %v", cond, no)
+	par.Trace("if:: %s -> %s", Fmt(cond), Fmt(no))
 	return no
 }
 
@@ -384,21 +382,21 @@ func evalIsZero(par *CallParams) []byte {
 	arg := par.Arg(0)
 	for _, b := range arg {
 		if b != 0 {
-			par.Trace("isZero:: %v -> nil", arg)
+			par.Trace("isZero:: %s -> nil", Fmt(arg))
 			return nil
 		}
 	}
-	par.Trace("isZero:: %v -> true", arg)
+	par.Trace("isZero:: %s -> true", Fmt(arg))
 	return []byte{0xff}
 }
 
 func evalNot(par *CallParams) []byte {
 	arg := par.Arg(0)
 	if len(arg) == 0 {
-		par.Trace("not:: %v -> true", arg)
+		par.Trace("not:: %s -> true", Fmt(arg))
 		return []byte{0xff}
 	}
-	par.Trace("not:: %v -> nil", arg)
+	par.Trace("not:: %s -> nil", Fmt(arg))
 	return nil
 }
 
@@ -408,7 +406,7 @@ func evalConcat(par *CallParams) []byte {
 		buf.Write(par.Arg(i))
 	}
 	ret := buf.Bytes()
-	par.Trace("concat:: %d params -> %v", par.Arity(), ret)
+	par.Trace("Concat:: %d params -> %s", par.Arity(), Fmt(ret))
 	return ret
 }
 
@@ -455,10 +453,10 @@ func evalMustSum8(par *CallParams) []byte {
 	a0, a1 := mustArithmArgs(par, 1, "sum8")
 	sum := int(a0[0]) + int(a1[0])
 	if sum > 255 {
-		par.TracePanic("_mustSum8:: %v, %v -> arithmetic overflow", a0, a1)
+		par.TracePanic("_mustSum8:: %s, %s -> arithmetic overflow", Fmt(a0), Fmt(a1))
 	}
 	ret := []byte{byte(sum)}
-	par.Trace("sum8:: %v, %v -> %v", a0, a1, ret)
+	par.Trace("sum8:: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
 	return ret
 }
 
@@ -467,7 +465,7 @@ func evalSum16_32(par *CallParams) []byte {
 	sum := uint32(binary.BigEndian.Uint16(a0)) + uint32(binary.BigEndian.Uint16(a1))
 	ret := make([]byte, 4)
 	binary.BigEndian.PutUint32(ret, sum)
-	par.Trace("sum16_32:: %v, %v -> %v", a0, a1, ret)
+	par.Trace("sum16_32:: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
 	return ret
 }
 
@@ -475,11 +473,11 @@ func evalMustSum16(par *CallParams) []byte {
 	a0, a1 := mustArithmArgs(par, 2, "sum_16")
 	sum := uint32(binary.BigEndian.Uint16(a0)) + uint32(binary.BigEndian.Uint16(a1))
 	if sum > math.MaxUint16 {
-		par.TracePanic("_mustSum16: %v, %v -> arithmetic overflow", a0, a1)
+		par.TracePanic("_mustSum16: %s, %s -> arithmetic overflow", Fmt(a0), Fmt(a1))
 	}
 	ret := make([]byte, 2)
 	binary.BigEndian.PutUint16(ret, uint16(sum))
-	par.Trace("sum16:: %v, %v -> %v", a0, a1, ret)
+	par.Trace("sum16:: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
 	return ret
 }
 
@@ -488,7 +486,7 @@ func evalSum32_64(par *CallParams) []byte {
 	sum := uint64(binary.BigEndian.Uint32(a0)) + uint64(binary.BigEndian.Uint32(a1))
 	ret := make([]byte, 8)
 	binary.BigEndian.PutUint64(ret, sum)
-	par.Trace("sum32_64:: %v, %v -> %v", a0, a1, ret)
+	par.Trace("sum32_64:: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
 	return ret
 }
 
@@ -496,11 +494,11 @@ func evalMustSum32(par *CallParams) []byte {
 	a0, a1 := mustArithmArgs(par, 4, "sum32")
 	sum := uint64(binary.BigEndian.Uint32(a0)) + uint64(binary.BigEndian.Uint32(a1))
 	if sum > math.MaxUint32 {
-		par.TracePanic("_mustSum32:: %v, %v -> arithmetic overflow", a0, a1)
+		par.TracePanic("_mustSum32:: %s, %s -> arithmetic overflow", Fmt(a0), Fmt(a1))
 	}
 	ret := make([]byte, 4)
 	binary.BigEndian.PutUint32(ret, uint32(sum))
-	par.Trace("sum32:: %v, %v -> %v", a0, a1, ret)
+	par.Trace("sum32:: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
 	return ret
 }
 
@@ -513,17 +511,17 @@ func evalMustSum64(par *CallParams) []byte {
 	}
 	ret := make([]byte, 8)
 	binary.BigEndian.PutUint64(ret, s0+s1)
-	par.Trace("sum64:: %v, %v -> %v", a0, a1, ret)
+	par.Trace("sum64:: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
 	return ret
 }
 
 func evalMustSub8(par *CallParams) []byte {
 	a0, a1 := mustArithmArgs(par, 1, "sub8")
 	if a0[0] < a1[0] {
-		par.TracePanic("_mustSub8:: %v, %v -> underflow in subtraction", a0, a1)
+		par.TracePanic("_mustSub8:: %s, %s -> underflow in subtraction", Fmt(a0), Fmt(a1))
 	}
 	ret := []byte{a0[0] - a1[0]}
-	par.Trace("sub8:: %v, %v -> %v", a0, a1, ret)
+	par.Trace("sub8:: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
 	return ret
 }
 
@@ -532,19 +530,19 @@ func evalLessThan(par *CallParams) []byte {
 	a0 := par.Arg(0)
 	a1 := par.Arg(1)
 	if len(a0) != len(a1) {
-		par.TracePanic("lessThan: operands must be equal length. %v, %v", a0, a1)
+		par.TracePanic("lessThan: operands must be equal length. %s, %s", Fmt(a0), Fmt(a1))
 	}
 	for i := range a0 {
 		switch {
 		case a0[i] < a1[i]:
-			par.Trace("lessThan: %v, %v -> true", a0, a1)
+			par.Trace("lessThan: %s, %s -> true", Fmt(a0), Fmt(a1))
 			return []byte{0xff} // true
 		case a0[i] > a1[i]:
-			par.Trace("lessThan: %v, %v -> false", a0, a1)
+			par.Trace("lessThan: %s, %s -> false", Fmt(a0), Fmt(a1))
 			return nil //false
 		}
 	}
-	par.Trace("lessThan: %v, %v -> false", a0, a1)
+	par.Trace("lessThan: %s, %s -> false", Fmt(a0), Fmt(a1))
 	return nil // equal -> false
 }
 
@@ -555,11 +553,11 @@ func evalValidSigED25519(par *CallParams) []byte {
 
 	if ed25519.Verify(pubKey, msg, signature) {
 		par.Trace("ValidSigED25519: msg=%s, sig=%s, pubKey=%s -> true",
-			hex.EncodeToString(msg), hex.EncodeToString(signature), hex.EncodeToString(pubKey))
+			Fmt(msg), Fmt(signature), Fmt(pubKey))
 		return []byte{0xff}
 	}
 	par.Trace("ValidSigED25519: msg=%s, sig=%s, pubKey=%s -> false",
-		hex.EncodeToString(msg), hex.EncodeToString(signature), hex.EncodeToString(pubKey))
+		Fmt(msg), Fmt(signature), Fmt(pubKey))
 	return nil
 }
 
@@ -569,6 +567,6 @@ func evalBlake2b(par *CallParams) []byte {
 		buf.Write(par.Arg(i))
 	}
 	ret := blake2b.Sum256(buf.Bytes())
-	par.Trace("blake2b: %d params -> %s", par.Arity(), hex.EncodeToString(ret[:]))
+	par.Trace("blake2b: %d params -> %s", par.Arity(), Fmt(ret[:]))
 	return ret[:]
 }

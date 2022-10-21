@@ -440,7 +440,7 @@ func CompileExpression(source string) (*Expression, int, []byte, error) {
 func dataFunction(data []byte) EvalFunction {
 	d := data
 	return func(par *CallParams) []byte {
-		par.Trace("-> %v", d)
+		par.Trace("-> %s", Fmt(d))
 		return data
 	}
 }

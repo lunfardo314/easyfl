@@ -12,7 +12,7 @@ import (
 	"golang.org/x/crypto/blake2b"
 )
 
-const formula1 = "func unlockBlock: concat(concat(0x0000, slice(0x01020304050607, 2, 5)))"
+const formula1 = "func unlockBlock: Concat(Concat(0x0000, slice(0x01020304050607, 2, 5)))"
 
 func TestCompile(t *testing.T) {
 	t.Run("1", func(t *testing.T) {
@@ -63,18 +63,18 @@ func TestEval(t *testing.T) {
 		require.EqualValues(t, []byte{222}, ret)
 	})
 	t.Run("4", func(t *testing.T) {
-		ret, err := EvalFromSource(nil, "concat($0,$1)", []byte{222}, []byte{111})
+		ret, err := EvalFromSource(nil, "Concat($0,$1)", []byte{222}, []byte{111})
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{222, 111}, ret)
 	})
 	t.Run("5", func(t *testing.T) {
-		ret, err := EvalFromSource(nil, "concat($0,concat($1,$0))", []byte{222}, []byte{111})
+		ret, err := EvalFromSource(nil, "Concat($0,Concat($1,$0))", []byte{222}, []byte{111})
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{222, 111, 222}, ret)
 	})
 	t.Run("6", func(t *testing.T) {
 		ret, err := EvalFromSource(nil,
-			"concat(concat(slice($2,1,1), byte($2,0)), slice(concat(concat($0,$1),concat($1,$0)),1,2))",
+			"Concat(Concat(slice($2,1,1), byte($2,0)), slice(Concat(Concat($0,$1),Concat($1,$0)),1,2))",
 			[]byte{222}, []byte{111}, []byte{123, 234})
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{234, 123, 111, 111}, ret)
@@ -85,12 +85,12 @@ func TestEval(t *testing.T) {
 		require.EqualValues(t, []byte{9}, ret)
 	})
 	t.Run("8", func(t *testing.T) {
-		ret, err := EvalFromSource(nil, "concat(1,2,3,4,5)")
+		ret, err := EvalFromSource(nil, "Concat(1,2,3,4,5)")
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{1, 2, 3, 4, 5}, ret)
 	})
 	t.Run("9", func(t *testing.T) {
-		ret, err := EvalFromSource(nil, "slice(concat(concat(1,2),concat(3,4,5)),2,3)")
+		ret, err := EvalFromSource(nil, "slice(Concat(Concat(1,2),Concat(3,4,5)),2,3)")
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{3, 4}, ret)
 	})
@@ -128,7 +128,7 @@ func TestEval(t *testing.T) {
 		require.True(t, len(ret) == 0)
 	})
 	t.Run("16", func(t *testing.T) {
-		ret, err := EvalFromSource(NewGlobalDataTracePrint(nil), "concat")
+		ret, err := EvalFromSource(NewGlobalDataTracePrint(nil), "Concat")
 		require.NoError(t, err)
 		require.True(t, len(ret) == 0)
 	})
@@ -170,7 +170,7 @@ func TestEval(t *testing.T) {
 	})
 	t.Run("22", func(t *testing.T) {
 		_, err := EvalFromSource(NewGlobalDataTracePrint(nil), "sum8($0, $1)", []byte{160}, []byte{160})
-		requireErrorWith(t, err, "arithmetic overflow")
+		RequireErrorWith(t, err, "arithmetic overflow")
 	})
 	var blake2bInvokedNum int
 	EmbedLong("blake2b-test", 1, func(par *CallParams) []byte {
@@ -215,19 +215,19 @@ func TestEval(t *testing.T) {
 
 func TestExtendLib(t *testing.T) {
 	t.Run("ext-2", func(t *testing.T) {
-		_, err := ExtendErr("nil1", "concat()")
+		_, err := ExtendErr("nil1", "Concat()")
 		require.NoError(t, err)
 	})
 	t.Run("ext-3", func(t *testing.T) {
-		_, err := ExtendErr("cat2", "concat($0, $1)")
+		_, err := ExtendErr("cat2", "Concat($0, $1)")
 		require.NoError(t, err)
 		ret, err := EvalFromSource(NewGlobalDataTracePrint(nil), "cat2(1,2)")
 		require.EqualValues(t, []byte{1, 2}, ret)
 	})
 	const complex = `
-		concat(
-			concat($0,$1),
-			concat($0,$2)
+		Concat(
+			Concat($0,$1),
+			Concat($0,$2)
 		)
 	`
 	_, err := ExtendErr("complex", complex)
@@ -235,9 +235,9 @@ func TestExtendLib(t *testing.T) {
 
 	d := func(i byte) []byte { return []byte{i} }
 	compl := func(d0, d1, d2 []byte) []byte {
-		c0 := concat(d0, d1)
-		c1 := concat(d0, d2)
-		c3 := concat(c0, c1)
+		c0 := Concat(d0, d1)
+		c1 := Concat(d0, d2)
+		c3 := Concat(c0, c1)
 		return c3
 	}
 	t.Run("ext-4", func(t *testing.T) {
@@ -252,7 +252,7 @@ func TestExtendLib(t *testing.T) {
 		require.EqualValues(t, exp, ret)
 	})
 	t.Run("eval from binary", func(t *testing.T) {
-		source := "concat($2, $1, $0)"
+		source := "Concat($2, $1, $0)"
 		_, arity, code, err := CompileExpression(source)
 		require.NoError(t, err)
 		require.EqualValues(t, 3, arity)
@@ -266,7 +266,7 @@ func TestExtendLib(t *testing.T) {
 		require.Error(t, err)
 	})
 	t.Run("never panics", func(t *testing.T) {
-		_, err := EvalFromSource(NewGlobalDataTracePrint(nil), "if(concat,byte(0,1),0x01)")
+		_, err := EvalFromSource(NewGlobalDataTracePrint(nil), "if(Concat,byte(0,1),0x01)")
 		require.NoError(t, err)
 	})
 
@@ -372,7 +372,7 @@ func TestSigED25519(t *testing.T) {
 	})
 	t.Run("validSignatureED25519-wrong-pubkey", func(t *testing.T) {
 		signature := ed25519.Sign(privKey, []byte(msg))
-		pk := concat([]byte(pubKey))
+		pk := Concat([]byte(pubKey))
 		pk[3]++
 		res, err := EvalFromSource(NewGlobalDataTracePrint(nil), "validSignatureED25519($0,$1,$2)", []byte(msg), signature, pk)
 		require.NoError(t, err)
@@ -381,14 +381,14 @@ func TestSigED25519(t *testing.T) {
 	})
 	t.Run("validSignatureED25519-wrong-pubkey", func(t *testing.T) {
 		_, err := EvalFromSource(NewGlobalDataTracePrint(nil), "validSignatureED25519($0,$1,$2)", nil, nil, nil)
-		requireErrorWith(t, err, "bad public key length")
+		RequireErrorWith(t, err, "bad public key length")
 	})
 }
 
 func TestTracing(t *testing.T) {
 	t.Run("no panic 0", func(t *testing.T) {
 		tr := NewGlobalDataLog(nil)
-		ret, err := EvalFromSource(tr, "slice(concat(concat(1,2),concat(3,4,5)),2,3)")
+		ret, err := EvalFromSource(tr, "slice(Concat(Concat(1,2),Concat(3,4,5)),2,3)")
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{3, 4}, ret)
 		tr.PrintLog()
@@ -450,12 +450,12 @@ func TestTracing(t *testing.T) {
 		_, err := EvalFromSource(tr, "not(not(not($0)))", []byte{10})
 		require.NoError(t, err)
 	})
-	t.Run("trace concat", func(t *testing.T) {
+	t.Run("trace Concat", func(t *testing.T) {
 		tr := NewGlobalDataTracePrint(nil)
-		_, err := EvalFromSource(tr, "concat($0,concat($0,$0))", []byte{10})
+		_, err := EvalFromSource(tr, "Concat($0,Concat($0,$0))", []byte{10})
 		require.NoError(t, err)
 		tr = NewGlobalDataTracePrint(nil)
-		_, err = EvalFromSource(tr, "concat(concat())")
+		_, err = EvalFromSource(tr, "Concat(Concat())")
 		require.NoError(t, err)
 	})
 }
