@@ -58,7 +58,7 @@ func (c *Call) Eval() []byte {
 
 // DataContext accesses the data context inside the embedded function
 func (p *CallParams) DataContext() interface{} {
-	return p.ctx.glb
+	return p.ctx.glb.Data()
 }
 
 // Arity return actual number of call parameters
