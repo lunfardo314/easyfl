@@ -79,7 +79,7 @@ func init() {
 	EmbedShort("isZero", 1, evalIsZero)
 	// stateless varargs
 	// 'Concat' concatenates variable number of arguments. Concat() is empty byte array
-	EmbedLong("Concat", -1, evalConcat)
+	EmbedLong("concat", -1, evalConcat)
 	EmbedLong("and", -1, evalAnd)
 	EmbedLong("or", -1, evalOr)
 
