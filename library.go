@@ -186,10 +186,8 @@ func makeEvalFunForExpressions(sym string, expr *Expression) EvalFunction {
 			varScope[i] = NewCall(par.args[i].EvalFunc, p)
 		}
 		nextCtx := NewEvalContext(varScope, par.ctx.glb)
-		nextParams := NewCallParams(nextCtx, expr.Args)
-		call := NewCall(expr.EvalFunc, nextParams)
-		ret := call.Eval()
-		par.Trace("extended '%s':: %d params -> %v", sym, par.Arity(), ret)
+		ret := NewCall(expr.EvalFunc, NewCallParams(nextCtx, expr.Args)).Eval()
+		par.Trace("'%s':: %d params -> %s", sym, par.Arity(), Fmt(ret))
 		return ret
 	}
 }
