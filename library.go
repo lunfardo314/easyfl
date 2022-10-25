@@ -92,6 +92,9 @@ func init() {
 	EmbedShort("sum32_64", 2, evalSum32_64)
 	EmbedShort("sum64", 2, evalMustSum64)
 	EmbedShort("sub8", 2, evalMustSub8)
+	EmbedShort("mul8_16", 2, evalMul8_16)
+	EmbedShort("mul16_32", 2, evalMul16_32)
+
 	// comparison
 	EmbedShort("lessThan", 2, evalLessThan)
 	Extend("lessOrEqualThan", "or(lessThan($0,$1),equal($0,$1))")
@@ -521,6 +524,24 @@ func evalMustSub8(par *CallParams) []byte {
 	ret := []byte{a0[0] - a1[0]}
 	par.Trace("sub8:: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
 	return ret
+}
+
+func evalMul8_16(par *CallParams) []byte {
+	a0, a1 := mustArithmArgs(par, 1, "mul8_16")
+	var ret [2]byte
+	binary.BigEndian.PutUint16(ret[:], uint16(a0[0])*uint16(a1[0]))
+	par.Trace("mul8_16:: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret[:]))
+	return ret[:]
+}
+
+func evalMul16_32(par *CallParams) []byte {
+	a0, a1 := mustArithmArgs(par, 2, "mul16_32")
+	var ret [4]byte
+	op0 := binary.BigEndian.Uint16(a0)
+	op1 := binary.BigEndian.Uint16(a1)
+	binary.BigEndian.PutUint32(ret[:], uint32(op0)*uint32(op1))
+	par.Trace("mul16_32:: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret[:]))
+	return ret[:]
 }
 
 // lexicographical comparison of two slices of equal length

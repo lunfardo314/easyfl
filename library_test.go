@@ -459,3 +459,23 @@ func TestTracing(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
+
+func TestArithmetics(t *testing.T) {
+	runTest := func(s string, a0, a1, exp []byte) {
+		name := fmt.Sprintf("%s: %s, %s -> %s", s, Fmt(a0), Fmt(a1), Fmt(exp))
+		t.Run(name, func(t *testing.T) {
+			ret, err := EvalFromSource(NewGlobalDataTracePrint(nil), s, a0, a1)
+			require.NoError(t, err)
+			require.EqualValues(t, exp, ret)
+		})
+	}
+	runTest("mul8_16($0,$1)", num(byte(1)), num(byte(1)), num(uint16(1)))
+	runTest("mul8_16($0,$1)", num(byte(10)), num(byte(1)), num(uint16(10)))
+	runTest("mul8_16($0,$1)", num(byte(11)), num(byte(11)), num(uint16(121)))
+	runTest("mul8_16($0,$1)", num(byte(255)), num(byte(255)), num(uint16(255*255)))
+
+	runTest("mul16_32($0,$1)", num(uint16(1)), num(uint16(1)), num(uint32(1)))
+	runTest("mul16_32($0,$1)", num(uint16(11)), num(uint16(11)), num(uint32(121)))
+	runTest("mul16_32($0,$1)", num(uint16(255)), num(uint16(255)), num(uint32(255*255)))
+	runTest("mul16_32($0,$1)", num(uint16(255*255)), num(uint16(255*255)), num(uint32(255*255*255*255)))
+}
