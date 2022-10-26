@@ -517,14 +517,29 @@ func TestInline(t *testing.T) {
 		require.NoError(t, err)
 		t.Logf("result: %s", Fmt(res))
 	})
-	t.Run("5", func(t *testing.T) {
+	t.Run("bin code cannot be nil", func(t *testing.T) {
+		_, err := EvalFromBinary(NewGlobalDataTracePrint(nil), nil)
+		require.Error(t, err)
+	})
+	t.Run("0-parameter bin code never starts from 0", func(t *testing.T) {
+		bin := []byte{0}
+		t.Logf("code: %s", Fmt(bin))
+		_, err := EvalFromBinary(NewGlobalDataTracePrint(nil), bin)
+		require.Error(t, err)
+
+		bin = []byte{0, 0}
+		t.Logf("code: %s", Fmt(bin))
+		_, err = EvalFromBinary(NewGlobalDataTracePrint(nil), bin)
+		require.Error(t, err)
+	})
+	t.Run("0-started code require 1 parameter", func(t *testing.T) {
 		bin := []byte{0}
 		t.Logf("code: %s", Fmt(bin))
 		res, err := EvalFromBinary(NewGlobalDataTracePrint(nil), bin, []byte{10})
 		require.NoError(t, err)
 		t.Logf("result: %s", Fmt(res))
 	})
-	t.Run("6", func(t *testing.T) {
+	t.Run("nil code is 0x80", func(t *testing.T) {
 		bin := []byte{0x80}
 		t.Logf("code: %s", Fmt(bin))
 		res, err := EvalFromBinary(NewGlobalDataTracePrint(nil), bin)
