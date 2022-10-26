@@ -121,13 +121,10 @@ func PrintLibraryStats() {
 // EmbedShort embeds short-callable function inti the library
 // contextDependent is not used currently, it is intended for caching of values TODO
 func EmbedShort(sym string, requiredNumPar int, evalFun EvalFunction, contextDependent ...bool) byte {
-	if numEmbeddedShort >= MaxNumEmbeddedShort {
-		panic("too many embedded short functions")
-	}
-	mustUniqueName(sym)
-	if requiredNumPar > 15 {
-		panic("can't be more than 15 parameters")
-	}
+	Assert(numEmbeddedShort < MaxNumEmbeddedShort, "too many embedded short functions")
+	Assert(!existsFunction(sym), "!existsFunction(sym)")
+	Assert(requiredNumPar <= 15, "can't be more than 15 parameters")
+
 	if traceYN {
 		evalFun = wrapWithTracing(evalFun, sym)
 	}
@@ -146,17 +143,18 @@ func EmbedShort(sym string, requiredNumPar int, evalFun EvalFunction, contextDep
 	theLibrary.funByFunCode[dscr.funCode] = dscr
 	numEmbeddedShort++
 
+	{
+		codeBytes, err := FunctionCodeBytesByName(sym)
+		AssertNoError(err)
+		Assert(len(codeBytes) == 1, "expected short code")
+	}
 	return byte(dscr.funCode)
 }
 
 func EmbedLong(sym string, requiredNumPar int, evalFun EvalFunction) uint16 {
-	if numEmbeddedLong >= MaxNumEmbeddedLong {
-		panic("too many embedded long functions")
-	}
-	mustUniqueName(sym)
-	if requiredNumPar > 15 {
-		panic("can't be more than 15 parameters")
-	}
+	Assert(numEmbeddedLong < MaxNumEmbeddedLong, "too many embedded long functions")
+	Assert(!existsFunction(sym), "!existsFunction(sym)")
+	Assert(requiredNumPar <= 15, "can't be more than 15 parameters")
 	if traceYN {
 		evalFun = wrapWithTracing(evalFun, sym)
 	}
@@ -170,6 +168,11 @@ func EmbedLong(sym string, requiredNumPar int, evalFun EvalFunction) uint16 {
 	theLibrary.funByFunCode[dscr.funCode] = dscr
 	numEmbeddedLong++
 
+	{
+		codeBytes, err := FunctionCodeBytesByName(sym)
+		AssertNoError(err)
+		Assert(len(codeBytes) == 2, "expected long code")
+	}
 	return dscr.funCode
 }
 
@@ -207,9 +210,8 @@ func ExtendErr(sym string, source string) (uint16, error) {
 		return 0, fmt.Errorf("error while compiling '%s': %v", sym, err)
 	}
 
-	if numExtended >= MaxNumExtended {
-		panic("too many extended functions")
-	}
+	Assert(numExtended < MaxNumExtended, "too many extended functions")
+
 	if existsFunction(sym) {
 		return 0, errors.New("repeating symbol '" + sym + "'")
 	}
@@ -229,6 +231,13 @@ func ExtendErr(sym string, source string) (uint16, error) {
 	theLibrary.funByName[sym] = dscr
 	theLibrary.funByFunCode[dscr.funCode] = dscr
 	numExtended++
+
+	{
+		codeBytes, err := FunctionCodeBytesByName(sym)
+		AssertNoError(err)
+		Assert(len(codeBytes) == 2, "expected long code")
+	}
+
 	return dscr.funCode, nil
 
 }
@@ -239,12 +248,6 @@ func wrapWithTracing(f EvalFunction, msg string) EvalFunction {
 		ret := f(par)
 		fmt.Printf("EvalFunction '%s' - OUT: %v\n", msg, ret)
 		return ret
-	}
-}
-
-func mustUniqueName(sym string) {
-	if existsFunction(sym) {
-		panic("repeating symbol '" + sym + "'")
 	}
 }
 
@@ -300,6 +303,19 @@ func functionByCode(funCode uint16) (EvalFunction, int, error) {
 		return nil, 0, fmt.Errorf("wrong function code %d", funCode)
 	}
 	return libData.evalFun, libData.requiredNumParams, nil
+}
+
+func FunctionCodeBytesByName(sym string) ([]byte, error) {
+	fi, err := functionByName(sym)
+	if err != nil {
+		return nil, err
+	}
+	var codeBytes [2]byte
+	binary.BigEndian.PutUint16(codeBytes[:], fi.FunCode)
+	if fi.IsShort {
+		return codeBytes[1:], nil
+	}
+	return codeBytes[:], nil
 }
 
 func isNil(p interface{}) bool {

@@ -510,7 +510,7 @@ func TestInline(t *testing.T) {
 		t.Logf("result: %s", Fmt(res))
 	})
 	t.Run("2", func(t *testing.T) {
-		addrStr := fmt.Sprintf("addressED25519(0x%s)", strings.Repeat("00", 32))
+		addrStr := fmt.Sprintf("fun1par(0x%s)", strings.Repeat("00", 32))
 		_, _, bin, err := CompileExpression(addrStr)
 		require.NoError(t, err)
 		t.Logf("code: %s", Fmt(bin))
