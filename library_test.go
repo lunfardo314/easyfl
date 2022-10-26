@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math/rand"
+	"strings"
 	"testing"
 	"time"
 
@@ -478,4 +479,57 @@ func TestArithmetics(t *testing.T) {
 	runTest("mul16_32($0,$1)", num(uint16(11)), num(uint16(11)), num(uint32(121)))
 	runTest("mul16_32($0,$1)", num(uint16(255)), num(uint16(255)), num(uint32(255*255)))
 	runTest("mul16_32($0,$1)", num(uint16(255*255)), num(uint16(255*255)), num(uint32(255*255*255*255)))
+}
+
+func TestInline(t *testing.T) {
+	Extend("addressED25519", "$0")
+
+	t.Run("1", func(t *testing.T) {
+		_, _, bin, err := CompileExpression("addressED25519(0x00)")
+		require.NoError(t, err)
+		t.Logf("code: %s", Fmt(bin))
+		res, err := EvalFromBinary(NewGlobalDataTracePrint(nil), bin)
+		require.NoError(t, err)
+		t.Logf("result: %s", Fmt(res))
+	})
+	t.Run("2", func(t *testing.T) {
+		addrStr := fmt.Sprintf("addressED25519(0x%s)", strings.Repeat("00", 32))
+		_, _, bin, err := CompileExpression(addrStr)
+		require.NoError(t, err)
+		t.Logf("code: %s", Fmt(bin))
+		res, err := EvalFromBinary(NewGlobalDataTracePrint(nil), bin)
+		require.NoError(t, err)
+		t.Logf("result: %s", Fmt(res))
+	})
+	t.Run("3", func(t *testing.T) {
+		_, _, bin, err := CompileExpression("slice(0,0,0)")
+		require.NoError(t, err)
+		t.Logf("code: %s", Fmt(bin))
+		res, err := EvalFromBinary(NewGlobalDataTracePrint(nil), bin)
+		require.NoError(t, err)
+		t.Logf("result: %s", Fmt(res))
+	})
+	t.Run("4", func(t *testing.T) {
+		_, _, bin, err := CompileExpression("0")
+		require.NoError(t, err)
+		t.Logf("code: %s", Fmt(bin))
+		res, err := EvalFromBinary(NewGlobalDataTracePrint(nil), bin)
+		require.NoError(t, err)
+		t.Logf("result: %s", Fmt(res))
+	})
+	t.Run("5", func(t *testing.T) {
+		bin := []byte{0}
+		t.Logf("code: %s", Fmt(bin))
+		res, err := EvalFromBinary(NewGlobalDataTracePrint(nil), bin, []byte{10})
+		require.NoError(t, err)
+		t.Logf("result: %s", Fmt(res))
+	})
+	t.Run("6", func(t *testing.T) {
+		bin := []byte{0x80}
+		t.Logf("code: %s", Fmt(bin))
+		res, err := EvalFromBinary(NewGlobalDataTracePrint(nil), bin)
+		require.NoError(t, err)
+		require.True(t, len(res) == 0)
+		t.Logf("result: %s", Fmt(res))
+	})
 }
