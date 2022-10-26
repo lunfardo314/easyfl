@@ -482,13 +482,30 @@ func TestArithmetics(t *testing.T) {
 }
 
 func TestInline(t *testing.T) {
-	Extend("addressED25519", "$0")
+	Extend("fun1par", "$0")
+	Extend("fun2par", "concat($0,$1)")
 
 	t.Run("1", func(t *testing.T) {
-		_, _, bin, err := CompileExpression("addressED25519(0x00)")
+		_, _, bin, err := CompileExpression("fun1par(0x00)")
 		require.NoError(t, err)
 		t.Logf("code: %s", Fmt(bin))
 		res, err := EvalFromBinary(NewGlobalDataTracePrint(nil), bin)
+		require.NoError(t, err)
+		t.Logf("result: %s", Fmt(res))
+	})
+	t.Run("call 2 param", func(t *testing.T) {
+		_, _, bin, err := CompileExpression("fun2par(0x01, 0x02)")
+		require.NoError(t, err)
+		t.Logf("code: %s", Fmt(bin))
+		res, err := EvalFromBinary(NewGlobalDataTracePrint(nil), bin)
+		require.NoError(t, err)
+		t.Logf("result: %s", Fmt(res))
+	})
+	t.Run("fun 2 param", func(t *testing.T) {
+		_, _, bin, err := CompileExpression("fun2par($0, $1)")
+		require.NoError(t, err)
+		t.Logf("code: %s", Fmt(bin))
+		res, err := EvalFromBinary(NewGlobalDataTracePrint(nil), bin, []byte{1}, []byte{2})
 		require.NoError(t, err)
 		t.Logf("result: %s", Fmt(res))
 	})
