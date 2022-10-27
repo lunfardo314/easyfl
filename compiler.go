@@ -503,3 +503,11 @@ func ParseCallWithConstants(code []byte, n int) ([]byte, [][]byte, error) {
 	}
 	return callPrefix, params, nil
 }
+
+func ParseCallPrefixFromBinary(code []byte) ([]byte, error) {
+	callPrefix, _, _, err := parseCallPrefix(code)
+	if err != nil {
+		return nil, err
+	}
+	return callPrefix, nil
+}
