@@ -356,20 +356,38 @@ func ExpressionFromBinary(code []byte) (*Expression, error) {
 	return ret, nil
 }
 
+// ParseInlineDataPrefix attempts to parse beginning of the code as data literal
+// Returns:
+// - parsed literal or nil
+// - true if success, false if not
+// - EOF if not enough data
+func ParseInlineDataPrefix(code []byte) ([]byte, bool, error) {
+	if code[0]&FirstByteDataMask == 0 {
+		// not data
+		return nil, false, nil
+	}
+	// it is data
+	size := int(code[0] & FirstByteDataLenMask)
+	if len(code) < size+1 {
+		// too short
+		return nil, false, io.EOF
+	}
+	return code[1 : 1+size], true, nil
+}
+
 func expressionFromBinary(code []byte) (*Expression, []byte, error) {
 	if len(code) == 0 {
 		return nil, nil, io.EOF
 	}
-	if code[0]&FirstByteDataMask != 0 {
-		// it is data
-		size := int(code[0] & FirstByteDataLenMask)
-		if len(code) < size+1 {
-			return nil, nil, io.EOF
-		}
+	data, itIsData, err := ParseInlineDataPrefix(code)
+	if err != nil {
+		return nil, nil, err
+	}
+	if itIsData {
 		ret := &Expression{
-			EvalFunc: dataFunction(code[1 : 1+size]),
+			EvalFunc: dataFunction(data),
 		}
-		return ret, code[1+size:], nil
+		return ret, code[len(data)+1:], nil
 	}
 	// function call expected
 	ret := &Expression{
@@ -378,7 +396,6 @@ func expressionFromBinary(code []byte) (*Expression, []byte, error) {
 	}
 	var evalFun EvalFunction
 	var numParams, arity int
-	var err error
 
 	if code[0]&FirstByteLongCallMask == 0 {
 		// short call
