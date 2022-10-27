@@ -144,7 +144,11 @@ func EmbedShort(sym string, requiredNumPar int, evalFun EvalFunction, contextDep
 	numEmbeddedShort++
 
 	{
-		codeBytes, err := FunctionCodeBytesByName(sym)
+		// sanity check
+		if requiredNumPar < 0 {
+			requiredNumPar = 1
+		}
+		codeBytes, err := FunctionCallPrefixByName(sym, byte(requiredNumPar))
 		AssertNoError(err)
 		Assert(len(codeBytes) == 1, "expected short code")
 	}
@@ -169,7 +173,11 @@ func EmbedLong(sym string, requiredNumPar int, evalFun EvalFunction) uint16 {
 	numEmbeddedLong++
 
 	{
-		codeBytes, err := FunctionCodeBytesByName(sym)
+		// sanity check
+		if requiredNumPar < 0 {
+			requiredNumPar = 1
+		}
+		codeBytes, err := FunctionCallPrefixByName(sym, byte(requiredNumPar))
 		AssertNoError(err)
 		Assert(len(codeBytes) == 2, "expected long code")
 	}
@@ -233,7 +241,8 @@ func ExtendErr(sym string, source string) (uint16, error) {
 	numExtended++
 
 	{
-		codeBytes, err := FunctionCodeBytesByName(sym)
+		// sanity check
+		codeBytes, err := FunctionCallPrefixByName(sym, byte(numParam))
 		AssertNoError(err)
 		Assert(len(codeBytes) == 2, "expected long code")
 	}
@@ -305,17 +314,35 @@ func functionByCode(funCode uint16) (EvalFunction, int, error) {
 	return libData.evalFun, libData.requiredNumParams, nil
 }
 
-func FunctionCodeBytesByName(sym string) ([]byte, error) {
+func (fi *funInfo) callPrefix(numArgs byte) ([]byte, error) {
+	var ret []byte
+	if fi.IsShort {
+		Assert(fi.FunCode > 15, "internal inconsistency: fi.FunCode must be > 15")
+		ret = []byte{byte(fi.FunCode)}
+	} else {
+		if fi.NumParams < 0 {
+			if numArgs > 15 {
+				return nil, fmt.Errorf("internal inconsistency: number of arguments must be <= 15")
+			}
+		} else {
+			if int(numArgs) != fi.NumParams {
+				return nil, fmt.Errorf("wrong number of arguments")
+			}
+		}
+		firstByte := FirstByteLongCallMask | (numArgs << 2)
+		u16 := (uint16(firstByte) << 8) | fi.FunCode
+		ret = make([]byte, 2)
+		binary.BigEndian.PutUint16(ret, u16)
+	}
+	return ret, nil
+}
+
+func FunctionCallPrefixByName(sym string, numArgs byte) ([]byte, error) {
 	fi, err := functionByName(sym)
 	if err != nil {
 		return nil, err
 	}
-	var codeBytes [2]byte
-	binary.BigEndian.PutUint16(codeBytes[:], fi.FunCode)
-	if fi.IsShort {
-		return codeBytes[1:], nil
-	}
-	return codeBytes[:], nil
+	return fi.callPrefix(numArgs)
 }
 
 func isNil(p interface{}) bool {

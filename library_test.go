@@ -1,6 +1,7 @@
 package easyfl
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"encoding/binary"
 	"fmt"
@@ -583,5 +584,24 @@ func TestInline(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, len(res) == 0)
 		t.Logf("result: %s", Fmt(res))
+	})
+	t.Run("fun prefix1", func(t *testing.T) {
+		prefix, err := FunctionCallPrefixByName("fun1par", 1)
+		require.NoError(t, err)
+		t.Logf("fun1par prefix: %s", Fmt(prefix))
+
+		_, _, binCode, err := CompileExpression("fun1par(0xeeff)")
+		require.NoError(t, err)
+		t.Logf("fun1par(0xeeff) code: %s", Fmt(binCode))
+		require.True(t, bytes.HasPrefix(binCode, prefix))
+
+		prefix, err = FunctionCallPrefixByName("fun2par", 2)
+		require.NoError(t, err)
+		t.Logf("fun2par prefix: %s", Fmt(prefix))
+
+		_, _, binCode, err = CompileExpression("fun2par(0xeeff, 0x1122)")
+		require.NoError(t, err)
+		t.Logf("fun2par(0xeeff, 0x1122) code: %s", Fmt(binCode))
+		require.True(t, bytes.HasPrefix(binCode, prefix))
 	})
 }

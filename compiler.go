@@ -300,17 +300,9 @@ func (f *parsedExpression) binaryFromParsedExpression(w io.Writer) (int, error) 
 		return 0, fmt.Errorf("%d arguments required, got %d: '%s'", fi.NumParams, len(f.params), f.sym)
 	}
 
-	var callBytes []byte
-	if fi.IsShort {
-		if fi.FunCode <= 15 {
-			panic("internal inconsistency: fi.FunCode <= 15")
-		}
-		callBytes = []byte{byte(fi.FunCode)}
-	} else {
-		firstByte := FirstByteLongCallMask | (byte(len(f.params)) << 2)
-		u16 := (uint16(firstByte) << 8) | fi.FunCode
-		callBytes = make([]byte, 2)
-		binary.BigEndian.PutUint16(callBytes, u16)
+	callBytes, err := fi.callPrefix(byte(len(f.params)))
+	if err != nil {
+		return 0, err
 	}
 	// write call bytes
 	if _, err = w.Write(callBytes); err != nil {
@@ -357,6 +349,7 @@ func ExpressionFromBinary(code []byte) (*Expression, error) {
 }
 
 // ParseInlineDataPrefix attempts to parse beginning of the code as data literal
+// Function is for binary code analysis
 // Returns:
 // - parsed literal or nil
 // - true if success, false if not
