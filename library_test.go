@@ -604,4 +604,31 @@ func TestInline(t *testing.T) {
 		t.Logf("fun2par(0xeeff, 0x1122) code: %s", Fmt(binCode))
 		require.True(t, bytes.HasPrefix(binCode, prefix))
 	})
+	t.Run("parse simple call 1", func(t *testing.T) {
+		_, _, binCode, err := CompileExpression("fun1par(0xeeff)")
+		require.NoError(t, err)
+		prefix, args, err := ParseCallWithConstants(binCode, 1)
+		require.NoError(t, err)
+
+		prefix1, err := FunctionCallPrefixByName("fun1par", 1)
+		require.NoError(t, err)
+		require.EqualValues(t, prefix, prefix1)
+		require.EqualValues(t, 1, len(args))
+		require.EqualValues(t, []byte{0xee, 0xff}, args[0])
+	})
+	t.Run("parse simple call 2", func(t *testing.T) {
+		_, _, binCode, err := CompileExpression("fun2par(0xeeff, 0x1122)")
+		require.NoError(t, err)
+		prefix, args, err := ParseCallWithConstants(binCode, 1)
+		require.Error(t, err)
+		prefix, args, err = ParseCallWithConstants(binCode, 2)
+		require.NoError(t, err)
+
+		prefix1, err := FunctionCallPrefixByName("fun2par", 2)
+		require.NoError(t, err)
+		require.EqualValues(t, prefix, prefix1)
+		require.EqualValues(t, 2, len(args))
+		require.EqualValues(t, []byte{0xee, 0xff}, args[0])
+		require.EqualValues(t, []byte{0x11, 0x22}, args[1])
+	})
 }

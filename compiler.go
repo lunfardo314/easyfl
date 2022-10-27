@@ -348,26 +348,6 @@ func ExpressionFromBinary(code []byte) (*Expression, error) {
 	return ret, nil
 }
 
-// ParseInlineDataPrefix attempts to parse beginning of the code as data literal
-// Function is for binary code analysis
-// Returns:
-// - parsed literal or nil
-// - true if success, false if not
-// - EOF if not enough data
-func ParseInlineDataPrefix(code []byte) ([]byte, bool, error) {
-	if code[0]&FirstByteDataMask == 0 {
-		// not data
-		return nil, false, nil
-	}
-	// it is data
-	size := int(code[0] & FirstByteDataLenMask)
-	if len(code) < size+1 {
-		// too short
-		return nil, false, io.EOF
-	}
-	return code[1 : 1+size], true, nil
-}
-
 func expressionFromBinary(code []byte) (*Expression, []byte, error) {
 	if len(code) == 0 {
 		return nil, nil, io.EOF
@@ -387,39 +367,12 @@ func expressionFromBinary(code []byte) (*Expression, []byte, error) {
 		Args:     make([]*Expression, 0),
 		EvalFunc: nil,
 	}
-	var evalFun EvalFunction
-	var numParams, arity int
 
-	if code[0]&FirstByteLongCallMask == 0 {
-		// short call
-		if code[0] < EmbeddedReservedUntil {
-			// param reference
-			evalFun = evalParamFun(code[0])
-		} else {
-			evalFun, arity, err = functionByCode(uint16(code[0]))
-			if err != nil {
-				return nil, nil, err
-			}
-		}
-		code = code[1:]
-	} else {
-		// long call
-		if len(code) < 2 {
-			return nil, nil, io.EOF
-		}
-		arity = int((code[0] & FirstByteLongCallArityMask) >> 2)
-		t := binary.BigEndian.Uint16(code[:2])
-		idx := t & Uint16LongCallCodeMask
-		evalFun, numParams, err = functionByCode(idx)
-		if err != nil {
-			return nil, nil, err
-		}
-		if numParams > 0 && numParams != arity {
-			return nil, nil, fmt.Errorf("wrong number of call varScope")
-		}
-		code = code[2:]
+	callPrefix, evalFun, arity, err := parseCallPrefix(code)
+	if err != nil {
+		return nil, nil, err
 	}
-
+	code = code[len(callPrefix):]
 	// collect call Args
 	var p *Expression
 	for i := 0; i < arity; i++ {
@@ -461,4 +414,92 @@ func dataCalls(glb GlobalData, data ...[]byte) []*Call {
 		ret[i] = NewCall(dataFunction(d), NewCallParams(NewEvalContext(nil, glb), nil))
 	}
 	return ret
+}
+
+func parseCallPrefix(code []byte) ([]byte, EvalFunction, int, error) {
+	if len(code) == 0 || code[0]&FirstByteDataMask != 0 {
+		return nil, nil, 0, fmt.Errorf("parseCallPrefix: not a function call")
+	}
+
+	var evalFun EvalFunction
+	var numParams, arity int
+	var err error
+	var callPrefix []byte
+
+	if code[0]&FirstByteLongCallMask == 0 {
+		// short call
+		if code[0] < EmbeddedReservedUntil {
+			// param reference
+			evalFun = evalParamFun(code[0])
+		} else {
+			evalFun, arity, err = functionByCode(uint16(code[0]))
+			if err != nil {
+				return nil, nil, 0, err
+			}
+		}
+		callPrefix = code[:1]
+	} else {
+		// long call
+		if len(code) < 2 {
+			return nil, nil, 0, io.EOF
+		}
+		arity = int((code[0] & FirstByteLongCallArityMask) >> 2)
+		t := binary.BigEndian.Uint16(code[:2])
+		idx := t & Uint16LongCallCodeMask
+		evalFun, numParams, err = functionByCode(idx)
+		if err != nil {
+			return nil, nil, 0, err
+		}
+		if numParams > 0 && numParams != arity {
+			return nil, nil, 0, fmt.Errorf("wrong number of call args")
+		}
+		callPrefix = code[:2]
+	}
+	return callPrefix, evalFun, arity, nil
+}
+
+// ParseInlineDataPrefix attempts to parse beginning of the code as inline data
+// Function is for binary code analysis
+// Returns:
+// - parsed literal or nil
+// - true if success, false if not
+// - EOF if not enough data
+func ParseInlineDataPrefix(code []byte) ([]byte, bool, error) {
+	if code[0]&FirstByteDataMask == 0 {
+		// not data
+		return nil, false, nil
+	}
+	// it is data
+	size := int(code[0] & FirstByteDataLenMask)
+	if len(code) < size+1 {
+		// too short
+		return nil, false, io.EOF
+	}
+	return code[1 : 1+size], true, nil
+}
+
+//ParseCallWithConstants parses simple call structure from the binary of the expression fun(l1, ..., ln),
+//where li is inline data. Expected number of parameters n is given
+func ParseCallWithConstants(code []byte, n int) ([]byte, [][]byte, error) {
+	callPrefix, _, arity, err := parseCallPrefix(code)
+	if err != nil {
+		return nil, nil, err
+	}
+	if arity != n {
+		return nil, nil, fmt.Errorf("wrong expected number of args")
+	}
+	params := make([][]byte, 0)
+	code = code[len(callPrefix):]
+	for i := 0; i < n; i++ {
+		data, isData, err := ParseInlineDataPrefix(code)
+		if err != nil {
+			return nil, nil, err
+		}
+		if !isData {
+			return nil, nil, fmt.Errorf("not a data argument")
+		}
+		params = append(params, data)
+		code = code[1+len(data):]
+	}
+	return callPrefix, params, nil
 }
