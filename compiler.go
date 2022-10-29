@@ -575,10 +575,13 @@ func ParseCallPrefixFromBinary(code []byte) ([]byte, error) {
 	return callPrefix, nil
 }
 
-func DecompileBinaryOneLevel(code []byte) (string, []byte, [][]byte, error) {
+func DecompileBinaryOneLevel(code []byte, expectedNumArgs ...int) (string, []byte, [][]byte, error) {
 	f, err := ExpressionFromBinary(code)
 	if err != nil {
 		return "", nil, nil, err
+	}
+	if len(expectedNumArgs) > 0 && len(f.Args) != expectedNumArgs[0] {
+		return "", nil, nil, fmt.Errorf("unexpected number of 1st level call arguments")
 	}
 	args := make([][]byte, len(f.Args))
 	prefix := f.CallPrefix
