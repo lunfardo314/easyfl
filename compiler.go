@@ -235,7 +235,7 @@ func (f *parsedExpression) binaryFromParsedExpression(w io.Writer) (int, error) 
 			return 0, nil
 		}
 		if strings.HasPrefix(f.sym, "x/") {
-			// it is an inline binary code
+			// it is an inline binary executable code
 			b, err := hex.DecodeString(f.sym[2:])
 			if err != nil {
 				return 0, fmt.Errorf("%v: '%s'", err, f.sym)
@@ -360,30 +360,97 @@ func ExpressionFromBinary(code []byte) (*Expression, error) {
 	return ret, nil
 }
 
+func ExpressionToBinary(f *Expression) []byte {
+	var buf bytes.Buffer
+	AssertNoError(writeExpressionBinary(&buf, f))
+	return buf.Bytes()
+}
+
+func ExpressionToSource(f *Expression) string {
+	var buf bytes.Buffer
+	AssertNoError(writeExpressionSource(&buf, f))
+	return string(buf.Bytes())
+}
+
+func writeExpressionBinary(w io.Writer, expr *Expression) error {
+	if _, err := w.Write(expr.CallPrefix); err != nil {
+		return err
+	}
+	for _, arg := range expr.Args {
+		if err := writeExpressionBinary(w, arg); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeExpressionSource(w io.Writer, f *Expression) error {
+	if _, err := w.Write([]byte(f.FunctionName)); err != nil {
+		return err
+	}
+	if len(f.Args) > 0 {
+		if _, err := w.Write([]byte{'('}); err != nil {
+			return err
+		}
+	}
+	first := true
+	for _, arg := range f.Args {
+		if !first {
+			if _, err := w.Write([]byte{','}); err != nil {
+				return err
+			}
+		}
+		if err := writeExpressionSource(w, arg); err != nil {
+			return err
+		}
+		first = false
+	}
+	if len(f.Args) > 0 {
+		if _, err := w.Write([]byte{')'}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// expressionFromBinary parses executable code into the executable expression tree
 func expressionFromBinary(code []byte) (*Expression, []byte, error) {
 	if len(code) == 0 {
 		return nil, nil, io.EOF
 	}
-	data, itIsData, err := ParseInlineDataPrefix(code)
+	dataPrefix, itIsData, err := ParseInlineDataPrefix(code)
 	if err != nil {
 		return nil, nil, err
 	}
 	if itIsData {
-		ret := &Expression{
-			EvalFunc: dataFunction(data),
+		var sym string
+		switch len(dataPrefix[1:]) {
+		case 0:
+			sym = "nil"
+		case 1:
+			sym = fmt.Sprintf("%d", dataPrefix[1])
+		default:
+			sym = fmt.Sprintf("0x%s", hex.EncodeToString(dataPrefix[1:]))
 		}
-		return ret, code[len(data)+1:], nil
+		ret := &Expression{
+			EvalFunc:     dataFunction(dataPrefix[1:]),
+			FunctionName: sym,
+			CallPrefix:   dataPrefix,
+		}
+		return ret, code[len(dataPrefix):], nil
 	}
 	// function call expected
-	ret := &Expression{
-		Args:     make([]*Expression, 0),
-		EvalFunc: nil,
-	}
-
-	callPrefix, evalFun, arity, err := parseCallPrefix(code)
+	callPrefix, evalFun, arity, sym, err := parseCallPrefix(code)
 	if err != nil {
 		return nil, nil, err
 	}
+	ret := &Expression{
+		Args:         make([]*Expression, 0),
+		EvalFunc:     nil,
+		FunctionName: sym,
+		CallPrefix:   callPrefix,
+	}
+
 	code = code[len(callPrefix):]
 	// collect call Args
 	var p *Expression
@@ -412,6 +479,14 @@ func CompileExpression(source string) (*Expression, int, []byte, error) {
 	return ret, numParams, code, nil
 }
 
+func DecompileBinary(code []byte) (string, error) {
+	f, err := ExpressionFromBinary(code)
+	if err != nil {
+		return "", err
+	}
+	return ExpressionToSource(f), nil
+}
+
 func dataFunction(data []byte) EvalFunction {
 	d := data
 	return func(par *CallParams) []byte {
@@ -428,52 +503,54 @@ func dataCalls(glb GlobalData, data ...[]byte) []*Call {
 	return ret
 }
 
-func parseCallPrefix(code []byte) ([]byte, EvalFunction, int, error) {
+func parseCallPrefix(code []byte) ([]byte, EvalFunction, int, string, error) {
 	if len(code) == 0 || code[0]&FirstByteDataMask != 0 {
-		return nil, nil, 0, fmt.Errorf("parseCallPrefix: not a function call")
+		return nil, nil, 0, "", fmt.Errorf("parseCallPrefix: not a function call")
 	}
 
 	var evalFun EvalFunction
 	var numParams, arity int
 	var err error
 	var callPrefix []byte
+	var sym string
 
 	if code[0]&FirstByteLongCallMask == 0 {
 		// short call
 		if code[0] < EmbeddedReservedUntil {
 			// param reference
 			evalFun = evalParamFun(code[0])
+			sym = fmt.Sprintf("$%d", code[0])
 		} else {
-			evalFun, arity, err = functionByCode(uint16(code[0]))
+			evalFun, arity, sym, err = functionByCode(uint16(code[0]))
 			if err != nil {
-				return nil, nil, 0, err
+				return nil, nil, 0, sym, err
 			}
 		}
 		callPrefix = code[:1]
 	} else {
 		// long call
 		if len(code) < 2 {
-			return nil, nil, 0, io.EOF
+			return nil, nil, 0, "", io.EOF
 		}
 		arity = int((code[0] & FirstByteLongCallArityMask) >> 2)
 		t := binary.BigEndian.Uint16(code[:2])
 		idx := t & Uint16LongCallCodeMask
-		evalFun, numParams, err = functionByCode(idx)
+		evalFun, numParams, sym, err = functionByCode(idx)
 		if err != nil {
-			return nil, nil, 0, err
+			return nil, nil, 0, "", err
 		}
 		if numParams > 0 && numParams != arity {
-			return nil, nil, 0, fmt.Errorf("wrong number of call args")
+			return nil, nil, 0, "", fmt.Errorf("wrong number of call args")
 		}
 		callPrefix = code[:2]
 	}
-	return callPrefix, evalFun, arity, nil
+	return callPrefix, evalFun, arity, sym, nil
 }
 
 // ParseInlineDataPrefix attempts to parse beginning of the code as inline data
 // Function is for binary code analysis
 // Returns:
-// - parsed literal or nil
+// - parsed data with the 1 byte prefix or nil
 // - true if success, false if not
 // - EOF if not enough data
 func ParseInlineDataPrefix(code []byte) ([]byte, bool, error) {
@@ -487,39 +564,64 @@ func ParseInlineDataPrefix(code []byte) ([]byte, bool, error) {
 		// too short
 		return nil, false, io.EOF
 	}
-	return code[1 : 1+size], true, nil
-}
-
-//ParseCallWithConstants parses simple call structure from the binary of the expression fun(l1, ..., ln),
-//where li is inline data. Expected number of parameters n is given
-func ParseCallWithConstants(code []byte, n int) ([]byte, [][]byte, error) {
-	callPrefix, _, arity, err := parseCallPrefix(code)
-	if err != nil {
-		return nil, nil, err
-	}
-	if arity != n {
-		return nil, nil, fmt.Errorf("wrong expected number of args")
-	}
-	params := make([][]byte, 0)
-	code = code[len(callPrefix):]
-	for i := 0; i < n; i++ {
-		data, isData, err := ParseInlineDataPrefix(code)
-		if err != nil {
-			return nil, nil, err
-		}
-		if !isData {
-			return nil, nil, fmt.Errorf("not a data argument")
-		}
-		params = append(params, data)
-		code = code[1+len(data):]
-	}
-	return callPrefix, params, nil
+	return code[0 : 1+size], true, nil
 }
 
 func ParseCallPrefixFromBinary(code []byte) ([]byte, error) {
-	callPrefix, _, _, err := parseCallPrefix(code)
+	callPrefix, _, _, _, err := parseCallPrefix(code)
 	if err != nil {
 		return nil, err
 	}
 	return callPrefix, nil
+}
+
+func DecompileBinaryOneLevel(code []byte) (string, []byte, [][]byte, error) {
+	f, err := ExpressionFromBinary(code)
+	if err != nil {
+		return "", nil, nil, err
+	}
+	args := make([][]byte, len(f.Args))
+	prefix := f.CallPrefix
+
+	for i, arg := range f.Args {
+		var buf bytes.Buffer
+		if err = writeExpressionBinary(&buf, arg); err != nil {
+			return "", nil, nil, err
+		}
+		args[i] = buf.Bytes()
+	}
+	return f.FunctionName, prefix, args, nil
+}
+
+func ComposeOneLevel(sym string, args [][]byte) string {
+	ret := sym
+	first := true
+	if len(args) > 0 {
+		ret += "("
+	}
+	for _, arg := range args {
+		if !first {
+			ret += ","
+		}
+		if len(arg) == 0 {
+			ret += "nil"
+		} else {
+			if arg[0]&FirstByteDataMask != 0 {
+				// it is data
+				if len(arg) == 2 {
+					ret += fmt.Sprintf("%d", arg[1])
+				} else {
+					ret += fmt.Sprintf("0x%s", hex.EncodeToString(arg[1:]))
+				}
+			} else {
+				// it is a function call
+				ret += fmt.Sprintf("x/%s", hex.EncodeToString(arg))
+			}
+		}
+		first = false
+	}
+	if len(args) > 0 {
+		ret += ")"
+	}
+	return ret
 }

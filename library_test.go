@@ -608,33 +608,6 @@ func TestParseBin(t *testing.T) {
 		t.Logf("fun2par(0xeeff, 0x1122) code: %s", Fmt(binCode))
 		require.True(t, bytes.HasPrefix(binCode, prefix))
 	})
-	t.Run("parse simple call 1", func(t *testing.T) {
-		_, _, binCode, err := CompileExpression("fun1par(0xeeff)")
-		require.NoError(t, err)
-		prefix, args, err := ParseCallWithConstants(binCode, 1)
-		require.NoError(t, err)
-
-		prefix1, err := FunctionCallPrefixByName("fun1par", 1)
-		require.NoError(t, err)
-		require.EqualValues(t, prefix, prefix1)
-		require.EqualValues(t, 1, len(args))
-		require.EqualValues(t, []byte{0xee, 0xff}, args[0])
-	})
-	t.Run("parse simple call 2", func(t *testing.T) {
-		_, _, binCode, err := CompileExpression("fun2par(0xeeff, 0x1122)")
-		require.NoError(t, err)
-		prefix, args, err := ParseCallWithConstants(binCode, 1)
-		require.Error(t, err)
-		prefix, args, err = ParseCallWithConstants(binCode, 2)
-		require.NoError(t, err)
-
-		prefix1, err := FunctionCallPrefixByName("fun2par", 2)
-		require.NoError(t, err)
-		require.EqualValues(t, prefix, prefix1)
-		require.EqualValues(t, 2, len(args))
-		require.EqualValues(t, []byte{0xee, 0xff}, args[0])
-		require.EqualValues(t, []byte{0x11, 0x22}, args[1])
-	})
 }
 
 func TestInlineCode(t *testing.T) {
@@ -682,5 +655,87 @@ func TestInlineCode(t *testing.T) {
 		require.NoError(t, err)
 		t.Logf("result: %s", Fmt(res))
 		require.EqualValues(t, []byte{0, 2}, res)
+	})
+}
+
+func TestDecompile(t *testing.T) {
+	t.Run("bin-expr 1", func(t *testing.T) {
+		const formula = "concat(0,1)"
+		_, _, bin, err := CompileExpression(formula)
+		require.NoError(t, err)
+		f, err := ExpressionFromBinary(bin)
+		require.NoError(t, err)
+		binBack := ExpressionToBinary(f)
+		require.EqualValues(t, bin, binBack)
+		formulaBack, err := DecompileBinary(bin)
+		require.NoError(t, err)
+		t.Logf("orig: '%s'", formula)
+		t.Logf("decompiled: '%s'", formulaBack)
+
+		_, _, binBack1, err := CompileExpression(formulaBack)
+		require.NoError(t, err)
+		require.EqualValues(t, bin, binBack1)
+
+		sym, _, args, err := DecompileBinaryOneLevel(bin)
+		require.NoError(t, err)
+
+		formulaBack2 := ComposeOneLevel(sym, args)
+		t.Logf("decompiled by level 1: '%s'", formulaBack2)
+
+		_, _, binBack2, err := CompileExpression(formulaBack)
+		require.NoError(t, err)
+		require.EqualValues(t, bin, binBack2)
+	})
+	t.Run("bin-expr 2", func(t *testing.T) {
+		const formula = "slice(concat($0,1),1,1)"
+		_, _, bin, err := CompileExpression(formula)
+		require.NoError(t, err)
+		f, err := ExpressionFromBinary(bin)
+		require.NoError(t, err)
+		binBack := ExpressionToBinary(f)
+		require.EqualValues(t, bin, binBack)
+		formulaBack, err := DecompileBinary(bin)
+		require.NoError(t, err)
+		t.Logf("orig: '%s'", formula)
+		t.Logf("decompiled: '%s'", formulaBack)
+		_, _, binBack1, err := CompileExpression(formulaBack)
+		require.NoError(t, err)
+		require.EqualValues(t, bin, binBack1)
+
+		sym, _, args, err := DecompileBinaryOneLevel(bin)
+		require.NoError(t, err)
+
+		formulaBack2 := ComposeOneLevel(sym, args)
+		t.Logf("decompiled by level 1: '%s'", formulaBack2)
+
+		_, _, binBack2, err := CompileExpression(formulaBack)
+		require.NoError(t, err)
+		require.EqualValues(t, bin, binBack2)
+	})
+	t.Run("bin-expr 3", func(t *testing.T) {
+		const formula = "fun2par(fun1par(0x0102),concat($0,$1))"
+		_, _, bin, err := CompileExpression(formula)
+		require.NoError(t, err)
+		f, err := ExpressionFromBinary(bin)
+		require.NoError(t, err)
+		binBack := ExpressionToBinary(f)
+		require.EqualValues(t, bin, binBack)
+		formulaBack, err := DecompileBinary(bin)
+		require.NoError(t, err)
+		t.Logf("orig: '%s'", formula)
+		t.Logf("decompiled: '%s'", formulaBack)
+		_, _, binBack1, err := CompileExpression(formulaBack)
+		require.NoError(t, err)
+		require.EqualValues(t, bin, binBack1)
+
+		sym, _, args, err := DecompileBinaryOneLevel(bin)
+		require.NoError(t, err)
+
+		formulaBack2 := ComposeOneLevel(sym, args)
+		t.Logf("decompiled by level 1: '%s'", formulaBack2)
+
+		_, _, binBack2, err := CompileExpression(formulaBack)
+		require.NoError(t, err)
+		require.EqualValues(t, bin, binBack2)
 	})
 }

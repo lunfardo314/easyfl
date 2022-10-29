@@ -25,8 +25,12 @@ const (
 )
 
 type Expression struct {
+	// Artifact for execution
 	Args     []*Expression
 	EvalFunc EvalFunction
+	// Artifacts for code parsing
+	FunctionName string
+	CallPrefix   []byte
 }
 
 type EvalFunction func(glb *CallParams) []byte
@@ -305,13 +309,13 @@ func functionByName(sym string) (*funInfo, error) {
 	return ret, nil
 }
 
-func functionByCode(funCode uint16) (EvalFunction, int, error) {
+func functionByCode(funCode uint16) (EvalFunction, int, string, error) {
 	var libData *funDescriptor
 	libData = theLibrary.funByFunCode[funCode]
 	if libData == nil {
-		return nil, 0, fmt.Errorf("wrong function code %d", funCode)
+		return nil, 0, "", fmt.Errorf("wrong function code %d", funCode)
 	}
-	return libData.evalFun, libData.requiredNumParams, nil
+	return libData.evalFun, libData.requiredNumParams, libData.sym, nil
 }
 
 func (fi *funInfo) callPrefix(numArgs byte) ([]byte, error) {
