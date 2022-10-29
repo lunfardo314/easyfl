@@ -738,4 +738,32 @@ func TestDecompile(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, bin, binBack2)
 	})
+	t.Run("bin-expr 1", func(t *testing.T) {
+		const formula = "concat(u64/1337)"
+		_, _, bin, err := CompileExpression(formula)
+		require.NoError(t, err)
+		f, err := ExpressionFromBinary(bin)
+		require.NoError(t, err)
+		binBack := ExpressionToBinary(f)
+		require.EqualValues(t, bin, binBack)
+		formulaBack, err := DecompileBinary(bin)
+		require.NoError(t, err)
+		t.Logf("orig: '%s'", formula)
+		t.Logf("decompiled: '%s'", formulaBack)
+
+		_, _, binBack1, err := CompileExpression(formulaBack)
+		require.NoError(t, err)
+		require.EqualValues(t, bin, binBack1)
+
+		sym, _, args, err := DecompileBinaryOneLevel(bin, 1)
+		require.NoError(t, err)
+		require.EqualValues(t, 1337, binary.BigEndian.Uint64(args[0]))
+
+		formulaBack2 := ComposeOneLevel(sym, args)
+		t.Logf("decompiled by level 1: '%s'", formulaBack2)
+
+		_, _, binBack2, err := CompileExpression(formulaBack)
+		require.NoError(t, err)
+		require.EqualValues(t, bin, binBack2)
+	})
 }

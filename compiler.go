@@ -592,6 +592,10 @@ func DecompileBinaryOneLevel(code []byte, expectedNumArgs ...int) (string, []byt
 			return "", nil, nil, err
 		}
 		args[i] = buf.Bytes()
+		if len(args[i]) > 0 && args[i][0]&FirstByteDataMask != 0 {
+			// if it is data, skip the prefix
+			args[i] = args[i][1:]
+		}
 	}
 	return f.FunctionName, prefix, args, nil
 }
