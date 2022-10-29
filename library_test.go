@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -482,9 +483,12 @@ func TestArithmetics(t *testing.T) {
 	runTest("mul16_32($0,$1)", num(uint16(255*255)), num(uint16(255*255)), num(uint32(255*255*255*255)))
 }
 
-func TestInline(t *testing.T) {
+func init() {
 	Extend("fun1par", "$0")
 	Extend("fun2par", "concat($0,$1)")
+}
+
+func TestParseBin(t *testing.T) {
 
 	t.Run("1", func(t *testing.T) {
 		_, _, bin, err := CompileExpression("fun1par(0x00)")
@@ -630,5 +634,53 @@ func TestInline(t *testing.T) {
 		require.EqualValues(t, 2, len(args))
 		require.EqualValues(t, []byte{0xee, 0xff}, args[0])
 		require.EqualValues(t, []byte{0x11, 0x22}, args[1])
+	})
+}
+
+func TestInlineCode(t *testing.T) {
+	t.Run("1", func(t *testing.T) {
+		_, _, bin1, err := CompileExpression("concat(0,1)")
+		require.NoError(t, err)
+		_, _, bin2, err := CompileExpression("concat(concat(0,1),2)")
+		require.NoError(t, err)
+		_, _, bin3, err := CompileExpression(fmt.Sprintf("concat(x/%s,2)", hex.EncodeToString(bin1)))
+		require.NoError(t, err)
+		require.EqualValues(t, bin2, bin3)
+
+		t.Logf("code with inline: %s", Fmt(bin3))
+		res, err := EvalFromBinary(NewGlobalDataTracePrint(nil), bin3)
+		require.NoError(t, err)
+		t.Logf("result: %s", Fmt(res))
+		require.EqualValues(t, []byte{0, 1, 2}, res)
+	})
+	t.Run("2", func(t *testing.T) {
+		_, _, bin1, err := CompileExpression("$0")
+		require.NoError(t, err)
+		_, _, bin2, err := CompileExpression("concat($0,2)")
+		require.NoError(t, err)
+		_, _, bin3, err := CompileExpression(fmt.Sprintf("concat(x/%s,2)", hex.EncodeToString(bin1)))
+		require.NoError(t, err)
+		require.EqualValues(t, bin2, bin3)
+
+		t.Logf("code with inline: %s", Fmt(bin3))
+		res, err := EvalFromBinary(NewGlobalDataTracePrint(nil), bin3, []byte{0, 1})
+		require.NoError(t, err)
+		t.Logf("result: %s", Fmt(res))
+		require.EqualValues(t, []byte{0, 1, 2}, res)
+	})
+	t.Run("3", func(t *testing.T) {
+		_, _, bin1, err := CompileExpression("fun1par(0)")
+		require.NoError(t, err)
+		_, _, bin2, err := CompileExpression("fun2par(fun1par(0),$0)")
+		require.NoError(t, err)
+		_, _, bin3, err := CompileExpression(fmt.Sprintf("fun2par(x/%s,$0)", hex.EncodeToString(bin1)))
+		require.NoError(t, err)
+		require.EqualValues(t, bin2, bin3)
+
+		t.Logf("code with inline: %s", Fmt(bin3))
+		res, err := EvalFromBinary(NewGlobalDataTracePrint(nil), bin3, []byte{2})
+		require.NoError(t, err)
+		t.Logf("result: %s", Fmt(res))
+		require.EqualValues(t, []byte{0, 2}, res)
 	})
 }

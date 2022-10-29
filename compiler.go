@@ -234,6 +234,18 @@ func (f *parsedExpression) binaryFromParsedExpression(w io.Writer) (int, error) 
 			}
 			return 0, nil
 		}
+		if strings.HasPrefix(f.sym, "x/") {
+			// it is an inline binary code
+			b, err := hex.DecodeString(f.sym[2:])
+			if err != nil {
+				return 0, fmt.Errorf("%v: '%s'", err, f.sym)
+			}
+			// write the code as is
+			if _, err = w.Write(b); err != nil {
+				return 0, err
+			}
+			return 0, nil
+		}
 		if strings.HasPrefix(f.sym, "u16/") {
 			// it is u16 constant big endian
 			n, err = strconv.Atoi(strings.TrimPrefix(f.sym, "u16/"))
