@@ -757,7 +757,7 @@ func TestDecompile(t *testing.T) {
 
 		sym, _, args, err := ParseBinaryOneLevel(bin, 1)
 		require.NoError(t, err)
-		require.EqualValues(t, 1337, binary.BigEndian.Uint64(args[0]))
+		require.EqualValues(t, 1337, binary.BigEndian.Uint64(StripDataPrefix(args[0])))
 
 		formulaBack2 := ComposeOneLevel(sym, args)
 		t.Logf("decompiled by level 1: '%s'", formulaBack2)

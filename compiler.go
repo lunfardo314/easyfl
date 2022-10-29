@@ -592,12 +592,17 @@ func ParseBinaryOneLevel(code []byte, expectedNumArgs ...int) (string, []byte, [
 			return "", nil, nil, err
 		}
 		args[i] = buf.Bytes()
-		if len(args[i]) > 0 && args[i][0]&FirstByteDataMask != 0 {
-			// if it is data, skip the prefix
-			args[i] = args[i][1:]
-		}
 	}
 	return f.FunctionName, prefix, args, nil
+}
+
+// StripDataPrefix if the first byte is a data prefix, strips it
+func StripDataPrefix(data []byte) []byte {
+	if len(data) > 0 && data[0]&FirstByteDataMask != 0 {
+		// if it is data, skip the prefix
+		return data[1:]
+	}
+	return data
 }
 
 func ComposeOneLevel(sym string, args [][]byte) string {
@@ -616,6 +621,7 @@ func ComposeOneLevel(sym string, args [][]byte) string {
 			if arg[0]&FirstByteDataMask != 0 {
 				// it is data
 				if len(arg) == 2 {
+					// one byte constant
 					ret += fmt.Sprintf("%d", arg[1])
 				} else {
 					ret += fmt.Sprintf("0x%s", hex.EncodeToString(arg[1:]))
