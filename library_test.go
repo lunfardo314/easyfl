@@ -676,7 +676,7 @@ func TestDecompile(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, bin, binBack1)
 
-		sym, _, args, err := DecompileBinaryOneLevel(bin)
+		sym, _, args, err := ParseBinaryOneLevel(bin)
 		require.NoError(t, err)
 
 		formulaBack2 := ComposeOneLevel(sym, args)
@@ -702,7 +702,7 @@ func TestDecompile(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, bin, binBack1)
 
-		sym, _, args, err := DecompileBinaryOneLevel(bin)
+		sym, _, args, err := ParseBinaryOneLevel(bin)
 		require.NoError(t, err)
 
 		formulaBack2 := ComposeOneLevel(sym, args)
@@ -728,7 +728,7 @@ func TestDecompile(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, bin, binBack1)
 
-		sym, _, args, err := DecompileBinaryOneLevel(bin)
+		sym, _, args, err := ParseBinaryOneLevel(bin)
 		require.NoError(t, err)
 
 		formulaBack2 := ComposeOneLevel(sym, args)
@@ -755,7 +755,7 @@ func TestDecompile(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, bin, binBack1)
 
-		sym, _, args, err := DecompileBinaryOneLevel(bin, 1)
+		sym, _, args, err := ParseBinaryOneLevel(bin, 1)
 		require.NoError(t, err)
 		require.EqualValues(t, 1337, binary.BigEndian.Uint64(args[0]))
 

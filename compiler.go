@@ -575,7 +575,7 @@ func ParseCallPrefixFromBinary(code []byte) ([]byte, error) {
 	return callPrefix, nil
 }
 
-func DecompileBinaryOneLevel(code []byte, expectedNumArgs ...int) (string, []byte, [][]byte, error) {
+func ParseBinaryOneLevel(code []byte, expectedNumArgs ...int) (string, []byte, [][]byte, error) {
 	f, err := ExpressionFromBinary(code)
 	if err != nil {
 		return "", nil, nil, err
