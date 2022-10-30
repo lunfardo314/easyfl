@@ -19,6 +19,11 @@ func Concat(data ...interface{}) []byte {
 			buf.Write(d)
 		case interface{ Bytes() []byte }:
 			buf.Write(d.Bytes())
+		case int:
+			if d < 0 || d > 255 {
+				panic("not a 1 byte integer value")
+			}
+			buf.WriteByte(byte(d))
 		default:
 			panic("must be 'byte', '[]byte' or 'interface{ Bytes() []byte }'")
 		}
