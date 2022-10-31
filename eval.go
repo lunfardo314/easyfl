@@ -119,7 +119,11 @@ func evalExpression(glb GlobalData, f *Expression, varScope []*Call) []byte {
 
 // EvalExpression evaluates expression, in the context of any data context and given values of parameters
 func EvalExpression(glb GlobalData, f *Expression, args ...[]byte) []byte {
-	argsForData := dataCalls(glb, args...)
+	argsForData := make([]*Call, len(args))
+	callParams := NewCallParams(NewEvalContext(nil, glb), nil)
+	for i, d := range args {
+		argsForData[i] = NewCall(dataFunction(d), callParams)
+	}
 	return evalExpression(glb, f, argsForData)
 }
 

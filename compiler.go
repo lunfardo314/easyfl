@@ -495,14 +495,6 @@ func dataFunction(data []byte) EvalFunction {
 	}
 }
 
-func dataCalls(glb GlobalData, data ...[]byte) []*Call {
-	ret := make([]*Call, len(data))
-	for i, d := range data {
-		ret[i] = NewCall(dataFunction(d), NewCallParams(NewEvalContext(nil, glb), nil))
-	}
-	return ret
-}
-
 func parseCallPrefix(code []byte) ([]byte, EvalFunction, int, string, error) {
 	if len(code) == 0 || code[0]&FirstByteDataMask != 0 {
 		return nil, nil, 0, "", fmt.Errorf("parseCallPrefix: not a function call")
