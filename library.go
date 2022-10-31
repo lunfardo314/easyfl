@@ -196,7 +196,7 @@ func Extend(sym string, source string) uint16 {
 	return ret
 }
 
-func makeEvalFunForExpressions(sym string, expr *Expression) EvalFunction {
+func makeEvalFunForExpression(sym string, expr *Expression) EvalFunction {
 	return func(par *CallParams) []byte {
 		varScope := make([]*Call, len(par.args))
 		for i := range varScope {
@@ -228,7 +228,7 @@ func ExtendErr(sym string, source string) (uint16, error) {
 	if numParam > 15 {
 		return 0, errors.New("can't be more than 15 parameters")
 	}
-	evalFun := makeEvalFunForExpressions(sym, f)
+	evalFun := makeEvalFunForExpression(sym, f)
 	if traceYN {
 		evalFun = wrapWithTracing(evalFun, sym)
 	}
