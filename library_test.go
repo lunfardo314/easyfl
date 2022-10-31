@@ -738,7 +738,7 @@ func TestDecompile(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, bin, binBack2)
 	})
-	t.Run("bin-expr 1", func(t *testing.T) {
+	t.Run("bin-expr 4", func(t *testing.T) {
 		const formula = "concat(u64/1337)"
 		_, _, bin, err := CompileExpression(formula)
 		require.NoError(t, err)
@@ -765,5 +765,41 @@ func TestDecompile(t *testing.T) {
 		_, _, binBack2, err := CompileExpression(formulaBack)
 		require.NoError(t, err)
 		require.EqualValues(t, bin, binBack2)
+	})
+	t.Run("bin-expr 5", func(t *testing.T) {
+		const formula = "concat(u64/1337, 123, concat(1,2,3), tail(0x00010203, 1))"
+		_, _, bin, err := CompileExpression(formula)
+		require.NoError(t, err)
+		f, err := ExpressionFromBinary(bin)
+		require.NoError(t, err)
+		binBack := ExpressionToBinary(f)
+		require.EqualValues(t, bin, binBack)
+		formulaBack, err := DecompileBinary(bin)
+		require.NoError(t, err)
+		t.Logf("orig: '%s'", formula)
+		t.Logf("decompiled: '%s'", formulaBack)
+
+		_, _, binBack1, err := CompileExpression(formulaBack)
+		require.NoError(t, err)
+		require.EqualValues(t, bin, binBack1)
+
+		sym, prefix, args, err := ParseBinaryOneLevel(bin, 4)
+		require.NoError(t, err)
+		require.EqualValues(t, 1337, binary.BigEndian.Uint64(StripDataPrefix(args[0])))
+
+		formulaBack2 := ComposeOneLevel(sym, args)
+		t.Logf("decompiled by level 1: '%s'", formulaBack2)
+
+		_, _, binBack2, err := CompileExpression(formulaBack)
+		require.NoError(t, err)
+		require.EqualValues(t, bin, binBack2)
+
+		pieces := make([]interface{}, len(args)+1)
+		pieces[0] = prefix
+		for i := range args {
+			pieces[i+1] = args[i]
+		}
+		// concatenation of decomposed binary is equal to the original
+		require.EqualValues(t, bin, Concat(pieces...))
 	})
 }
