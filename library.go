@@ -200,7 +200,7 @@ func makeEvalFunForExpression(sym string, expr *Expression) EvalFunction {
 	return func(par *CallParams) []byte {
 		varScope := make([]*Call, len(par.args))
 		for i := range varScope {
-			varScope[i] = NewCall(par.args[i].EvalFunc, NewCallParams(par.ctx, par.args[i].Args))
+			varScope[i] = newCall(par.args[i].EvalFunc, par.args[i].Args, par.ctx)
 		}
 		ret := evalExpression(par.ctx.glb, expr, varScope)
 		par.Trace("'%s':: %d params -> %s", sym, par.Arity(), Fmt(ret))

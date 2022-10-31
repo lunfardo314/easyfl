@@ -30,24 +30,24 @@ type Call struct {
 	params *CallParams
 }
 
-func NewEvalContext(varScope []*Call, glb GlobalData) *EvalContext {
+func newEvalContext(varScope []*Call, glb GlobalData) *EvalContext {
 	return &EvalContext{
 		varScope: varScope,
 		glb:      glb,
 	}
 }
 
-func NewCallParams(ctx *EvalContext, args []*Expression) *CallParams {
+func newCallParams(ctx *EvalContext, args []*Expression) *CallParams {
 	return &CallParams{
 		ctx:  ctx,
 		args: args,
 	}
 }
 
-func NewCall(f EvalFunction, params *CallParams) *Call {
+func newCall(f EvalFunction, args []*Expression, ctx *EvalContext) *Call {
 	return &Call{
 		f:      f,
-		params: params,
+		params: newCallParams(ctx, args),
 	}
 }
 
@@ -66,10 +66,8 @@ func (p *CallParams) Arity() byte {
 	return byte(len(p.args))
 }
 
-func (ctx *EvalContext) call(fun EvalFunction, args []*Expression) []byte {
-	par := NewCallParams(ctx, args)
-	call := NewCall(fun, par)
-	return call.Eval()
+func (ctx *EvalContext) eval(f *Expression) []byte {
+	return newCall(f.EvalFunc, f.Args, ctx).Eval()
 }
 
 // Arg evaluates argument if the call inside embedded function
@@ -77,7 +75,7 @@ func (p *CallParams) Arg(n byte) []byte {
 	if traceYN {
 		fmt.Printf("Arg(%d) -- IN\n", n)
 	}
-	ret := p.ctx.call(p.args[n].EvalFunc, p.args[n].Args)
+	ret := p.ctx.eval(p.args[n])
 
 	if traceYN {
 		fmt.Printf("Arg(%d) -- OUT ret: %v\n", n, ret)
@@ -116,16 +114,15 @@ func (ctx *EvalContext) DataContext() interface{} {
 }
 
 func evalExpression(glb GlobalData, f *Expression, varScope []*Call) []byte {
-	ctx := NewEvalContext(varScope, glb)
-	return ctx.call(f.EvalFunc, f.Args)
+	return newEvalContext(varScope, glb).eval(f)
 }
 
 // EvalExpression evaluates expression, in the context of any data context and given values of parameters
 func EvalExpression(glb GlobalData, f *Expression, args ...[]byte) []byte {
 	argsForData := make([]*Call, len(args))
-	callParams := NewCallParams(NewEvalContext(nil, glb), nil)
+	ctx := newEvalContext(nil, glb)
 	for i, d := range args {
-		argsForData[i] = NewCall(dataFunction(d), callParams)
+		argsForData[i] = newCall(dataFunction(d), nil, ctx)
 	}
 	return evalExpression(glb, f, argsForData)
 }
