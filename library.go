@@ -25,10 +25,10 @@ const (
 )
 
 type Expression struct {
-	// Artifact for execution
+	// for evaluation
 	Args     []*Expression
 	EvalFunc EvalFunction
-	// Artifacts for code parsing
+	// for code parsing
 	FunctionName string
 	CallPrefix   []byte
 }
@@ -40,7 +40,7 @@ type funDescriptor struct {
 	funCode           uint16
 	requiredNumParams int
 	evalFun           EvalFunction
-	contextDependent  bool
+	locallyDependent  bool
 }
 
 type libraryData struct {
@@ -123,7 +123,7 @@ func PrintLibraryStats() {
 }
 
 // EmbedShort embeds short-callable function inti the library
-// contextDependent is not used currently, it is intended for caching of values TODO
+// locallyDependent is not used currently, it is intended for caching of values TODO
 func EmbedShort(sym string, requiredNumPar int, evalFun EvalFunction, contextDependent ...bool) byte {
 	Assert(numEmbeddedShort < MaxNumEmbeddedShort, "too many embedded short functions")
 	Assert(!existsFunction(sym), "!existsFunction(sym)")
@@ -141,7 +141,7 @@ func EmbedShort(sym string, requiredNumPar int, evalFun EvalFunction, contextDep
 		funCode:           uint16(numEmbeddedShort),
 		requiredNumParams: requiredNumPar,
 		evalFun:           evalFun,
-		contextDependent:  ctxDept,
+		locallyDependent:  ctxDept,
 	}
 	theLibrary.funByName[sym] = dscr
 	theLibrary.funByFunCode[dscr.funCode] = dscr
@@ -200,11 +200,9 @@ func makeEvalFunForExpressions(sym string, expr *Expression) EvalFunction {
 	return func(par *CallParams) []byte {
 		varScope := make([]*Call, len(par.args))
 		for i := range varScope {
-			p := NewCallParams(par.ctx, par.args[i].Args)
-			varScope[i] = NewCall(par.args[i].EvalFunc, p)
+			varScope[i] = NewCall(par.args[i].EvalFunc, NewCallParams(par.ctx, par.args[i].Args))
 		}
-		nextCtx := NewEvalContext(varScope, par.ctx.glb)
-		ret := NewCall(expr.EvalFunc, NewCallParams(nextCtx, expr.Args)).Eval()
+		ret := evalExpression(par.ctx.glb, expr, varScope)
 		par.Trace("'%s':: %d params -> %s", sym, par.Arity(), Fmt(ret))
 		return ret
 	}
