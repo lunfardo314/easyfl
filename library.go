@@ -198,7 +198,7 @@ func Extend(sym string, source string) uint16 {
 
 func makeEvalFunForExpression(sym string, expr *Expression) EvalFunction {
 	return func(par *CallParams) []byte {
-		varScope := make([]*Call, len(par.args))
+		varScope := make([]*call, len(par.args))
 		for i := range varScope {
 			varScope[i] = newCall(par.args[i].EvalFunc, par.args[i].Args, par.ctx)
 		}

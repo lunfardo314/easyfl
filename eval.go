@@ -12,47 +12,47 @@ type GlobalData interface {
 	PutTrace(string)   // hook for tracing messages. Called only if enabled
 }
 
-// EvalContext is the structure through which the EasyFL script accesses data structure it is validating
-type EvalContext struct {
+// evalContext is the structure through which the EasyFL script accesses data structure it is validating
+type evalContext struct {
 	glb      GlobalData
-	varScope []*Call
+	varScope []*call
 }
 
 // CallParams is a structure through which the function accesses its evaluation context and call arguments
 type CallParams struct {
-	ctx  *EvalContext
+	ctx  *evalContext
 	args []*Expression
 }
 
-// Call is EvalFunction with params
-type Call struct {
+// call is EvalFunction with params
+type call struct {
 	f      EvalFunction
 	params *CallParams
 }
 
-func newEvalContext(varScope []*Call, glb GlobalData) *EvalContext {
-	return &EvalContext{
+func newEvalContext(varScope []*call, glb GlobalData) *evalContext {
+	return &evalContext{
 		varScope: varScope,
 		glb:      glb,
 	}
 }
 
-func newCallParams(ctx *EvalContext, args []*Expression) *CallParams {
+func newCallParams(ctx *evalContext, args []*Expression) *CallParams {
 	return &CallParams{
 		ctx:  ctx,
 		args: args,
 	}
 }
 
-func newCall(f EvalFunction, args []*Expression, ctx *EvalContext) *Call {
-	return &Call{
+func newCall(f EvalFunction, args []*Expression, ctx *evalContext) *call {
+	return &call{
 		f:      f,
 		params: newCallParams(ctx, args),
 	}
 }
 
 // Eval evaluates the expression by calling it eval function with the parameter
-func (c *Call) Eval() []byte {
+func (c *call) Eval() []byte {
 	return c.f(c.params)
 }
 
@@ -66,7 +66,7 @@ func (p *CallParams) Arity() byte {
 	return byte(len(p.args))
 }
 
-func (ctx *EvalContext) eval(f *Expression) []byte {
+func (ctx *evalContext) eval(f *Expression) []byte {
 	return newCall(f.EvalFunc, f.Args, ctx).Eval()
 }
 
@@ -109,17 +109,13 @@ func (p *CallParams) evalParam(n byte) []byte {
 	return ret
 }
 
-func (ctx *EvalContext) DataContext() interface{} {
-	return ctx.glb.Data()
-}
-
-func evalExpression(glb GlobalData, f *Expression, varScope []*Call) []byte {
+func evalExpression(glb GlobalData, f *Expression, varScope []*call) []byte {
 	return newEvalContext(varScope, glb).eval(f)
 }
 
 // EvalExpression evaluates expression, in the context of any data context and given values of parameters
 func EvalExpression(glb GlobalData, f *Expression, args ...[]byte) []byte {
-	argsForData := make([]*Call, len(args))
+	argsForData := make([]*call, len(args))
 	ctx := newEvalContext(nil, glb)
 	for i, d := range args {
 		argsForData[i] = newCall(dataFunction(d), nil, ctx)
