@@ -66,13 +66,18 @@ func (p *CallParams) Arity() byte {
 	return byte(len(p.args))
 }
 
+func (ctx *EvalContext) call(fun EvalFunction, args []*Expression) []byte {
+	par := NewCallParams(ctx, args)
+	call := NewCall(fun, par)
+	return call.Eval()
+}
+
 // Arg evaluates argument if the call inside embedded function
 func (p *CallParams) Arg(n byte) []byte {
 	if traceYN {
 		fmt.Printf("Arg(%d) -- IN\n", n)
 	}
-	call := NewCall(p.args[n].EvalFunc, NewCallParams(p.ctx, p.args[n].Args))
-	ret := call.Eval()
+	ret := p.ctx.call(p.args[n].EvalFunc, p.args[n].Args)
 
 	if traceYN {
 		fmt.Printf("Arg(%d) -- OUT ret: %v\n", n, ret)
@@ -112,9 +117,7 @@ func (ctx *EvalContext) DataContext() interface{} {
 
 func evalExpression(glb GlobalData, f *Expression, varScope []*Call) []byte {
 	ctx := NewEvalContext(varScope, glb)
-	par := NewCallParams(ctx, f.Args)
-	call := NewCall(f.EvalFunc, par)
-	return call.Eval()
+	return ctx.call(f.EvalFunc, f.Args)
 }
 
 // EvalExpression evaluates expression, in the context of any data context and given values of parameters
