@@ -1,6 +1,7 @@
 package easyfl
 
 import (
+	"bytes"
 	"fmt"
 )
 
@@ -170,4 +171,18 @@ func EvalFromBinary(glb GlobalData, code []byte, args ...[]byte) ([]byte, error)
 		return nil
 	})
 	return ret, err
+}
+
+func MustEqual(source1, source2 string) {
+	res1, err := EvalFromSource(nil, source1)
+	Assert(err == nil, "expression '%s' resulted in error: '%v'", source1, err)
+	res2, err := EvalFromSource(nil, source2)
+	Assert(err == nil, "expression '%s' resulted in error: '%v'", source2, err)
+	Assert(bytes.Equal(res1, res2), "must be equal %s and %s: %s != %s", source1, source2, Fmt(res1), Fmt(res2))
+}
+
+func MustTrue(source string) {
+	res, err := EvalFromSource(nil, source)
+	Assert(err == nil, "expression '%s' resulted in error: '%v'", source, err)
+	Assert(len(res) > 0, "expression '%s' must be true", res)
 }

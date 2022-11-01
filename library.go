@@ -72,6 +72,8 @@ func init() {
 	// basic
 	// 'slice' inclusive the end. Expects 1-byte slices at $1 and $2
 	EmbedShort("slice", 3, evalSlice)
+	MustEqual("slice(0x010203,1,2)", "0x0203")
+
 	// 'tail' takes from $1 to the end
 	EmbedShort("tail", 2, evalTail)
 	EmbedShort("equal", 2, evalEqual)
@@ -85,6 +87,8 @@ func init() {
 	// stateless varargs
 	// 'Concat' concatenates variable number of arguments. Concat() is empty byte array
 	EmbedLong("concat", -1, evalConcat)
+	MustEqual("concat(1,2)", "0x0102")
+
 	EmbedLong("and", -1, evalAnd)
 	EmbedLong("or", -1, evalOr)
 
@@ -102,16 +106,24 @@ func init() {
 
 	// comparison
 	EmbedShort("lessThan", 2, evalLessThan)
+	MustTrue("lessThan(1,2)")
+	MustTrue("not(lessThan(2,1))")
+	MustTrue("not(lessThan(2,2))")
+
 	Extend("lessOrEqualThan", "or(lessThan($0,$1),equal($0,$1))")
 	Extend("greaterThan", "not(lessOrEqualThan($0,$1))")
 	Extend("greaterOrEqualThan", "not(lessThan($0,$1))")
 	// other
 	Extend("nil", "or")
+	MustEqual("concat", "nil")
+
 	Extend("byte", "slice($0, $1, $1)")
+	MustEqual("byte(0x010203, 2)", "3")
 
 	EmbedLong("validSignatureED25519", 3, evalValidSigED25519)
-	EmbedLong("blake2b", -1, evalBlake2b)
 
+	EmbedLong("blake2b", -1, evalBlake2b)
+	MustEqual("len8(blake2b(1))", "32")
 }
 
 func PrintLibraryStats() {
