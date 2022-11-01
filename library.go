@@ -75,6 +75,7 @@ func init() {
 	// 'tail' takes from $1 to the end
 	EmbedShort("tail", 2, evalTail)
 	EmbedShort("equal", 2, evalEqual)
+	EmbedShort("hasPrefix", 2, evalHasPrefix)
 	// 'len8' returns length up until 255 (256 and more panics)
 	EmbedShort("len8", 1, evalLen8)
 	EmbedShort("len16", 1, evalLen16)
@@ -387,6 +388,17 @@ func evalEqual(par *CallParams) []byte {
 		ret = []byte{0xff}
 	}
 	par.Trace("equal:: %s, %s -> %s", Fmt(p0), Fmt(p1), Fmt(ret))
+	return ret
+}
+
+func evalHasPrefix(par *CallParams) []byte {
+	var ret []byte
+	data := par.Arg(0)
+	prefix := par.Arg(1)
+	if bytes.HasPrefix(data, prefix) {
+		ret = []byte{0xff}
+	}
+	par.Trace("hasPrefix:: %s, %s -> %s", Fmt(data), Fmt(prefix), Fmt(ret))
 	return ret
 }
 
