@@ -300,6 +300,29 @@ func (f *parsedExpression) binaryFromParsedExpression(w io.Writer) (int, error) 
 			}
 			return 0, nil
 		}
+		if strings.HasPrefix(f.sym, "#") {
+			// function call prefix literal
+			funName := strings.TrimPrefix(f.sym, "#")
+			fi, err := functionByName(funName)
+			if err != nil {
+				return 0, err
+			}
+			numArgs = fi.NumParams
+			if numArgs < 0 {
+				numArgs = 0
+			}
+			funCallPrefix, err := fi.callPrefix(byte(numArgs))
+			if err != nil {
+				return 0, err
+			}
+			if _, err = w.Write([]byte{FirstByteDataMask | byte(len(funCallPrefix))}); err != nil {
+				return 0, err
+			}
+			if _, err = w.Write(funCallPrefix); err != nil {
+				return 0, err
+			}
+			return 0, nil
+		}
 		// TODO other types of literals
 	}
 	// either has arguments or not literal

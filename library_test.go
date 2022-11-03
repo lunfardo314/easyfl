@@ -47,6 +47,24 @@ func TestCompile(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, f)
 	})
+	t.Run("fun call literal 1", func(t *testing.T) {
+		prefix, err := EvalFromSource(nil, "#concat")
+		require.NoError(t, err)
+		_, _, code, err := CompileExpression("concat")
+		require.NoError(t, err)
+		prefix1, err := ParseCallPrefixFromBinary(code)
+		require.NoError(t, err)
+		require.True(t, bytes.Equal(prefix, prefix1))
+	})
+	t.Run("fun call literal 2", func(t *testing.T) {
+		prefix, err := EvalFromSource(nil, "#tail")
+		require.NoError(t, err)
+		_, _, code, err := CompileExpression("tail(0x010203, 2)")
+		require.NoError(t, err)
+		prefix1, err := ParseCallPrefixFromBinary(code)
+		require.NoError(t, err)
+		require.True(t, bytes.Equal(prefix, prefix1))
+	})
 }
 
 func TestEval(t *testing.T) {
