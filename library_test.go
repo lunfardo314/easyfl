@@ -17,6 +17,10 @@ import (
 
 const formula1 = "func unlockBlock: concat(concat(0x0000, slice(0x01020304050607, 2, 5)))"
 
+func TestInit(t *testing.T) {
+	PrintLibraryStats()
+}
+
 func TestCompile(t *testing.T) {
 	t.Run("1", func(t *testing.T) {
 		ret, err := parseFunctions(formula1)

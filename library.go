@@ -119,6 +119,21 @@ func init() {
 	EmbedShort("mul8_16", 2, evalMul8_16)
 	EmbedShort("mul16_32", 2, evalMul16_32)
 
+	// bitwise
+	EmbedShort("bitwiseOR", 2, evalBitwiseOR)
+	MustEqual("bitwiseOR(0x01, 0x80)", "0x81")
+
+	EmbedShort("bitwiseAND", 2, evalBitwiseAND)
+	MustEqual("bitwiseAND(0x03, 0xf2)", "0x02")
+	MustEqual("bitwiseAND(0x0102, 0xff00)", "0x0100")
+
+	EmbedShort("bitwiseNOT", 1, evalBitwiseNOT)
+	MustEqual("bitwiseNOT(0x00ff)", "0xff00")
+
+	EmbedShort("bitwiseXOR", 2, evalBitwiseXOR)
+	MustEqual("bitwiseXOR(0x1234, 0x1234)", "0x0000")
+	MustEqual("bitwiseXOR(0x1234, 0xffff)", "bitwiseNOT(0x1234)")
+
 	// comparison
 	EmbedShort("lessThan", 2, evalLessThan)
 	MustTrue("lessThan(1,2)")
@@ -672,4 +687,56 @@ func evalBlake2b(par *CallParams) []byte {
 	ret := blake2b.Sum256(buf.Bytes())
 	par.Trace("blake2b: %d params -> %s", par.Arity(), Fmt(ret[:]))
 	return ret[:]
+}
+
+func evalBitwiseAND(par *CallParams) []byte {
+	a0 := par.Arg(0)
+	a1 := par.Arg(1)
+	if len(a0) != len(a1) {
+		par.TracePanic("evalBitwiseAND: equal length arguments expected: %s -- %s", Fmt(a0), Fmt(a1))
+	}
+	ret := make([]byte, len(a0))
+	for i := range a0 {
+		ret[i] = a0[i] & a1[i]
+	}
+	par.Trace("evalBitwiseAND: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
+	return ret
+}
+
+func evalBitwiseOR(par *CallParams) []byte {
+	a0 := par.Arg(0)
+	a1 := par.Arg(1)
+	if len(a0) != len(a1) {
+		par.TracePanic("evalBitwiseOR: equal length arguments expected: %s -- %s", Fmt(a0), Fmt(a1))
+	}
+	ret := make([]byte, len(a0))
+	for i := range a0 {
+		ret[i] = a0[i] | a1[i]
+	}
+	par.Trace("evalBitwiseOR: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
+	return ret
+}
+
+func evalBitwiseXOR(par *CallParams) []byte {
+	a0 := par.Arg(0)
+	a1 := par.Arg(1)
+	if len(a0) != len(a1) {
+		par.TracePanic("evalBitwiseXOR: equal length arguments expected: %s -- %s", Fmt(a0), Fmt(a1))
+	}
+	ret := make([]byte, len(a0))
+	for i := range a0 {
+		ret[i] = a0[i] ^ a1[i]
+	}
+	par.Trace("evalBitwiseXOR: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
+	return ret
+}
+
+func evalBitwiseNOT(par *CallParams) []byte {
+	a0 := par.Arg(0)
+	ret := make([]byte, len(a0))
+	for i := range a0 {
+		ret[i] = ^a0[i]
+	}
+	par.Trace("evalBitwiseNOT: %s -> %s", Fmt(a0), Fmt(ret))
+	return ret
 }
