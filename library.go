@@ -88,20 +88,29 @@ func init() {
 	// 'Concat' concatenates variable number of arguments. Concat() is empty byte array
 	EmbedLong("concat", -1, evalConcat)
 	MustEqual("concat(1,2)", "0x0102")
+	MustEqual("concat(1,2,3,4)", "concat(concat(1,2),concat(3,4))")
 
 	EmbedLong("and", -1, evalAnd)
+	MustTrue("and")
+	MustTrue("not(and(concat))")
 	EmbedLong("or", -1, evalOr)
+	MustTrue("not(or)")
+	MustTrue("not(or(concat))")
+	MustTrue("or(1)")
 
 	// safe arithmetics
 	EmbedShort("sum8", 2, evalMustSum8)
 	MustEqual("sum8(5,6)", "sum8(10,1)")
 	MustEqual("sum8(5,6)", "11")
+
 	EmbedShort("sum8_16", 2, evalSum8_16)
 	MustEqual("sum8_16(5,6)", "sum8_16(10,1)")
 	MustEqual("sum8_16(5,6)", "u16/11")
+
 	EmbedShort("sum16", 2, evalMustSum16)
 	MustEqual("sum16(u16/5,u16/6)", "sum16(u16/10,u16/1)")
 	MustEqual("sum16(u16/5,u16/6)", "u16/11")
+
 	EmbedShort("sum16_32", 2, evalSum16_32)
 	EmbedShort("sum32", 2, evalMustSum32)
 	EmbedShort("sum32_64", 2, evalSum32_64)
