@@ -3,6 +3,7 @@ package easyfl
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math"
@@ -154,6 +155,26 @@ func init() {
 
 	EmbedLong("blake2b", -1, evalBlake2b)
 	MustEqual("len8(blake2b(1))", "32")
+
+	// code parsing
+	// $0 - binary EasyFL code
+	// $1 - expected call prefix (#-literal)
+	// $2 - number of the parameter to return
+	// Panics if the binary code is not the valid call of the specified function or number of the parameter is out of bounds
+	// Returns code of the argument if it is a call function, or data is it is a constant
+	EmbedLong("parseCallArg", 3, evalParseCallArg)
+	EmbedLong("parseCallPrefix", 1, evalParseCallPrefix)
+	{
+		_, _, binCode, err := CompileExpression("slice(0x01020304,1,2)")
+		AssertNoError(err)
+		src := fmt.Sprintf("parseCallArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 1)
+		MustEqual(src, "1")
+		src = fmt.Sprintf("parseCallArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 2)
+		MustEqual(src, "2")
+
+		src = fmt.Sprintf("equal(parseCallPrefix(0x%s), #slice)", hex.EncodeToString(binCode))
+		MustTrue(src)
+	}
 }
 
 func PrintLibraryStats() {
@@ -738,5 +759,34 @@ func evalBitwiseNOT(par *CallParams) []byte {
 		ret[i] = ^a0[i]
 	}
 	par.Trace("evalBitwiseNOT: %s -> %s", Fmt(a0), Fmt(ret))
+	return ret
+}
+
+func evalParseCallPrefix(par *CallParams) []byte {
+	a0 := par.Arg(0)
+	prefix, err := ParseCallPrefixFromBinary(a0)
+	if err != nil {
+		par.TracePanic("evalParseCallPrefix: %v", err)
+	}
+	par.Trace("evalParseCallPrefix: %s -> %s", Fmt(a0), Fmt(prefix))
+	return prefix
+}
+
+func evalParseCallArg(par *CallParams) []byte {
+	a0 := par.Arg(0)
+	_, prefix, args, err := ParseBinaryOneLevel(a0)
+	if err != nil {
+		par.TracePanic("evalParseCallArg: %v", err)
+	}
+	expectedPrefix := par.Arg(1)
+	idx := par.Arg(2)
+	if !bytes.Equal(prefix, expectedPrefix) {
+		par.TracePanic("evalParseCallArg: unexpected function prefix. Expected '%s', got '%s'", Fmt(expectedPrefix), Fmt(prefix))
+	}
+	if len(idx) != 1 || len(args) <= int(idx[0]) {
+		par.TracePanic("evalParseCallArg: wrong parameters index")
+	}
+	ret := StripDataPrefix(args[idx[0]])
+	par.Trace("%s, %s, %s -> %s", Fmt(a0), Fmt(expectedPrefix), Fmt(idx), Fmt(ret))
 	return ret
 }

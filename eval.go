@@ -186,3 +186,8 @@ func MustTrue(source string) {
 	Assert(err == nil, "expression '%s' resulted in error: '%v'", source, err)
 	Assert(len(res) > 0, "expression '%s' must be true", res)
 }
+
+func MustError(source string) {
+	_, err := EvalFromSource(nil, source)
+	Assert(err != nil, "expression '%s' must return an error", source, err)
+}
