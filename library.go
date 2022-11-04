@@ -176,6 +176,7 @@ func init() {
 	// Panics if the binary code is not the valid call of the specified function or number of the parameter is out of bounds
 	// Returns code of the argument if it is a call function, or data is it is a constant
 	EmbedLong("parseCallArg", 3, evalParseCallArg)
+	EmbedLong("parseCallPrefix", 1, evalParseCallPrefix)
 	{
 		_, _, binCode, err := CompileExpression("slice(0x01020304,1,2)")
 		AssertNoError(err)
@@ -183,6 +184,8 @@ func init() {
 		MustEqual(src, "1")
 		src = fmt.Sprintf("parseCallArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 2)
 		MustEqual(src, "2")
+		src = fmt.Sprintf("parseCallPrefix(0x%s)", hex.EncodeToString(binCode))
+		MustEqual(src, "#slice")
 	}
 }
 
@@ -799,4 +802,14 @@ func evalParseCallArg(par *CallParams) []byte {
 	ret := StripDataPrefix(args[idx[0]])
 	par.Trace("%s, %s, %s -> %s", Fmt(a0), Fmt(expectedPrefix), Fmt(idx), Fmt(ret))
 	return ret
+}
+
+func evalParseCallPrefix(par *CallParams) []byte {
+	code := par.Arg(0)
+	prefix, err := ParseCallPrefixFromBinary(code)
+	if err != nil {
+		par.TracePanic("evalParseCallPrefix: %v", err)
+	}
+	par.Trace("%s -> %s", Fmt(code), Fmt(prefix))
+	return prefix
 }
