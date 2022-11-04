@@ -99,10 +99,19 @@ func init() {
 	EmbedLong("and", -1, evalAnd)
 	MustTrue("and")
 	MustTrue("not(and(concat))")
+
 	EmbedLong("or", -1, evalOr)
 	MustTrue("not(or)")
 	MustTrue("not(or(concat))")
 	MustTrue("or(1)")
+
+	Extend("nil", "or")
+	MustTrue("not(nil)")
+
+	Extend("equiv", "or(and($0,$1), and(not($0),not($1)))")
+	MustTrue("equiv(nil, nil)")
+	MustTrue("equiv(2, 100)")
+	MustTrue("not(equiv(nil, 0))")
 
 	// safe arithmetics
 	EmbedShort("sum8", 2, evalMustSum8)
@@ -150,7 +159,6 @@ func init() {
 	Extend("greaterThan", "not(lessOrEqualThan($0,$1))")
 	Extend("greaterOrEqualThan", "not(lessThan($0,$1))")
 	// other
-	Extend("nil", "or")
 	MustEqual("concat", "nil")
 
 	Extend("byte", "slice($0, $1, $1)")
