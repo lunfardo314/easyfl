@@ -79,6 +79,11 @@ func init() {
 	EmbedShort("tail", 2, evalTail)
 	EmbedShort("equal", 2, evalEqual)
 	EmbedShort("hasPrefix", 2, evalHasPrefix)
+	MustTrue("hasPrefix(0xf10203,0xf1)")
+
+	EmbedShort("repeat", 2, evalRepeat)
+	MustEqual("repeat(1,5)", "0x0101010101")
+
 	// 'len8' returns length up until 255 (256 and more panics)
 	EmbedShort("len8", 1, evalLen8)
 	EmbedShort("len16", 1, evalLen16)
@@ -458,6 +463,17 @@ func evalHasPrefix(par *CallParams) []byte {
 		ret = []byte{0xff}
 	}
 	par.Trace("hasPrefix:: %s, %s -> %s", Fmt(data), Fmt(prefix), Fmt(ret))
+	return ret
+}
+
+func evalRepeat(par *CallParams) []byte {
+	fragment := par.Arg(0)
+	n := par.Arg(1)
+	if len(n) != 1 {
+		par.TracePanic("evalRepeat: count must 1-byte long")
+	}
+	ret := bytes.Repeat(fragment, int(n[0]))
+	par.Trace("hasPrefix:: %s, %s -> %s", Fmt(fragment), Fmt(n), Fmt(ret))
 	return ret
 }
 
