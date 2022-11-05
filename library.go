@@ -89,7 +89,13 @@ func init() {
 	EmbedShort("len16", 1, evalLen16)
 	EmbedShort("not", 1, evalNot)
 	EmbedShort("if", 3, evalIf)
+
+	// returns false if at least one byte is not 0
 	EmbedShort("isZero", 1, evalIsZero)
+	MustTrue("isZero(0)")
+	MustTrue("isZero(repeat(0,100))")
+	MustTrue("not(isZero(0x0000000003))")
+
 	// stateless varargs
 	// 'Concat' concatenates variable number of arguments. Concat() is empty byte array
 	EmbedLong("concat", -1, evalConcat)
