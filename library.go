@@ -173,7 +173,9 @@ func init() {
 	EmbedLong("validSignatureED25519", 3, evalValidSigED25519)
 
 	EmbedLong("blake2b", -1, evalBlake2b)
+	h := blake2b.Sum256([]byte{1})
 	MustEqual("len8(blake2b(1))", "32")
+	MustEqual("blake2b(1)", fmt.Sprintf("0x%s", hex.EncodeToString(h[:])))
 
 	// code parsing
 	// $0 - binary EasyFL code
