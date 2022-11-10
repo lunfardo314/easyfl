@@ -825,3 +825,17 @@ func TestDecompile(t *testing.T) {
 		require.EqualValues(t, bin, Concat(pieces...))
 	})
 }
+
+func TestLocalLibrary(t *testing.T) {
+	const source = `
+ func fun1 : concat($0, $1)
+ func fun2 : concat(fun1($0,2),fun1(3,4))
+ func fun3 : fun2($0)
+`
+
+	lib, err := CompileToLocalLibrary(source)
+	require.NoError(t, err)
+	data := lib.Bytes()
+	require.EqualValues(t, 3, len(data))
+
+}

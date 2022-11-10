@@ -184,7 +184,7 @@ const (
 )
 
 // binaryFromParsedExpression takes parsed expression and generates binary code of it
-func (f *parsedExpression) binaryFromParsedExpression(w io.Writer) (int, error) {
+func (f *parsedExpression) binaryFromParsedExpression(w io.Writer, localLib ...*LocalLibrary) (int, error) {
 	numArgs := 0
 	if len(f.params) == 0 {
 		// parameter reference
@@ -327,7 +327,7 @@ func (f *parsedExpression) binaryFromParsedExpression(w io.Writer) (int, error) 
 	}
 	// either has arguments or not literal
 	// try if it is a short call
-	fi, err := functionByName(f.sym)
+	fi, err := functionByName(f.sym, localLib...)
 	if err != nil {
 		return 0, err
 	}
@@ -345,7 +345,7 @@ func (f *parsedExpression) binaryFromParsedExpression(w io.Writer) (int, error) 
 	}
 	// generate code for call parameters
 	for _, ff := range f.params {
-		n, err := ff.binaryFromParsedExpression(w)
+		n, err := ff.binaryFromParsedExpression(w, localLib...)
 		if err != nil {
 			return 0, err
 		}
@@ -357,14 +357,14 @@ func (f *parsedExpression) binaryFromParsedExpression(w io.Writer) (int, error) 
 }
 
 // ExpressionSourceToBinary compile expression from source form into binary for embedding into transaction
-func ExpressionSourceToBinary(formulaSource string) ([]byte, int, error) {
+func ExpressionSourceToBinary(formulaSource string, localLib ...*LocalLibrary) ([]byte, int, error) {
 	f, err := parseExpression(formulaSource)
 	if err != nil {
 		return nil, 0, err
 	}
 
 	var buf bytes.Buffer
-	numArgs, err := f.binaryFromParsedExpression(&buf)
+	numArgs, err := f.binaryFromParsedExpression(&buf, localLib...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -372,8 +372,8 @@ func ExpressionSourceToBinary(formulaSource string) ([]byte, int, error) {
 }
 
 // ExpressionFromBinary creates evaluation form of the expression
-func ExpressionFromBinary(code []byte) (*Expression, error) {
-	ret, remaining, err := expressionFromBinary(code)
+func ExpressionFromBinary(code []byte, localLib ...*LocalLibrary) (*Expression, error) {
+	ret, remaining, err := expressionFromBinary(code, localLib...)
 	if err != nil {
 		return nil, err
 	}
@@ -437,7 +437,7 @@ func writeExpressionSource(w io.Writer, f *Expression) error {
 }
 
 // expressionFromBinary parses executable code into the executable expression tree
-func expressionFromBinary(code []byte) (*Expression, []byte, error) {
+func expressionFromBinary(code []byte, localLib ...*LocalLibrary) (*Expression, []byte, error) {
 	if len(code) == 0 {
 		return nil, nil, io.EOF
 	}
@@ -463,7 +463,7 @@ func expressionFromBinary(code []byte) (*Expression, []byte, error) {
 		return ret, code[len(dataPrefix):], nil
 	}
 	// function call expected
-	callPrefix, evalFun, arity, sym, err := parseCallPrefix(code)
+	callPrefix, evalFun, arity, sym, err := parseCallPrefix(code, localLib...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -478,7 +478,7 @@ func expressionFromBinary(code []byte) (*Expression, []byte, error) {
 	// collect call Args
 	var p *Expression
 	for i := 0; i < arity; i++ {
-		p, code, err = expressionFromBinary(code)
+		p, code, err = expressionFromBinary(code, localLib...)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -489,13 +489,13 @@ func expressionFromBinary(code []byte) (*Expression, []byte, error) {
 }
 
 // CompileExpression compiles from sources directly into the evaluation form
-func CompileExpression(source string) (*Expression, int, []byte, error) {
+func CompileExpression(source string, localLib ...*LocalLibrary) (*Expression, int, []byte, error) {
 	src := strings.Join(splitLinesStripComments(source), "")
-	code, numParams, err := ExpressionSourceToBinary(stripSpaces(src))
+	code, numParams, err := ExpressionSourceToBinary(stripSpaces(src), localLib...)
 	if err != nil {
 		return nil, 0, nil, err
 	}
-	ret, err := ExpressionFromBinary(code)
+	ret, err := ExpressionFromBinary(code, localLib...)
 	if err != nil {
 		return nil, 0, nil, err
 	}
@@ -518,7 +518,7 @@ func dataFunction(data []byte) EvalFunction {
 	}
 }
 
-func parseCallPrefix(code []byte) ([]byte, EvalFunction, int, string, error) {
+func parseCallPrefix(code []byte, localLib ...*LocalLibrary) ([]byte, EvalFunction, int, string, error) {
 	if len(code) == 0 || code[0]&FirstByteDataMask != 0 {
 		return nil, nil, 0, "", fmt.Errorf("parseCallPrefix: not a function call")
 	}
@@ -550,14 +550,28 @@ func parseCallPrefix(code []byte) ([]byte, EvalFunction, int, string, error) {
 		arity = int((code[0] & FirstByteLongCallArityMask) >> 2)
 		t := binary.BigEndian.Uint16(code[:2])
 		idx := t & Uint16LongCallCodeMask
-		evalFun, numParams, sym, err = functionByCode(idx)
+		if idx > FirstLocalFunCode {
+			return nil, nil, 0, "", fmt.Errorf("wrong call prefix")
+		}
+		callPrefix = code[:2]
+		if idx == FirstLocalFunCode {
+			// it is a local library call
+			if len(localLib) == 0 {
+				return nil, nil, 0, "", fmt.Errorf("local library not provided")
+			}
+			if len(code) < 3 {
+				return nil, nil, 0, "", io.EOF
+			}
+			idx = uint16(FirstLocalFunCode) + uint16(code[2])
+			callPrefix = code[:3]
+		}
+		evalFun, numParams, sym, err = functionByCode(idx, localLib...)
 		if err != nil {
 			return nil, nil, 0, "", err
 		}
 		if numParams > 0 && numParams != arity {
 			return nil, nil, 0, "", fmt.Errorf("wrong number of call args")
 		}
-		callPrefix = code[:2]
 	}
 	return callPrefix, evalFun, arity, sym, nil
 }

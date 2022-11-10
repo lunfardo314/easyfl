@@ -19,43 +19,47 @@ const (
 	FirstEmbeddedLongFun  = MaxNumEmbeddedShort
 	MaxNumEmbeddedLong    = 256
 	FirstExtendedFun      = FirstEmbeddedLongFun + MaxNumEmbeddedLong
-	MaxFunCode            = 1023
-	MaxNumExtended        = MaxFunCode - FirstExtendedFun
+	MaxGlobalFunCode      = 1022
+	FirstLocalFunCode     = 1023 // functions in local libraries uses extra byte for local function codes
+	MaxNumExtended        = MaxGlobalFunCode - FirstExtendedFun
 
 	MaxParameters = 15
 )
 
-type Expression struct {
-	// for evaluation
-	Args     []*Expression
-	EvalFunc EvalFunction
-	// for code parsing
-	FunctionName string
-	CallPrefix   []byte
-}
+type (
+	Expression struct {
+		// for evaluation
+		Args     []*Expression
+		EvalFunc EvalFunction
+		// for code parsing
+		FunctionName string
+		CallPrefix   []byte
+	}
 
-type EvalFunction func(glb *CallParams) []byte
+	EvalFunction func(glb *CallParams) []byte
 
-type funDescriptor struct {
-	sym               string
-	funCode           uint16
-	requiredNumParams int
-	evalFun           EvalFunction
-	locallyDependent  bool
-}
+	funDescriptor struct {
+		sym               string
+		funCode           uint16
+		requiredNumParams int
+		evalFun           EvalFunction
+		locallyDependent  bool
+	}
 
-type libraryData struct {
-	funByName    map[string]*funDescriptor
-	funByFunCode map[uint16]*funDescriptor
-}
+	libraryData struct {
+		funByName    map[string]*funDescriptor
+		funByFunCode map[uint16]*funDescriptor
+	}
 
-type funInfo struct {
-	Sym        string
-	FunCode    uint16
-	IsEmbedded bool
-	IsShort    bool
-	NumParams  int
-}
+	funInfo struct {
+		Sym        string
+		FunCode    uint16
+		IsEmbedded bool
+		IsShort    bool
+		IsLocal    bool
+		NumParams  int
+	}
+)
 
 var (
 	theLibrary = &libraryData{
@@ -365,39 +369,69 @@ func MustExtendMany(source string) {
 	}
 }
 
-func existsFunction(sym string) bool {
-	_, found := theLibrary.funByName[sym]
+func existsFunction(sym string, localLib ...*LocalLibrary) bool {
+	if _, found := theLibrary.funByName[sym]; found {
+		return true
+	}
+	if len(localLib) == 0 {
+		return false
+	}
+	_, found := localLib[0].funByName[sym]
 	return found
 }
 
-func functionByName(sym string) (*funInfo, error) {
+func functionByName(sym string, localLib ...*LocalLibrary) (*funInfo, error) {
 	fd, found := theLibrary.funByName[sym]
-	if !found {
-		return nil, fmt.Errorf("no such function in the library: '%s'", sym)
-	}
 	ret := &funInfo{
-		Sym:       sym,
-		FunCode:   fd.funCode,
-		NumParams: fd.requiredNumParams,
+		Sym: sym,
 	}
-	switch {
-	case fd.funCode < FirstEmbeddedLongFun:
-		ret.IsEmbedded = true
-		ret.IsShort = true
-	case fd.funCode < FirstExtendedFun:
-		ret.IsEmbedded = true
-		ret.IsShort = false
+	if found {
+		ret.FunCode = fd.funCode
+		ret.NumParams = fd.requiredNumParams
+		switch {
+		case fd.funCode < FirstEmbeddedLongFun:
+			ret.IsEmbedded = true
+			ret.IsShort = true
+		case fd.funCode < FirstExtendedFun:
+			ret.IsEmbedded = true
+			ret.IsShort = false
+		}
+	} else {
+		if len(localLib) > 0 {
+			if fdLoc, foundLocal := localLib[0].funByName[sym]; foundLocal {
+				ret.FunCode = fdLoc.funCode
+				ret.NumParams = fdLoc.requiredNumParams
+				ret.IsLocal = true
+			} else {
+				ret = nil
+			}
+		} else {
+			ret = nil
+		}
+	}
+	if ret == nil {
+		return nil, fmt.Errorf("no such function in the library: '%s'", sym)
 	}
 	return ret, nil
 }
 
-func functionByCode(funCode uint16) (EvalFunction, int, string, error) {
-	var libData *funDescriptor
-	libData = theLibrary.funByFunCode[funCode]
-	if libData == nil {
+func functionByCode(funCode uint16, localLib ...*LocalLibrary) (EvalFunction, int, string, error) {
+	if funCode < FirstLocalFunCode {
+		libData := theLibrary.funByFunCode[funCode]
+		if libData != nil {
+			return libData.evalFun, libData.requiredNumParams, libData.sym, nil
+		}
+	}
+	funCodeLocal := funCode - FirstLocalFunCode
+	if len(localLib) == 0 || funCodeLocal > 255 {
 		return nil, 0, "", fmt.Errorf("wrong function code %d", funCode)
 	}
-	return libData.evalFun, libData.requiredNumParams, libData.sym, nil
+	libData := localLib[0].funByFunCode[byte(funCodeLocal)]
+	if libData == nil {
+		return nil, 0, "", fmt.Errorf("wrong local function code %d", funCode)
+	}
+	sym := fmt.Sprintf("(local library func '%d')", funCodeLocal)
+	return libData.evalFun, libData.requiredNumParams, sym, nil
 }
 
 func (fi *funInfo) callPrefix(numArgs byte) ([]byte, error) {
@@ -407,6 +441,7 @@ func (fi *funInfo) callPrefix(numArgs byte) ([]byte, error) {
 		ret = []byte{byte(fi.FunCode)}
 	} else {
 		if fi.NumParams < 0 {
+			// vararg function
 			if numArgs > 15 {
 				return nil, fmt.Errorf("internal inconsistency: number of arguments must be <= 15")
 			}
@@ -416,9 +451,19 @@ func (fi *funInfo) callPrefix(numArgs byte) ([]byte, error) {
 			}
 		}
 		firstByte := FirstByteLongCallMask | (numArgs << 2)
-		u16 := (uint16(firstByte) << 8) | fi.FunCode
-		ret = make([]byte, 2)
-		binary.BigEndian.PutUint16(ret, u16)
+		if !fi.IsLocal {
+			// normal long function call 2 bytes
+			u16 := (uint16(firstByte) << 8) | fi.FunCode
+			ret = make([]byte, 2)
+			binary.BigEndian.PutUint16(ret, u16)
+		} else {
+			Assert(fi.FunCode <= FirstLocalFunCode+255 && FirstLocalFunCode <= fi.FunCode, "fi.FunCode <= FirstLocalFunCode+255 && FirstLocalFunCode <= fi.FunCode")
+			// local function call 3 bytes
+			u16 := (uint16(firstByte) << 8) | FirstLocalFunCode
+			ret = make([]byte, 3)
+			binary.BigEndian.PutUint16(ret[:2], u16)
+			ret[2] = byte(fi.FunCode - FirstLocalFunCode)
+		}
 	}
 	return ret, nil
 }
