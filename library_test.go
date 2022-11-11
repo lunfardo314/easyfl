@@ -832,10 +832,10 @@ func TestLocalLibrary(t *testing.T) {
  func fun2 : concat(fun1($0,2),fun1(3,4))
  func fun3 : fun2($0)
 `
-
-	lib, err := CompileToLocalLibrary(source)
+	libData, err := CompileLocalLibrary(source)
 	require.NoError(t, err)
-	data := lib.Bytes()
-	require.EqualValues(t, 3, len(data))
+	require.EqualValues(t, 3, len(libData))
 
+	_, err = LocalLibraryFromBytes(libData)
+	require.NoError(t, err)
 }

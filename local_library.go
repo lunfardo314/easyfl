@@ -7,28 +7,21 @@ import (
 
 type (
 	LocalLibrary struct {
-		funByName    map[string]*funLocal
-		funByFunCode map[byte]*funLocal // code of the function respective to the baseline of numExtended+FirstExtendedFun+1
-	}
-
-	funLocal struct {
-		sym               string
-		funCode           uint16 // always equal to FirstLocalFunCode + local code 1 byte
-		requiredNumParams int
-		evalFun           EvalFunction
-		binCode           []byte
+		funByName    map[string]*funDescriptor
+		funByFunCode []*funDescriptor // code of the function respective to the baseline of numExtended+FirstExtendedFun+1
 	}
 )
 
 func NewLocalLibrary() *LocalLibrary {
 	return &LocalLibrary{
-		funByName:    make(map[string]*funLocal),
-		funByFunCode: make(map[byte]*funLocal),
+		funByName:    make(map[string]*funDescriptor),
+		funByFunCode: make([]*funDescriptor, 0),
 	}
 }
 
-func CompileToLocalLibrary(source string) (*LocalLibrary, error) {
+func CompileLocalLibrary(source string) ([][]byte, error) {
 	lib := NewLocalLibrary()
+	ret := make([][]byte, 0)
 	parsed, err := parseFunctions(source)
 	if err != nil {
 		return nil, err
@@ -51,31 +44,18 @@ func CompileToLocalLibrary(source string) (*LocalLibrary, error) {
 		if traceYN {
 			evalFun = wrapWithTracing(evalFun, pf.Sym)
 		}
-		funcCodeByte := byte(len(lib.funByName))
 		funCode := FirstLocalFunCode + uint16(len(lib.funByName))
-		dscr := &funLocal{
+		dscr := &funDescriptor{
 			sym:               pf.Sym,
 			funCode:           funCode,
 			requiredNumParams: numParam,
 			evalFun:           evalFun,
-			binCode:           binCode,
 		}
-		lib.funByFunCode[funcCodeByte] = dscr
 		lib.funByName[pf.Sym] = dscr
+		lib.funByFunCode = append(lib.funByFunCode, dscr)
+		ret = append(ret, binCode)
 	}
-	return lib, nil
-}
-
-func (lib *LocalLibrary) Bytes() [][]byte {
-	ret := make([][]byte, 0)
-	for i := 0; i < 256; i++ {
-		dscr, ok := lib.funByFunCode[byte(i)]
-		if !ok {
-			continue
-		}
-		ret = append(ret, dscr.binCode)
-	}
-	return ret
+	return ret, nil
 }
 
 func LocalLibraryFromBytes(bin [][]byte) (*LocalLibrary, error) {
@@ -85,18 +65,26 @@ func LocalLibraryFromBytes(bin [][]byte) (*LocalLibrary, error) {
 	ret := NewLocalLibrary()
 
 	for i, data := range bin {
-		expr, err := ExpressionFromBinary(data, ret)
+		expr, remaining, maxParam, err := expressionFromBinary(data, ret)
 		if err != nil {
 			return nil, err
 		}
-
-		ret.funByFunCode[byte(i)] = &funLocal{
-			sym:               "",
-			funCode:           uint16(FirstLocalFunCode + i),
-			requiredNumParams: len(expr.Args),
-			evalFun:           expr.EvalFunc,
-			binCode:           data,
+		if len(remaining) != 0 {
+			return nil, fmt.Errorf("not all bytes have been consumed")
 		}
+		sym := fmt.Sprintf("lib#%d", i)
+		numParams := 0
+		if maxParam != 0xff {
+			numParams = int(maxParam) + 1
+		}
+		Assert(numParams <= 15, "numParams <= 15")
+		dscr := &funDescriptor{
+			sym:               sym,
+			funCode:           uint16(FirstLocalFunCode + i),
+			requiredNumParams: numParams,
+			evalFun:           makeEvalFunForExpression(sym, expr),
+		}
+		ret.funByFunCode = append(ret.funByFunCode, dscr)
 	}
 	return ret, nil
 }

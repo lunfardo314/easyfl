@@ -46,11 +46,6 @@ type (
 		locallyDependent  bool
 	}
 
-	libraryData struct {
-		funByName    map[string]*funDescriptor
-		funByFunCode map[uint16]*funDescriptor
-	}
-
 	funInfo struct {
 		Sym        string
 		FunCode    uint16
@@ -62,13 +57,11 @@ type (
 )
 
 var (
-	theLibrary = &libraryData{
-		funByName:    make(map[string]*funDescriptor),
-		funByFunCode: make(map[uint16]*funDescriptor),
-	}
-	numEmbeddedShort = EmbeddedReservedUntil + 1
-	numEmbeddedLong  int
-	numExtended      int
+	globalFunByName    = make(map[string]*funDescriptor)
+	globalFunByFunCode = make(map[uint16]*funDescriptor)
+	numEmbeddedShort   = EmbeddedReservedUntil + 1
+	numEmbeddedLong    int
+	numExtended        int
 )
 
 const traceYN = false
@@ -231,8 +224,8 @@ func EmbedShort(sym string, requiredNumPar int, evalFun EvalFunction, contextDep
 		evalFun:           evalFun,
 		locallyDependent:  ctxDept,
 	}
-	theLibrary.funByName[sym] = dscr
-	theLibrary.funByFunCode[dscr.funCode] = dscr
+	globalFunByName[sym] = dscr
+	globalFunByFunCode[dscr.funCode] = dscr
 	numEmbeddedShort++
 
 	{
@@ -260,8 +253,8 @@ func EmbedLong(sym string, requiredNumPar int, evalFun EvalFunction) uint16 {
 		requiredNumParams: requiredNumPar,
 		evalFun:           evalFun,
 	}
-	theLibrary.funByName[sym] = dscr
-	theLibrary.funByFunCode[dscr.funCode] = dscr
+	globalFunByName[sym] = dscr
+	globalFunByFunCode[dscr.funCode] = dscr
 	numEmbeddedLong++
 
 	{
@@ -326,8 +319,8 @@ func ExtendErr(sym string, source string) (uint16, error) {
 		requiredNumParams: numParam,
 		evalFun:           evalFun,
 	}
-	theLibrary.funByName[sym] = dscr
-	theLibrary.funByFunCode[dscr.funCode] = dscr
+	globalFunByName[sym] = dscr
+	globalFunByFunCode[dscr.funCode] = dscr
 	numExtended++
 
 	{
@@ -370,7 +363,7 @@ func MustExtendMany(source string) {
 }
 
 func existsFunction(sym string, localLib ...*LocalLibrary) bool {
-	if _, found := theLibrary.funByName[sym]; found {
+	if _, found := globalFunByName[sym]; found {
 		return true
 	}
 	if len(localLib) == 0 {
@@ -381,7 +374,7 @@ func existsFunction(sym string, localLib ...*LocalLibrary) bool {
 }
 
 func functionByName(sym string, localLib ...*LocalLibrary) (*funInfo, error) {
-	fd, found := theLibrary.funByName[sym]
+	fd, found := globalFunByName[sym]
 	ret := &funInfo{
 		Sym: sym,
 	}
@@ -417,20 +410,21 @@ func functionByName(sym string, localLib ...*LocalLibrary) (*funInfo, error) {
 
 func functionByCode(funCode uint16, localLib ...*LocalLibrary) (EvalFunction, int, string, error) {
 	if funCode < FirstLocalFunCode {
-		libData := theLibrary.funByFunCode[funCode]
+		libData := globalFunByFunCode[funCode]
 		if libData != nil {
 			return libData.evalFun, libData.requiredNumParams, libData.sym, nil
 		}
 	}
 	funCodeLocal := funCode - FirstLocalFunCode
-	if len(localLib) == 0 || funCodeLocal > 255 {
+	if len(localLib) == 0 || int(funCodeLocal) >= len(localLib[0].funByFunCode) {
 		return nil, 0, "", fmt.Errorf("wrong function code %d", funCode)
 	}
+
 	libData := localLib[0].funByFunCode[byte(funCodeLocal)]
 	if libData == nil {
 		return nil, 0, "", fmt.Errorf("wrong local function code %d", funCode)
 	}
-	sym := fmt.Sprintf("(local library func '%d')", funCodeLocal)
+	sym := fmt.Sprintf("lib#%d)", funCodeLocal)
 	return libData.evalFun, libData.requiredNumParams, sym, nil
 }
 

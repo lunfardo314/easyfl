@@ -373,7 +373,7 @@ func ExpressionSourceToBinary(formulaSource string, localLib ...*LocalLibrary) (
 
 // ExpressionFromBinary creates evaluation form of the expression
 func ExpressionFromBinary(code []byte, localLib ...*LocalLibrary) (*Expression, error) {
-	ret, remaining, err := expressionFromBinary(code, localLib...)
+	ret, remaining, _, err := expressionFromBinary(code, localLib...)
 	if err != nil {
 		return nil, err
 	}
@@ -436,14 +436,15 @@ func writeExpressionSource(w io.Writer, f *Expression) error {
 	return nil
 }
 
-// expressionFromBinary parses executable code into the executable expression tree
-func expressionFromBinary(code []byte, localLib ...*LocalLibrary) (*Expression, []byte, error) {
+// expressionFromBinary parses executable binary code into the executable expression tree
+func expressionFromBinary(code []byte, localLib ...*LocalLibrary) (*Expression, []byte, byte, error) {
 	if len(code) == 0 {
-		return nil, nil, io.EOF
+		return nil, nil, 0xff, io.EOF
 	}
+
 	dataPrefix, itIsData, err := ParseInlineDataPrefix(code)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0xff, err
 	}
 	if itIsData {
 		var sym string
@@ -460,12 +461,18 @@ func expressionFromBinary(code []byte, localLib ...*LocalLibrary) (*Expression, 
 			FunctionName: sym,
 			CallPrefix:   dataPrefix,
 		}
-		return ret, code[len(dataPrefix):], nil
+		return ret, code[len(dataPrefix):], 0xff, nil
 	}
+	maxParameterNumber := byte(0xff)
+
 	// function call expected
 	callPrefix, evalFun, arity, sym, err := parseCallPrefix(code, localLib...)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0xff, err
+	}
+	if len(callPrefix) == 1 && callPrefix[0] < EmbeddedReservedUntil {
+		// it is a parameter function call
+		maxParameterNumber = callPrefix[0]
 	}
 	ret := &Expression{
 		Args:         make([]*Expression, 0),
@@ -477,15 +484,21 @@ func expressionFromBinary(code []byte, localLib ...*LocalLibrary) (*Expression, 
 	code = code[len(callPrefix):]
 	// collect call Args
 	var p *Expression
+	var m byte
 	for i := 0; i < arity; i++ {
-		p, code, err = expressionFromBinary(code, localLib...)
+		p, code, m, err = expressionFromBinary(code, localLib...)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, 0xff, err
+		}
+		if m != 0xff {
+			if maxParameterNumber == 0xff || m > maxParameterNumber {
+				maxParameterNumber = m
+			}
 		}
 		ret.Args = append(ret.Args, p)
 	}
 	ret.EvalFunc = evalFun
-	return ret, code, nil
+	return ret, code, maxParameterNumber, nil
 }
 
 // CompileExpression compiles from sources directly into the evaluation form
