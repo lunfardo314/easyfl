@@ -63,7 +63,7 @@ func (p *CallParams) DataContext() interface{} {
 }
 
 // Slice makes CallParams with the slice of arguments
-func (p *CallParams) Slice(from, to int) *CallParams {
+func (p *CallParams) Slice(from, to byte) *CallParams {
 	return &CallParams{
 		ctx:  p.ctx,
 		args: p.args[from:to],
