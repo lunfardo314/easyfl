@@ -186,7 +186,6 @@ func expressionFromLibrary(libraryBin [][]byte, funIndex int) (*Expression, erro
 	if err != nil {
 		return nil, err
 	}
-	Assert(len(lib.funByFunCode) > 0, "len(lib.funByFunCode)>0")
 	expr, err := ExpressionFromBinary(libraryBin[funIndex], lib)
 	if err != nil {
 		return nil, err
@@ -219,6 +218,9 @@ func EvalFromLibrary(glb GlobalData, libraryBin [][]byte, funIndex int, args ...
 
 // CallLocalLibrary to be called from the extension outside the easyfl.
 func CallLocalLibrary(ctx *CallParams, libBin [][]byte, idx int) []byte {
+	if idx < 0 || idx >= len(libBin) {
+		panic("function index is out of library bounds")
+	}
 	expr, err := expressionFromLibrary(libBin, idx)
 	if err != nil {
 		ctx.TracePanic("error while parsing local library: %v", err)
