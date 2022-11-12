@@ -831,11 +831,60 @@ func TestLocalLibrary(t *testing.T) {
  func fun1 : concat($0, $1)
  func fun2 : concat(fun1($0,2),fun1(3,4))
  func fun3 : fun2($0)
+ func fun4 : 0x010203	
 `
 	libData, err := CompileLocalLibrary(source)
 	require.NoError(t, err)
-	require.EqualValues(t, 3, len(libData))
 
-	_, err = LocalLibraryFromBytes(libData)
-	require.NoError(t, err)
+	t.Run("1", func(t *testing.T) {
+		require.NoError(t, err)
+		require.EqualValues(t, 4, len(libData))
+
+		_, err = LocalLibraryFromBytes(libData)
+		require.NoError(t, err)
+		_, err = LocalLibraryFromBytes(libData[:3])
+		require.NoError(t, err)
+		_, err = LocalLibraryFromBytes(libData[:2])
+		require.NoError(t, err)
+		_, err = LocalLibraryFromBytes(libData[:1])
+		require.NoError(t, err)
+		_, err = LocalLibraryFromBytes(libData[:0]) // empty library is valid
+		require.NoError(t, err)
+	})
+	t.Run("2", func(t *testing.T) {
+		require.NoError(t, err)
+		MustEvalFromLibrary(nil, libData, 0, []byte{1}, []byte{2})
+		MustEvalFromLibrary(nil, libData, 1, []byte{5})
+		MustEvalFromLibrary(nil, libData, 2, []byte{1})
+		MustEvalFromLibrary(nil, libData, 3)
+		err = CatchPanicOrError(func() error {
+			MustEvalFromLibrary(nil, libData, 4, []byte{1})
+			return nil
+		})
+		RequireErrorWith(t, err, "function index is out of library bounds")
+	})
+	t.Run("3", func(t *testing.T) {
+		res, err := EvalFromLibrary(nil, libData, 0, []byte{1}, []byte{2})
+		require.NoError(t, err)
+		require.EqualValues(t, []byte{1, 2}, res)
+
+		res, err = EvalFromLibrary(nil, libData, 1, []byte{5})
+		require.NoError(t, err)
+		require.EqualValues(t, []byte{5, 2, 3, 4}, res)
+
+		res, err = EvalFromLibrary(nil, libData, 2, []byte{5})
+		require.NoError(t, err)
+		require.EqualValues(t, []byte{5, 2, 3, 4}, res)
+
+		res, err = EvalFromLibrary(nil, libData, 3)
+		require.NoError(t, err)
+		require.EqualValues(t, []byte{1, 2, 3}, res)
+
+		res, err = EvalFromLibrary(nil, libData, 2)
+		RequireErrorWith(t, err, "index out of range")
+
+		_, err = EvalFromLibrary(nil, libData, 4, []byte{5})
+		RequireErrorWith(t, err, "function index is out of library bounds")
+	})
+
 }

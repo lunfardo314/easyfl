@@ -173,6 +173,34 @@ func EvalFromBinary(glb GlobalData, code []byte, args ...[]byte) ([]byte, error)
 	return ret, err
 }
 
+func MustEvalFromLibrary(glb GlobalData, libraryBin [][]byte, funIndex int, args ...[]byte) []byte {
+	if funIndex < 0 || funIndex >= len(libraryBin) {
+		panic("function index is out of library bounds")
+	}
+	if funIndex == 0 {
+		return MustEvalFromBinary(glb, libraryBin[0], args...)
+	}
+	lib, err := LocalLibraryFromBytes(libraryBin[:funIndex])
+	if err != nil {
+		panic(err)
+	}
+	Assert(len(lib.funByFunCode) > 0, "len(lib.funByFunCode)>0")
+	expr, err := ExpressionFromBinary(libraryBin[funIndex], lib)
+	if err != nil {
+		panic(err)
+	}
+	return EvalExpression(glb, expr, args...)
+}
+
+func EvalFromLibrary(glb GlobalData, libraryBin [][]byte, funIndex int, args ...[]byte) ([]byte, error) {
+	var ret []byte
+	err := CatchPanicOrError(func() error {
+		ret = MustEvalFromLibrary(glb, libraryBin, funIndex, args...)
+		return nil
+	})
+	return ret, err
+}
+
 func MustEqual(source1, source2 string) {
 	res1, err := EvalFromSource(nil, source1)
 	Assert(err == nil, "expression '%s' resulted in error: '%v'", source1, err)
