@@ -173,6 +173,19 @@ func EvalFromBinary(glb GlobalData, code []byte, args ...[]byte) ([]byte, error)
 	return ret, err
 }
 
+func expressionFromLibrary(libraryBin [][]byte, funIndex int) (*Expression, error) {
+	lib, err := LocalLibraryFromBytes(libraryBin[:funIndex])
+	if err != nil {
+		return nil, err
+	}
+	Assert(len(lib.funByFunCode) > 0, "len(lib.funByFunCode)>0")
+	expr, err := ExpressionFromBinary(libraryBin[funIndex], lib)
+	if err != nil {
+		return nil, err
+	}
+	return expr, nil
+}
+
 func MustEvalFromLibrary(glb GlobalData, libraryBin [][]byte, funIndex int, args ...[]byte) []byte {
 	if funIndex < 0 || funIndex >= len(libraryBin) {
 		panic("function index is out of library bounds")
@@ -180,12 +193,7 @@ func MustEvalFromLibrary(glb GlobalData, libraryBin [][]byte, funIndex int, args
 	if funIndex == 0 {
 		return MustEvalFromBinary(glb, libraryBin[0], args...)
 	}
-	lib, err := LocalLibraryFromBytes(libraryBin[:funIndex])
-	if err != nil {
-		panic(err)
-	}
-	Assert(len(lib.funByFunCode) > 0, "len(lib.funByFunCode)>0")
-	expr, err := ExpressionFromBinary(libraryBin[funIndex], lib)
+	expr, err := expressionFromLibrary(libraryBin, funIndex)
 	if err != nil {
 		panic(err)
 	}
@@ -199,6 +207,20 @@ func EvalFromLibrary(glb GlobalData, libraryBin [][]byte, funIndex int, args ...
 		return nil
 	})
 	return ret, err
+}
+
+func CallLocalLibrary(ctx *CallParams, libBin [][]byte, idx int) []byte {
+	expr, err := expressionFromLibrary(libBin, idx)
+	if err != nil {
+		ctx.TracePanic("error while parsing local library: %v", err)
+	}
+	varScope := make([]*call, len(ctx.args))
+	for i := range varScope {
+		varScope[i] = newCall(ctx.args[i].EvalFunc, ctx.args[i].Args, ctx.ctx)
+	}
+	ret := evalExpression(ctx.ctx.glb, expr, varScope)
+	ctx.Trace("'lib#%d':: %d params -> %s", idx, ctx.Arity(), Fmt(ret))
+	return nil
 }
 
 func MustEqual(source1, source2 string) {
