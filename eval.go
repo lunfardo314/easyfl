@@ -229,7 +229,7 @@ func CallLocalLibrary(ctx *CallParams, libBin [][]byte, idx int) []byte {
 	}
 	ret := evalExpression(ctx.ctx.glb, expr, varScope)
 	ctx.Trace("'lib#%d':: %d params -> %s", idx, ctx.Arity(), Fmt(ret))
-	return nil
+	return ret
 }
 
 func MustEqual(source1, source2 string) {
