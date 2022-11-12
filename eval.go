@@ -62,6 +62,14 @@ func (p *CallParams) DataContext() interface{} {
 	return p.ctx.glb.Data()
 }
 
+// Slice makes CallParams with the slice of arguments
+func (p *CallParams) Slice(from, to int) *CallParams {
+	return &CallParams{
+		ctx:  p.ctx,
+		args: p.args[from:to],
+	}
+}
+
 // Arity return actual number of call parameters
 func (p *CallParams) Arity() byte {
 	return byte(len(p.args))
@@ -209,6 +217,7 @@ func EvalFromLibrary(glb GlobalData, libraryBin [][]byte, funIndex int, args ...
 	return ret, err
 }
 
+// CallLocalLibrary to be called from the extension outside the easyfl.
 func CallLocalLibrary(ctx *CallParams, libBin [][]byte, idx int) []byte {
 	expr, err := expressionFromLibrary(libBin, idx)
 	if err != nil {
