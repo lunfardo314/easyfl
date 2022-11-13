@@ -3,6 +3,7 @@ package easyfl
 import (
 	"bytes"
 	"fmt"
+	"strings"
 )
 
 // GlobalData represents the data to be evaluated. It is wrapped into the interface
@@ -248,7 +249,10 @@ func MustTrue(source string) {
 	Assert(len(res) > 0, "expression '%s' must be true", res)
 }
 
-func MustError(source string) {
+func MustError(source string, mustContain ...string) {
 	_, err := EvalFromSource(nil, source)
 	Assert(err != nil, "expression '%s' must return an error", source, err)
+	if len(mustContain) > 0 {
+		Assert(strings.Contains(err.Error(), mustContain[0]), fmt.Sprintf("error must contain '%s' (instead got %s)", mustContain[0], err.Error()))
+	}
 }

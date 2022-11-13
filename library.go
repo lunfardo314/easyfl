@@ -68,19 +68,29 @@ const traceYN = false
 
 func init() {
 	// basic
+	// 'fail' function panics engine. Literal starting with !!! is a call to 'fail' with the message
+	EmbedShort("fail", 1, evalFail)
+	{
+		MustError("fail(100)", "SCRIPT FAIL: error #100")
+		MustError("!!!hello,_world!", "hello, world!")
+		MustError("!!!fail_error_message_31415", "31415")
+	}
 	// 'slice' inclusive the end. Expects 1-byte slices at $1 and $2
 	EmbedShort("slice", 3, evalSlice)
-	MustEqual("slice(0x010203,1,2)", "0x0203")
-
+	{
+		MustEqual("slice(0x010203,1,2)", "0x0203")
+	}
 	// 'tail' takes from $1 to the end
 	EmbedShort("tail", 2, evalTail)
 	EmbedShort("equal", 2, evalEqual)
 	EmbedShort("hasPrefix", 2, evalHasPrefix)
-	MustTrue("hasPrefix(0xf10203,0xf1)")
-
+	{
+		MustTrue("hasPrefix(0xf10203,0xf1)")
+	}
 	EmbedShort("repeat", 2, evalRepeat)
-	MustEqual("repeat(1,5)", "0x0101010101")
-
+	{
+		MustEqual("repeat(1,5)", "0x0101010101")
+	}
 	// 'len8' returns length up until 255 (256 and more panics)
 	EmbedShort("len8", 1, evalLen8)
 	EmbedShort("len16", 1, evalLen16)
@@ -89,46 +99,56 @@ func init() {
 
 	// returns false if at least one byte is not 0
 	EmbedShort("isZero", 1, evalIsZero)
-	MustTrue("isZero(0)")
-	MustTrue("isZero(repeat(0,100))")
-	MustTrue("not(isZero(0x0000000003))")
-
+	{
+		MustTrue("isZero(0)")
+		MustTrue("isZero(repeat(0,100))")
+		MustTrue("not(isZero(0x0000000003))")
+	}
 	// stateless varargs
 	// 'Concat' concatenates variable number of arguments. Concat() is empty byte array
 	EmbedLong("concat", -1, evalConcat)
-	MustEqual("concat(1,2)", "0x0102")
-	MustEqual("concat(1,2,3,4)", "concat(concat(1,2),concat(3,4))")
-
+	{
+		MustEqual("concat(1,2)", "0x0102")
+		MustEqual("concat(1,2,3,4)", "concat(concat(1,2),concat(3,4))")
+	}
 	EmbedLong("and", -1, evalAnd)
-	MustTrue("and")
-	MustTrue("not(and(concat))")
-
+	{
+		MustTrue("and")
+		MustTrue("not(and(concat))")
+	}
 	EmbedLong("or", -1, evalOr)
-	MustTrue("not(or)")
-	MustTrue("not(or(concat))")
-	MustTrue("or(1)")
-
+	{
+		MustTrue("not(or)")
+		MustTrue("not(or(concat))")
+		MustTrue("or(1)")
+	}
 	Extend("nil", "or")
-	MustTrue("not(nil)")
-
+	{
+		MustEqual("concat", "nil")
+		MustTrue("not(nil)")
+	}
 	Extend("equiv", "or(and($0,$1), and(not($0),not($1)))")
-	MustTrue("equiv(nil, nil)")
-	MustTrue("equiv(2, 100)")
-	MustTrue("not(equiv(nil, 0))")
-
+	{
+		MustTrue("equiv(nil, nil)")
+		MustTrue("equiv(2, 100)")
+		MustTrue("not(equiv(nil, 0))")
+	}
 	// safe arithmetics
 	EmbedShort("sum8", 2, evalMustSum8)
-	MustEqual("sum8(5,6)", "sum8(10,1)")
-	MustEqual("sum8(5,6)", "11")
-
+	{
+		MustEqual("sum8(5,6)", "sum8(10,1)")
+		MustEqual("sum8(5,6)", "11")
+	}
 	EmbedShort("sum8_16", 2, evalSum8_16)
-	MustEqual("sum8_16(5,6)", "sum8_16(10,1)")
-	MustEqual("sum8_16(5,6)", "u16/11")
-
+	{
+		MustEqual("sum8_16(5,6)", "sum8_16(10,1)")
+		MustEqual("sum8_16(5,6)", "u16/11")
+	}
 	EmbedShort("sum16", 2, evalMustSum16)
-	MustEqual("sum16(u16/5,u16/6)", "sum16(u16/10,u16/1)")
-	MustEqual("sum16(u16/5,u16/6)", "u16/11")
-
+	{
+		MustEqual("sum16(u16/5,u16/6)", "sum16(u16/10,u16/1)")
+		MustEqual("sum16(u16/5,u16/6)", "u16/11")
+	}
 	EmbedShort("sum16_32", 2, evalSum16_32)
 	EmbedShort("sum32", 2, evalMustSum32)
 	EmbedShort("sum32_64", 2, evalSum32_64)
@@ -139,41 +159,48 @@ func init() {
 
 	// bitwise
 	EmbedShort("bitwiseOR", 2, evalBitwiseOR)
-	MustEqual("bitwiseOR(0x01, 0x80)", "0x81")
-
+	{
+		MustEqual("bitwiseOR(0x01, 0x80)", "0x81")
+	}
 	EmbedShort("bitwiseAND", 2, evalBitwiseAND)
-	MustEqual("bitwiseAND(0x03, 0xf2)", "0x02")
-	MustEqual("bitwiseAND(0x0102, 0xff00)", "0x0100")
-
+	{
+		MustEqual("bitwiseAND(0x03, 0xf2)", "0x02")
+		MustEqual("bitwiseAND(0x0102, 0xff00)", "0x0100")
+	}
 	EmbedShort("bitwiseNOT", 1, evalBitwiseNOT)
-	MustEqual("bitwiseNOT(0x00ff)", "0xff00")
-
+	{
+		MustEqual("bitwiseNOT(0x00ff)", "0xff00")
+	}
 	EmbedShort("bitwiseXOR", 2, evalBitwiseXOR)
-	MustEqual("bitwiseXOR(0x1234, 0x1234)", "0x0000")
-	MustEqual("bitwiseXOR(0x1234, 0xffff)", "bitwiseNOT(0x1234)")
-
+	{
+		MustEqual("bitwiseXOR(0x1234, 0x1234)", "0x0000")
+		MustEqual("bitwiseXOR(0x1234, 0xffff)", "bitwiseNOT(0x1234)")
+	}
 	// comparison
 	EmbedShort("lessThan", 2, evalLessThan)
-	MustTrue("lessThan(1,2)")
-	MustTrue("not(lessThan(2,1))")
-	MustTrue("not(lessThan(2,2))")
+	{
+		MustTrue("lessThan(1,2)")
+		MustTrue("not(lessThan(2,1))")
+		MustTrue("not(lessThan(2,2))")
+	}
 
 	Extend("lessOrEqualThan", "or(lessThan($0,$1),equal($0,$1))")
 	Extend("greaterThan", "not(lessOrEqualThan($0,$1))")
 	Extend("greaterOrEqualThan", "not(lessThan($0,$1))")
 	// other
-	MustEqual("concat", "nil")
 
 	Extend("byte", "slice($0, $1, $1)")
-	MustEqual("byte(0x010203, 2)", "3")
-
+	{
+		MustEqual("byte(0x010203, 2)", "3")
+	}
 	EmbedLong("validSignatureED25519", 3, evalValidSigED25519)
 
 	EmbedLong("blake2b", -1, evalBlake2b)
 	h := blake2b.Sum256([]byte{1})
-	MustEqual("len8(blake2b(1))", "32")
-	MustEqual("blake2b(1)", fmt.Sprintf("0x%s", hex.EncodeToString(h[:])))
-
+	{
+		MustEqual("len8(blake2b(1))", "32")
+		MustEqual("blake2b(1)", fmt.Sprintf("0x%s", hex.EncodeToString(h[:])))
+	}
 	// code parsing
 	// $0 - binary EasyFL code
 	// $1 - expected call prefix (#-literal)
@@ -472,6 +499,15 @@ func FunctionCallPrefixByName(sym string, numArgs byte) ([]byte, error) {
 
 func isNil(p interface{}) bool {
 	return p == nil || (reflect.ValueOf(p).Kind() == reflect.Ptr && reflect.ValueOf(p).IsNil())
+}
+
+func evalFail(par *CallParams) []byte {
+	c := par.Arg(0)
+	if len(c) == 1 {
+		par.TracePanic("SCRIPT FAIL: error #%d", c[0])
+	}
+	par.TracePanic("SCRIPT FAIL: '%s'", string(c))
+	return nil
 }
 
 // slices first argument 'from' 'to' inclusive 'to'

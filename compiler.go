@@ -187,143 +187,13 @@ const (
 func (f *parsedExpression) binaryFromParsedExpression(w io.Writer, localLib ...*LocalLibrary) (int, error) {
 	numArgs := 0
 	if len(f.params) == 0 {
-		// parameter reference
-		if strings.HasPrefix(f.sym, "$") {
-			n, err := strconv.Atoi(f.sym[1:])
-			if err != nil {
-				return 0, err
-			}
-			if n < 0 || n > MaxParameters {
-				return 0, fmt.Errorf("wrong argument reference '%s'", f.sym)
-			}
-			if numArgs < n+1 {
-				numArgs = n + 1
-			}
-			if _, err = w.Write([]byte{byte(n)}); err != nil {
-				return 0, err
-			}
-			return numArgs, nil
+		isLiteral, nArgs, err := parseLiteral(f.sym, w)
+		if err != nil {
+			return 0, err
 		}
-		// write inline data
-		n, err := strconv.Atoi(f.sym)
-		if err == nil {
-			// it is a number
-			if n < 0 || n >= 256 {
-				return 0, fmt.Errorf("integer constant value not uint8: %s", f.sym)
-			}
-			// it is a 1 byte value
-			if _, err = w.Write([]byte{FirstByteDataMask | byte(1), byte(n)}); err != nil {
-				return 0, err
-			}
-			return 0, nil
+		if isLiteral {
+			return nArgs, nil
 		}
-		if strings.HasPrefix(f.sym, "0x") {
-			// it is hexadecimal constant
-			b, err := hex.DecodeString(f.sym[2:])
-			if err != nil {
-				return 0, fmt.Errorf("%v: '%s'", err, f.sym)
-			}
-			if len(b) > 127 {
-				return 0, fmt.Errorf("hexadecimal constant longer than 127 bytes: '%s'", f.sym)
-			}
-			if _, err = w.Write([]byte{FirstByteDataMask | byte(len(b))}); err != nil {
-				return 0, err
-			}
-			if _, err = w.Write(b); err != nil {
-				return 0, err
-			}
-			return 0, nil
-		}
-		if strings.HasPrefix(f.sym, "x/") {
-			// it is an inline binary executable code
-			b, err := hex.DecodeString(f.sym[2:])
-			if err != nil {
-				return 0, fmt.Errorf("%v: '%s'", err, f.sym)
-			}
-			// write the code as is
-			if _, err = w.Write(b); err != nil {
-				return 0, err
-			}
-			return 0, nil
-		}
-		if strings.HasPrefix(f.sym, "u16/") {
-			// it is u16 constant big endian
-			n, err = strconv.Atoi(strings.TrimPrefix(f.sym, "u16/"))
-			if err != nil {
-				return 0, fmt.Errorf("%v: '%s'", err, f.sym)
-			}
-			if n < 0 || n > math.MaxUint16 {
-				return 0, fmt.Errorf("wrong u16 constant: '%s'", f.sym)
-			}
-			b := make([]byte, 2)
-			binary.BigEndian.PutUint16(b, uint16(n))
-			if _, err = w.Write([]byte{FirstByteDataMask | byte(2)}); err != nil {
-				return 0, err
-			}
-			if _, err = w.Write(b); err != nil {
-				return 0, err
-			}
-			return 0, nil
-		}
-		if strings.HasPrefix(f.sym, "u32/") {
-			// it is u16 constant big endian
-			n, err = strconv.Atoi(strings.TrimPrefix(f.sym, "u32/"))
-			if err != nil {
-				return 0, fmt.Errorf("%v: '%s'", err, f.sym)
-			}
-			if n < 0 || n > math.MaxUint32 {
-				return 0, fmt.Errorf("wrong u32 constant: '%s'", f.sym)
-			}
-			b := make([]byte, 4)
-			binary.BigEndian.PutUint32(b, uint32(n))
-			if _, err = w.Write([]byte{FirstByteDataMask | byte(4)}); err != nil {
-				return 0, err
-			}
-			if _, err = w.Write(b); err != nil {
-				return 0, err
-			}
-			return 0, nil
-		}
-		if strings.HasPrefix(f.sym, "u64/") {
-			// it is u16 constant big endian
-			un, err := strconv.ParseUint(strings.TrimPrefix(f.sym, "u64/"), 10, 64)
-			if err != nil {
-				return 0, fmt.Errorf("%v: '%s'", err, f.sym)
-			}
-			b := make([]byte, 8)
-			binary.BigEndian.PutUint64(b, un)
-			if _, err = w.Write([]byte{FirstByteDataMask | byte(8)}); err != nil {
-				return 0, err
-			}
-			if _, err = w.Write(b); err != nil {
-				return 0, err
-			}
-			return 0, nil
-		}
-		if strings.HasPrefix(f.sym, "#") {
-			// function call prefix literal
-			funName := strings.TrimPrefix(f.sym, "#")
-			fi, err := functionByName(funName)
-			if err != nil {
-				return 0, err
-			}
-			numArgs = fi.NumParams
-			if numArgs < 0 {
-				numArgs = 0
-			}
-			funCallPrefix, err := fi.callPrefix(byte(numArgs))
-			if err != nil {
-				return 0, err
-			}
-			if _, err = w.Write([]byte{FirstByteDataMask | byte(len(funCallPrefix))}); err != nil {
-				return 0, err
-			}
-			if _, err = w.Write(funCallPrefix); err != nil {
-				return 0, err
-			}
-			return 0, nil
-		}
-		// TODO other types of literals
 	}
 	// either has arguments or not literal
 	// try if it is a short call
@@ -354,6 +224,160 @@ func (f *parsedExpression) binaryFromParsedExpression(w io.Writer, localLib ...*
 		}
 	}
 	return numArgs, nil
+}
+
+func parseLiteral(sym string, w io.Writer) (bool, int, error) {
+	// write inline data
+	n, err := strconv.Atoi(sym)
+	itIsANumber := err == nil
+
+	switch {
+	case itIsANumber:
+		if n < 0 || n >= 256 {
+			return false, 0, fmt.Errorf("integer constant value not uint8: %s", sym)
+		}
+		// it is a 1 byte value
+		if _, err = w.Write([]byte{FirstByteDataMask | byte(1), byte(n)}); err != nil {
+			return false, 0, err
+		}
+		return true, 0, nil
+	case strings.HasPrefix(sym, "$"):
+		// parameter reference function
+		n, err := strconv.Atoi(sym[1:])
+		if err != nil {
+			return false, 0, err
+		}
+		if n < 0 || n > MaxParameters {
+			return false, 0, fmt.Errorf("wrong argument reference '%s'", sym)
+		}
+		if _, err = w.Write([]byte{byte(n)}); err != nil {
+			return false, 0, err
+		}
+		return true, n + 1, nil
+	case strings.HasPrefix(sym, "0x"):
+		// it is hexadecimal constant
+		b, err := hex.DecodeString(sym[2:])
+		if err != nil {
+			return false, 0, fmt.Errorf("%v: '%s'", err, sym)
+		}
+		if len(b) > 127 {
+			return false, 0, fmt.Errorf("hexadecimal constant can't be longer than 127 bytes: '%s'", sym)
+		}
+		if _, err = w.Write([]byte{FirstByteDataMask | byte(len(b))}); err != nil {
+			return false, 0, err
+		}
+		if _, err = w.Write(b); err != nil {
+			return false, 0, err
+		}
+		return true, 0, nil
+	case strings.HasPrefix(sym, "x/"):
+		// it is an inline binary executable code
+		b, err := hex.DecodeString(sym[2:])
+		if err != nil {
+			return false, 0, fmt.Errorf("%v: '%s'", err, sym)
+		}
+		// write the code as is
+		if _, err = w.Write(b); err != nil {
+			return false, 0, err
+		}
+		return true, 0, nil
+	case strings.HasPrefix(sym, "u16/"):
+		// it is u16 constant big endian
+		n, err = strconv.Atoi(strings.TrimPrefix(sym, "u16/"))
+		if err != nil {
+			return false, 0, fmt.Errorf("%v: '%s'", err, sym)
+		}
+		if n < 0 || n > math.MaxUint16 {
+			return false, 0, fmt.Errorf("wrong u16 constant: '%s'", sym)
+		}
+		b := make([]byte, 2)
+		binary.BigEndian.PutUint16(b, uint16(n))
+		if _, err = w.Write([]byte{FirstByteDataMask | byte(2)}); err != nil {
+			return false, 0, err
+		}
+		if _, err = w.Write(b); err != nil {
+			return false, 0, err
+		}
+		return true, 0, nil
+	case strings.HasPrefix(sym, "u32/"):
+		// it is u16 constant big endian
+		n, err = strconv.Atoi(strings.TrimPrefix(sym, "u32/"))
+		if err != nil {
+			return false, 0, fmt.Errorf("%v: '%s'", err, sym)
+		}
+		if n < 0 || n > math.MaxUint32 {
+			return false, 0, fmt.Errorf("wrong u32 constant: '%s'", sym)
+		}
+		b := make([]byte, 4)
+		binary.BigEndian.PutUint32(b, uint32(n))
+		if _, err = w.Write([]byte{FirstByteDataMask | byte(4)}); err != nil {
+			return false, 0, err
+		}
+		if _, err = w.Write(b); err != nil {
+			return false, 0, err
+		}
+		return true, 0, nil
+	case strings.HasPrefix(sym, "u64/"):
+		// it is u16 constant big endian
+		un, err := strconv.ParseUint(strings.TrimPrefix(sym, "u64/"), 10, 64)
+		if err != nil {
+			return false, 0, fmt.Errorf("%v: '%s'", err, sym)
+		}
+		b := make([]byte, 8)
+		binary.BigEndian.PutUint64(b, un)
+		if _, err = w.Write([]byte{FirstByteDataMask | byte(8)}); err != nil {
+			return false, 0, err
+		}
+		if _, err = w.Write(b); err != nil {
+			return false, 0, err
+		}
+		return true, 0, nil
+	case strings.HasPrefix(sym, "#"):
+		// function call prefix literal
+		funName := strings.TrimPrefix(sym, "#")
+		fi, err := functionByName(funName)
+		if err != nil {
+			return false, 0, err
+		}
+		numArgs := fi.NumParams
+		if numArgs < 0 {
+			numArgs = 0
+		}
+		funCallPrefix, err := fi.callPrefix(byte(numArgs))
+		if err != nil {
+			return false, 0, err
+		}
+		if _, err = w.Write([]byte{FirstByteDataMask | byte(len(funCallPrefix))}); err != nil {
+			return false, 0, err
+		}
+		if _, err = w.Write(funCallPrefix); err != nil {
+			return false, 0, err
+		}
+		return true, 0, nil
+	case strings.HasPrefix(sym, "!!!"):
+		// 'fail' literal
+		msg := strings.TrimPrefix(sym, "!!!")
+		msgData := []byte(strings.Replace(msg, "_", " ", -1))
+		if len(msgData) > 127 {
+			return false, 0, fmt.Errorf("fail message can't be longer than 127 bytes: '%s'", sym)
+		}
+		fi, err := functionByName("fail")
+		AssertNoError(err)
+		funCallPrefix, err := fi.callPrefix(1)
+		AssertNoError(err)
+		if _, err = w.Write(funCallPrefix); err != nil {
+			return false, 0, err
+		}
+		if _, err = w.Write([]byte{FirstByteDataMask | byte(len(msgData))}); err != nil {
+			return false, 0, err
+		}
+		if _, err = w.Write(msgData); err != nil {
+			return false, 0, err
+		}
+		return true, 0, nil
+	}
+	// TODO other types of literals
+	return false, 0, nil
 }
 
 // ExpressionSourceToBinary compile expression from source form into binary for embedding into transaction
