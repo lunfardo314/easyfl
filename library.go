@@ -219,6 +219,8 @@ func init() {
 		src = fmt.Sprintf("parseCallPrefix(0x%s)", hex.EncodeToString(binCode))
 		MustEqual(src, "#slice")
 	}
+	Extend("false", "or")
+	Extend("true", "and")
 }
 
 func PrintLibraryStats() {
