@@ -69,6 +69,17 @@ func TestCompile(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, bytes.Equal(prefix, prefix1))
 	})
+	t.Run("fail call binary", func(t *testing.T) {
+		_, _, code, err := CompileExpression("!!!ciao!")
+		require.NoError(t, err)
+		t.Logf("!!!ciao! code = %s", Fmt(code))
+		_, err = EvalFromBinary(nil, code)
+		RequireErrorWith(t, err, "SCRIPT FAIL: 'ciao!'")
+
+		src := fmt.Sprintf("x/%s", hex.EncodeToString(code))
+		_, err = EvalFromSource(nil, src)
+		RequireErrorWith(t, err, "SCRIPT FAIL: 'ciao!'")
+	})
 }
 
 func TestEval(t *testing.T) {
