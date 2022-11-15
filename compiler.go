@@ -13,6 +13,7 @@ import (
 	"unicode"
 )
 
+// funParsed is an interim representation of the source code
 type funParsed struct {
 	Sym        string
 	SourceCode string
@@ -380,7 +381,7 @@ func parseLiteral(sym string, w io.Writer) (bool, int, error) {
 	return false, 0, nil
 }
 
-// ExpressionSourceToBinary compile expression from source form into binary for embedding into transaction
+// ExpressionSourceToBinary compiles expression from source form into the canonical binary representation
 func ExpressionSourceToBinary(formulaSource string, localLib ...*LocalLibrary) ([]byte, int, error) {
 	f, err := parseExpression(formulaSource)
 	if err != nil {
@@ -395,7 +396,7 @@ func ExpressionSourceToBinary(formulaSource string, localLib ...*LocalLibrary) (
 	return buf.Bytes(), numArgs, nil
 }
 
-// ExpressionFromBinary creates evaluation form of the expression
+// ExpressionFromBinary creates evaluation form of the expression from its canonical representation
 func ExpressionFromBinary(code []byte, localLib ...*LocalLibrary) (*Expression, error) {
 	ret, remaining, _, err := expressionFromBinary(code, localLib...)
 	if err != nil {
@@ -407,12 +408,14 @@ func ExpressionFromBinary(code []byte, localLib ...*LocalLibrary) (*Expression, 
 	return ret, nil
 }
 
+// ExpressionToBinary converts evaluation form of the expression into the canonical binary form
 func ExpressionToBinary(f *Expression) []byte {
 	var buf bytes.Buffer
 	AssertNoError(writeExpressionBinary(&buf, f))
 	return buf.Bytes()
 }
 
+// ExpressionToSource converts evaluation form of the expression into the source form (decompiles)
 func ExpressionToSource(f *Expression) string {
 	var buf bytes.Buffer
 	AssertNoError(writeExpressionSource(&buf, f))
@@ -539,6 +542,7 @@ func CompileExpression(source string, localLib ...*LocalLibrary) (*Expression, i
 	return ret, numParams, code, nil
 }
 
+// DecompileBinary decompiles canonical binary form into source. Symbols are restored wherever possible
 func DecompileBinary(code []byte) (string, error) {
 	f, err := ExpressionFromBinary(code)
 	if err != nil {
@@ -556,7 +560,7 @@ func dataFunction(data []byte) EvalFunction {
 }
 
 func parseCallPrefix(code []byte, localLib ...*LocalLibrary) ([]byte, EvalFunction, int, string, error) {
-	if len(code) == 0 || code[0]&FirstByteDataMask != 0 {
+	if len(code) == 0 || IsDataPrefix(code) {
 		return nil, nil, 0, "", fmt.Errorf("parseCallPrefix: not a function call")
 	}
 
@@ -614,13 +618,13 @@ func parseCallPrefix(code []byte, localLib ...*LocalLibrary) ([]byte, EvalFuncti
 }
 
 // ParseInlineDataPrefix attempts to parse beginning of the code as inline data
-// Function is for binary code analysis
+// Function used is binary code analysis
 // Returns:
-// - parsed data with the 1 byte prefix or nil
-// - true if success, false if not
+// - parsed data including the 1-byte prefix, if it is data, otherwise nil
+// - true if it is data, false if not (it is a function call)
 // - EOF if not enough data
 func ParseInlineDataPrefix(code []byte) ([]byte, bool, error) {
-	if code[0]&FirstByteDataMask == 0 {
+	if !IsDataPrefix(code) {
 		// not data
 		return nil, false, nil
 	}
@@ -633,6 +637,29 @@ func ParseInlineDataPrefix(code []byte) ([]byte, bool, error) {
 	return code[0 : 1+size], true, nil
 }
 
+func IsDataPrefix(data []byte) bool {
+	if len(data) == 0 {
+		return false
+	}
+	return data[0]&FirstByteDataMask != 0
+}
+
+// StripDataPrefix if the first byte is a data prefix, strips it. Usually used for the data prefix returned by ParseInlineDataPrefix
+func StripDataPrefix(data []byte) []byte {
+	if IsDataPrefix(data) {
+		// if it is data, skip the prefix
+		return data[1:]
+	}
+	// no change otherwise
+	return data
+}
+
+// ParseCallPrefixFromBinary tries to parse first 1, 2 or 3 bytes as a prefix, which contains
+// all information about the function call (if it is not inline data)
+// Returns:
+// 1 byte for short call
+// 2 bytes for long calls
+// 3 bytes for local library call
 func ParseCallPrefixFromBinary(code []byte) ([]byte, error) {
 	callPrefix, _, _, _, err := parseCallPrefix(code)
 	if err != nil {
@@ -641,6 +668,14 @@ func ParseCallPrefixFromBinary(code []byte) ([]byte, error) {
 	return callPrefix, nil
 }
 
+// ParseBinaryOneLevel parses binary form of the function. Returns:
+// - if it is inline data, it returns its prefix
+// - if it is a function call, it returns pref, arg1, ... argN, where
+// -- perf is call prefix
+// -- argi is a canonical binary form of the argument i
+// Note, that argi is a canonical form of some expression too and the original expression is a concatenation
+// of its on-level parsed form.
+// To have next level, the argument can be parsed one level again
 func ParseBinaryOneLevel(code []byte, expectedNumArgs ...int) (string, []byte, [][]byte, error) {
 	f, err := ExpressionFromBinary(code)
 	if err != nil {
@@ -662,15 +697,8 @@ func ParseBinaryOneLevel(code []byte, expectedNumArgs ...int) (string, []byte, [
 	return f.FunctionName, prefix, args, nil
 }
 
-// StripDataPrefix if the first byte is a data prefix, strips it
-func StripDataPrefix(data []byte) []byte {
-	if len(data) > 0 && data[0]&FirstByteDataMask != 0 {
-		// if it is data, skip the prefix
-		return data[1:]
-	}
-	return data
-}
-
+// ComposeOneLevel creates a source form of the one-level parsed expression. The nested function calls
+// take a form of 'x/....' source literals
 func ComposeOneLevel(sym string, args [][]byte) string {
 	ret := sym
 	first := true

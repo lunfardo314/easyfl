@@ -824,6 +824,40 @@ func TestDecompile(t *testing.T) {
 		// concatenation of decomposed binary is equal to the original
 		require.EqualValues(t, bin, Concat(pieces...))
 	})
+	t.Run("bin-expr 6", func(t *testing.T) {
+		const formula = "0x010203"
+		_, _, bin, err := CompileExpression(formula)
+		require.NoError(t, err)
+		f, err := ExpressionFromBinary(bin)
+		require.NoError(t, err)
+		binBack := ExpressionToBinary(f)
+		require.EqualValues(t, bin, binBack)
+		formulaBack, err := DecompileBinary(bin)
+		require.NoError(t, err)
+		t.Logf("orig: '%s'", formula)
+		t.Logf("decompiled: '%s'", formulaBack)
+
+		_, _, binBack1, err := CompileExpression(formulaBack)
+		require.NoError(t, err)
+		require.EqualValues(t, bin, binBack1)
+
+		sym, prefix, args, err := ParseBinaryOneLevel(bin, 0)
+		require.NoError(t, err)
+		require.True(t, IsDataPrefix(prefix))
+		t.Logf("sym = %s", sym)
+		_, _, binBack2, err := CompileExpression(formulaBack)
+		require.NoError(t, err)
+		require.EqualValues(t, bin, binBack2)
+
+		pieces := make([]interface{}, len(args)+1)
+		pieces[0] = prefix
+		for i := range args {
+			pieces[i+1] = args[i]
+		}
+		// concatenation of decomposed binary is equal to the original
+		require.EqualValues(t, bin, Concat(pieces...))
+
+	})
 }
 
 func TestLocalLibrary(t *testing.T) {
