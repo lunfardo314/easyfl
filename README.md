@@ -5,8 +5,8 @@ This package is a **work in progress**
 It is a very simple functional programming language. It is extendable, platform-independent, minimalistic and human-readable. 
 The expressions of the language take one of the following forms:
 * _source form_, a the human-readable ASCII form
-* _canonical binary form_. The canonical binary is normally compiled from the source. It is a main form in which EasyFL expressions are
-stored. Source code and execution form are created from it. Canonical binary form is highly compressed and ideal for inline 
+* _canonical bytecode form_. The canonical bytecode is normally compiled from the source. It is a main form in which EasyFL expressions are
+stored. Source code and execution form are created from it. Canonical bytecode form is highly compressed and ideal for inline 
 embedding into the data structures. 
 * _internal execution_ form.
 
@@ -15,7 +15,7 @@ It was designed with programmability of UTXO transactions, extendability and ver
 The _EasyFL_ scripts enable programmability of UTXO behavior, also known as _output types_. Some people see it as a basic 
 form of smart contracts, however in our opinion, the _UTXO constraints_ or _UTXO scripts_ is a better name for it. 
 
-Computationally, _EasyFL_ is equivalent to the _Bitcoin Script_, i.e. its computational model is 
+Computationally, _EasyFL_ is equivalent to the _Bitcoin Script_ and equivalent models, i.e. its computational model is 
 non-Turing complete. _EasyFL_ can describe validity constraints of static data structures with known bounds, i.e. _circuits_. It is enough for 
 most use cases, which are based on the data state stored in the UTXO transaction. 
 
