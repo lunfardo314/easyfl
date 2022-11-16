@@ -872,7 +872,7 @@ func evalBitwiseNOT(par *CallParams) []byte {
 
 func evalParseCallArg(par *CallParams) []byte {
 	a0 := par.Arg(0)
-	_, prefix, args, err := ParseBinaryOneLevel(a0)
+	_, prefix, args, err := ParseBytecodeOneLevel(a0)
 	if err != nil {
 		par.TracePanic("evalParseCallArg: %v", err)
 	}
@@ -891,7 +891,7 @@ func evalParseCallArg(par *CallParams) []byte {
 
 func evalParseCallPrefix(par *CallParams) []byte {
 	code := par.Arg(0)
-	prefix, err := ParseCallPrefixFromBinary(code)
+	prefix, err := ParseCallPrefixFromBytecode(code)
 	if err != nil {
 		par.TracePanic("evalParseCallPrefix: %v", err)
 	}

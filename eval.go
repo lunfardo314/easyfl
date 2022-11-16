@@ -165,7 +165,7 @@ func MustEvalFromSource(glb GlobalData, source string, args ...[]byte) []byte {
 
 // MustEvalFromBinary interprets expression in the binary form. Will panic on any compile and runtime error
 func MustEvalFromBinary(glb GlobalData, code []byte, args ...[]byte) []byte {
-	expr, err := ExpressionFromBinary(code)
+	expr, err := ExpressionFromBytecode(code)
 	if err != nil {
 		panic(err)
 	}
@@ -187,7 +187,7 @@ func expressionFromLibrary(libraryBin [][]byte, funIndex int) (*Expression, erro
 	if err != nil {
 		return nil, err
 	}
-	expr, err := ExpressionFromBinary(libraryBin[funIndex], lib)
+	expr, err := ExpressionFromBytecode(libraryBin[funIndex], lib)
 	if err != nil {
 		return nil, err
 	}

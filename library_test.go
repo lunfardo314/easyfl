@@ -47,7 +47,7 @@ func TestCompile(t *testing.T) {
 		require.EqualValues(t, 0, numParams)
 		t.Logf("code len: %d", len(code))
 
-		f, err := ExpressionFromBinary(code)
+		f, err := ExpressionFromBytecode(code)
 		require.NoError(t, err)
 		require.NotNil(t, f)
 	})
@@ -56,7 +56,7 @@ func TestCompile(t *testing.T) {
 		require.NoError(t, err)
 		_, _, code, err := CompileExpression("concat")
 		require.NoError(t, err)
-		prefix1, err := ParseCallPrefixFromBinary(code)
+		prefix1, err := ParseCallPrefixFromBytecode(code)
 		require.NoError(t, err)
 		require.True(t, bytes.Equal(prefix, prefix1))
 	})
@@ -65,7 +65,7 @@ func TestCompile(t *testing.T) {
 		require.NoError(t, err)
 		_, _, code, err := CompileExpression("tail(0x010203, 2)")
 		require.NoError(t, err)
-		prefix1, err := ParseCallPrefixFromBinary(code)
+		prefix1, err := ParseCallPrefixFromBytecode(code)
 		require.NoError(t, err)
 		require.True(t, bytes.Equal(prefix, prefix1))
 	})
@@ -696,11 +696,11 @@ func TestDecompile(t *testing.T) {
 		const formula = "concat(0,1)"
 		_, _, bin, err := CompileExpression(formula)
 		require.NoError(t, err)
-		f, err := ExpressionFromBinary(bin)
+		f, err := ExpressionFromBytecode(bin)
 		require.NoError(t, err)
-		binBack := ExpressionToBinary(f)
+		binBack := ExpressionToBytecode(f)
 		require.EqualValues(t, bin, binBack)
-		formulaBack, err := DecompileBinary(bin)
+		formulaBack, err := DecompileBytecode(bin)
 		require.NoError(t, err)
 		t.Logf("orig: '%s'", formula)
 		t.Logf("decompiled: '%s'", formulaBack)
@@ -709,10 +709,10 @@ func TestDecompile(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, bin, binBack1)
 
-		sym, _, args, err := ParseBinaryOneLevel(bin)
+		sym, _, args, err := ParseBytecodeOneLevel(bin)
 		require.NoError(t, err)
 
-		formulaBack2 := ComposeOneLevel(sym, args)
+		formulaBack2 := ComposeBytecodeOneLevel(sym, args)
 		t.Logf("decompiled by level 1: '%s'", formulaBack2)
 
 		_, _, binBack2, err := CompileExpression(formulaBack)
@@ -723,11 +723,11 @@ func TestDecompile(t *testing.T) {
 		const formula = "slice(concat($0,1),1,1)"
 		_, _, bin, err := CompileExpression(formula)
 		require.NoError(t, err)
-		f, err := ExpressionFromBinary(bin)
+		f, err := ExpressionFromBytecode(bin)
 		require.NoError(t, err)
-		binBack := ExpressionToBinary(f)
+		binBack := ExpressionToBytecode(f)
 		require.EqualValues(t, bin, binBack)
-		formulaBack, err := DecompileBinary(bin)
+		formulaBack, err := DecompileBytecode(bin)
 		require.NoError(t, err)
 		t.Logf("orig: '%s'", formula)
 		t.Logf("decompiled: '%s'", formulaBack)
@@ -735,10 +735,10 @@ func TestDecompile(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, bin, binBack1)
 
-		sym, _, args, err := ParseBinaryOneLevel(bin)
+		sym, _, args, err := ParseBytecodeOneLevel(bin)
 		require.NoError(t, err)
 
-		formulaBack2 := ComposeOneLevel(sym, args)
+		formulaBack2 := ComposeBytecodeOneLevel(sym, args)
 		t.Logf("decompiled by level 1: '%s'", formulaBack2)
 
 		_, _, binBack2, err := CompileExpression(formulaBack)
@@ -749,11 +749,11 @@ func TestDecompile(t *testing.T) {
 		const formula = "fun2par(fun1par(0x0102),concat($0,$1))"
 		_, _, bin, err := CompileExpression(formula)
 		require.NoError(t, err)
-		f, err := ExpressionFromBinary(bin)
+		f, err := ExpressionFromBytecode(bin)
 		require.NoError(t, err)
-		binBack := ExpressionToBinary(f)
+		binBack := ExpressionToBytecode(f)
 		require.EqualValues(t, bin, binBack)
-		formulaBack, err := DecompileBinary(bin)
+		formulaBack, err := DecompileBytecode(bin)
 		require.NoError(t, err)
 		t.Logf("orig: '%s'", formula)
 		t.Logf("decompiled: '%s'", formulaBack)
@@ -761,10 +761,10 @@ func TestDecompile(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, bin, binBack1)
 
-		sym, _, args, err := ParseBinaryOneLevel(bin)
+		sym, _, args, err := ParseBytecodeOneLevel(bin)
 		require.NoError(t, err)
 
-		formulaBack2 := ComposeOneLevel(sym, args)
+		formulaBack2 := ComposeBytecodeOneLevel(sym, args)
 		t.Logf("decompiled by level 1: '%s'", formulaBack2)
 
 		_, _, binBack2, err := CompileExpression(formulaBack)
@@ -775,11 +775,11 @@ func TestDecompile(t *testing.T) {
 		const formula = "concat(u64/1337)"
 		_, _, bin, err := CompileExpression(formula)
 		require.NoError(t, err)
-		f, err := ExpressionFromBinary(bin)
+		f, err := ExpressionFromBytecode(bin)
 		require.NoError(t, err)
-		binBack := ExpressionToBinary(f)
+		binBack := ExpressionToBytecode(f)
 		require.EqualValues(t, bin, binBack)
-		formulaBack, err := DecompileBinary(bin)
+		formulaBack, err := DecompileBytecode(bin)
 		require.NoError(t, err)
 		t.Logf("orig: '%s'", formula)
 		t.Logf("decompiled: '%s'", formulaBack)
@@ -788,11 +788,11 @@ func TestDecompile(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, bin, binBack1)
 
-		sym, _, args, err := ParseBinaryOneLevel(bin, 1)
+		sym, _, args, err := ParseBytecodeOneLevel(bin, 1)
 		require.NoError(t, err)
 		require.EqualValues(t, 1337, binary.BigEndian.Uint64(StripDataPrefix(args[0])))
 
-		formulaBack2 := ComposeOneLevel(sym, args)
+		formulaBack2 := ComposeBytecodeOneLevel(sym, args)
 		t.Logf("decompiled by level 1: '%s'", formulaBack2)
 
 		_, _, binBack2, err := CompileExpression(formulaBack)
@@ -803,11 +803,11 @@ func TestDecompile(t *testing.T) {
 		const formula = "concat(u64/1337, 123, concat(1,2,3), tail(0x00010203, 1))"
 		_, _, bin, err := CompileExpression(formula)
 		require.NoError(t, err)
-		f, err := ExpressionFromBinary(bin)
+		f, err := ExpressionFromBytecode(bin)
 		require.NoError(t, err)
-		binBack := ExpressionToBinary(f)
+		binBack := ExpressionToBytecode(f)
 		require.EqualValues(t, bin, binBack)
-		formulaBack, err := DecompileBinary(bin)
+		formulaBack, err := DecompileBytecode(bin)
 		require.NoError(t, err)
 		t.Logf("orig: '%s'", formula)
 		t.Logf("decompiled: '%s'", formulaBack)
@@ -816,11 +816,11 @@ func TestDecompile(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, bin, binBack1)
 
-		sym, prefix, args, err := ParseBinaryOneLevel(bin, 4)
+		sym, prefix, args, err := ParseBytecodeOneLevel(bin, 4)
 		require.NoError(t, err)
 		require.EqualValues(t, 1337, binary.BigEndian.Uint64(StripDataPrefix(args[0])))
 
-		formulaBack2 := ComposeOneLevel(sym, args)
+		formulaBack2 := ComposeBytecodeOneLevel(sym, args)
 		t.Logf("decompiled by level 1: '%s'", formulaBack2)
 
 		_, _, binBack2, err := CompileExpression(formulaBack)
@@ -839,11 +839,11 @@ func TestDecompile(t *testing.T) {
 		const formula = "0x010203"
 		_, _, bin, err := CompileExpression(formula)
 		require.NoError(t, err)
-		f, err := ExpressionFromBinary(bin)
+		f, err := ExpressionFromBytecode(bin)
 		require.NoError(t, err)
-		binBack := ExpressionToBinary(f)
+		binBack := ExpressionToBytecode(f)
 		require.EqualValues(t, bin, binBack)
-		formulaBack, err := DecompileBinary(bin)
+		formulaBack, err := DecompileBytecode(bin)
 		require.NoError(t, err)
 		t.Logf("orig: '%s'", formula)
 		t.Logf("decompiled: '%s'", formulaBack)
@@ -852,7 +852,7 @@ func TestDecompile(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, bin, binBack1)
 
-		sym, prefix, args, err := ParseBinaryOneLevel(bin, 0)
+		sym, prefix, args, err := ParseBytecodeOneLevel(bin, 0)
 		require.NoError(t, err)
 		require.True(t, IsDataPrefix(prefix))
 		t.Logf("sym = %s", sym)

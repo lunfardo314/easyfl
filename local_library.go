@@ -65,7 +65,7 @@ func LocalLibraryFromBytes(bin [][]byte) (*LocalLibrary, error) {
 	ret := NewLocalLibrary()
 
 	for i, data := range bin {
-		expr, remaining, maxParam, err := expressionFromBinary(data, ret)
+		expr, remaining, maxParam, err := expressionFromBytecode(data, ret)
 		if err != nil {
 			return nil, err
 		}
