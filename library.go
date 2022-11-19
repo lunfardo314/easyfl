@@ -66,6 +66,23 @@ var (
 
 const traceYN = false
 
+/*
+EasyFL runtime defines a standard library. It is always compiled at startup, in the `init` function.
+The library is constructed by function calls:
+- 'EmbedShort' adds an embedded function to the library with the short opcode 1-byte long.
+Maximum number of short embedded functions is 64
+- 'EmbedLong' is the same as 'EmbedShort', only it embeds function with 2 byte long byte code.
+Maximum number of embedded function is 256
+- 'Extend' adds function defined as a EasyFL expression. Maximum number of extended functions is 702
+
+The 'init' function also includes inline tests with function call 'MustTrue', 'MustEqual', 'MustError'.
+
+'init' panics if library extensions fail or any of inline test fail
+
+The target environment, such as 'EasyUTXO' extends the standard library by using the same function in its 'init'
+
+*/
+
 func init() {
 	// basic
 	// 'fail' function panics engine. Literal starting with !!! is a call to 'fail' with the message
