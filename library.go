@@ -891,7 +891,7 @@ func evalParseBytecodeArg(par *CallParams) []byte {
 	a0 := par.Arg(0)
 	_, prefix, args, err := ParseBytecodeOneLevel(a0)
 	if err != nil {
-		par.TracePanic("evalParseBytecodeArg: %v", err)
+		par.TracePanic("evalParseBytecodeArg:: %v", err)
 	}
 	expectedPrefix := par.Arg(1)
 	idx := par.Arg(2)
@@ -902,7 +902,7 @@ func evalParseBytecodeArg(par *CallParams) []byte {
 		par.TracePanic("evalParseBytecodeArg: wrong parameters index")
 	}
 	ret := StripDataPrefix(args[idx[0]])
-	par.Trace("%s, %s, %s -> %s", Fmt(a0), Fmt(expectedPrefix), Fmt(idx), Fmt(ret))
+	par.Trace("parseBytecodeArg:: %s, %s, %s -> %s", Fmt(a0), Fmt(expectedPrefix), Fmt(idx), Fmt(ret))
 	return ret
 }
 
@@ -912,6 +912,6 @@ func evalParseBytecodePrefix(par *CallParams) []byte {
 	if err != nil {
 		par.TracePanic("evalParseBytecodePrefix: %v", err)
 	}
-	par.Trace("%s -> %s", Fmt(code), Fmt(prefix))
+	par.Trace("parseBytecodePrefix::%s -> %s", Fmt(code), Fmt(prefix))
 	return prefix
 }
