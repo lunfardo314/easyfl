@@ -97,8 +97,16 @@ func init() {
 	{
 		MustEqual("slice(0x010203,1,2)", "0x0203")
 	}
+	// 'byte' takes 1-byte long slice at index
+	EmbedShort("byte", 2, evalByte)
+	{
+		MustEqual("byte(0x010203, 2)", "3")
+	}
 	// 'tail' takes from $1 to the end
 	EmbedShort("tail", 2, evalTail)
+	{
+		MustEqual("tail(0x010203, 2)", "3")
+	}
 	EmbedShort("equal", 2, evalEqual)
 	EmbedShort("hasPrefix", 2, evalHasPrefix)
 	{
@@ -206,10 +214,6 @@ func init() {
 	Extend("greaterOrEqualThan", "not(lessThan($0,$1))")
 	// other
 
-	Extend("byte", "slice($0, $1, $1)")
-	{
-		MustEqual("byte(0x010203, 2)", "3")
-	}
 	EmbedLong("validSignatureED25519", 3, evalValidSigED25519)
 
 	EmbedLong("blake2b", -1, evalBlake2b)
@@ -534,6 +538,9 @@ func evalSlice(par *CallParams) []byte {
 	data := par.Arg(0)
 	from := par.Arg(1)
 	to := par.Arg(2)
+	if len(from) != 1 || len(to) != 1 {
+		par.TracePanic("slice:: data: %s, from: %s, to: %s -- wrong bound values", Fmt(data), Fmt(from), Fmt(to))
+	}
 	if from[0] > to[0] {
 		par.TracePanic("slice:: data: %s, from: %s, to: %s -- wrong slice bounds. ", Fmt(data), Fmt(from), Fmt(to))
 	}
@@ -543,6 +550,17 @@ func evalSlice(par *CallParams) []byte {
 	}
 	ret := data[from[0]:upper]
 	par.Trace("slice:: data: %s, from: %s, to: %s -> %s", Fmt(data), Fmt(from), Fmt(to), Fmt(ret))
+	return ret
+}
+
+func evalByte(par *CallParams) []byte {
+	data := par.Arg(0)
+	idx := par.Arg(1)
+	if len(idx) != 1 || int(idx[0]) >= len(data) {
+		par.TracePanic("byte:: data: %s, idx: %s -- wrong index value", Fmt(data), Fmt(idx))
+	}
+	ret := data[idx[0] : idx[0]+1]
+	par.Trace("byte:: data: %s, idx: %s -> %s", Fmt(data), Fmt(idx), Fmt(ret))
 	return ret
 }
 
