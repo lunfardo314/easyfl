@@ -30,6 +30,8 @@ type CallParams struct {
 type call struct {
 	f      EvalFunction
 	params *CallParams
+	cache  []byte
+	cached bool
 }
 
 func newEvalContext(varScope []*call, glb GlobalData) *evalContext {
@@ -55,7 +57,12 @@ func newCall(f EvalFunction, args []*Expression, ctx *evalContext) *call {
 
 // Eval evaluates the expression by calling it eval function with the parameter
 func (c *call) Eval() []byte {
-	return c.f(c.params)
+	if c.cached {
+		return c.cache
+	}
+	c.cache = c.f(c.params)
+	c.cached = true
+	return c.cache
 }
 
 // DataContext accesses the data context inside the embedded function

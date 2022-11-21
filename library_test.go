@@ -260,13 +260,13 @@ func TestExtendLib(t *testing.T) {
 		ret, err := EvalFromSource(NewGlobalDataTracePrint(nil), "cat2(1,2)")
 		require.EqualValues(t, []byte{1, 2}, ret)
 	})
-	const complex = `
+	const complicated = `
 		concat(
 			concat($0,$1),
 			concat($0,$2)
 		)
 	`
-	_, err := ExtendErr("complex", complex)
+	_, err := ExtendErr("complicated", complicated)
 	require.NoError(t, err)
 
 	d := func(i byte) []byte { return []byte{i} }
@@ -277,12 +277,12 @@ func TestExtendLib(t *testing.T) {
 		return c3
 	}
 	t.Run("ext-4", func(t *testing.T) {
-		ret, err := EvalFromSource(NewGlobalDataTracePrint(nil), "complex(0,1,2)")
+		ret, err := EvalFromSource(NewGlobalDataTracePrint(nil), "complicated(0,1,2)")
 		require.NoError(t, err)
 		require.EqualValues(t, compl(d(0), d(1), d(2)), ret)
 	})
 	t.Run("ext-5", func(t *testing.T) {
-		ret, err := EvalFromSource(NewGlobalDataTracePrint(nil), "complex(0,1,complex(2,1,0))")
+		ret, err := EvalFromSource(NewGlobalDataTracePrint(nil), "complicated(0,1,complicated(2,1,0))")
 		require.NoError(t, err)
 		exp := compl(d(0), d(1), compl(d(2), d(1), d(0)))
 		require.EqualValues(t, exp, ret)
@@ -493,6 +493,20 @@ func TestTracing(t *testing.T) {
 		tr = NewGlobalDataTracePrint(nil)
 		_, err = EvalFromSource(tr, "concat(concat())")
 		require.NoError(t, err)
+	})
+	t.Run("trace caching", func(t *testing.T) {
+		Extend("c6", "concat($0, $0, $0, $0, $0, $0)")
+		var counter int
+		EmbedShort("prn", 0, func(_ *CallParams) []byte {
+			counter++
+			fmt.Printf("counter incremented\n")
+			return []byte{1}
+		})
+		tr := NewGlobalDataTracePrint(nil)
+		res, err := EvalFromSource(tr, "c6(c6(prn))")
+		require.NoError(t, err)
+		require.EqualValues(t, bytes.Repeat([]byte{1}, 36), res)
+		require.EqualValues(t, 1, counter)
 	})
 }
 
