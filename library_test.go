@@ -271,9 +271,9 @@ func TestExtendLib(t *testing.T) {
 
 	d := func(i byte) []byte { return []byte{i} }
 	compl := func(d0, d1, d2 []byte) []byte {
-		c0 := Concat(d0, d1)
-		c1 := Concat(d0, d2)
-		c3 := Concat(c0, c1)
+		c0 := concat(d0, d1)
+		c1 := concat(d0, d2)
+		c3 := concat(c0, c1)
 		return c3
 	}
 	t.Run("ext-4", func(t *testing.T) {
@@ -408,7 +408,7 @@ func TestSigED25519(t *testing.T) {
 	})
 	t.Run("validSignatureED25519-wrong-pubkey", func(t *testing.T) {
 		signature := ed25519.Sign(privKey, []byte(msg))
-		pk := Concat([]byte(pubKey))
+		pk := concat([]byte(pubKey))
 		pk[3]++
 		res, err := EvalFromSource(NewGlobalDataTracePrint(nil), "validSignatureED25519($0,$1,$2)", []byte(msg), signature, pk)
 		require.NoError(t, err)
@@ -847,7 +847,7 @@ func TestDecompile(t *testing.T) {
 			pieces[i+1] = args[i]
 		}
 		// concatenation of decomposed binary is equal to the original
-		require.EqualValues(t, bin, Concat(pieces...))
+		require.EqualValues(t, bin, concat(pieces...))
 	})
 	t.Run("bin-expr 6", func(t *testing.T) {
 		const formula = "0x010203"
@@ -880,7 +880,7 @@ func TestDecompile(t *testing.T) {
 			pieces[i+1] = args[i]
 		}
 		// concatenation of decomposed binary is equal to the original
-		require.EqualValues(t, bin, Concat(pieces...))
+		require.EqualValues(t, bin, concat(pieces...))
 
 	})
 }
