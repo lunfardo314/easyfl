@@ -85,6 +85,12 @@ The target environment, such as 'EasyUTXO' extends the standard library by using
 
 func init() {
 	// basic
+	EmbedShort("id", 1, evalId)
+	{
+		MustEqual("id(0x010203)", "0x010203")
+		MustError("id")
+	}
+
 	// 'fail' function panics engine. Literal starting with !!! is a call to 'fail' with the message
 	EmbedShort("fail", 1, evalFail)
 	{
@@ -522,6 +528,10 @@ func FunctionCallPrefixByName(sym string, numArgs byte) ([]byte, error) {
 
 func isNil(p interface{}) bool {
 	return p == nil || (reflect.ValueOf(p).Kind() == reflect.Ptr && reflect.ValueOf(p).IsNil())
+}
+
+func evalId(par *CallParams) []byte {
+	return par.Arg(0)
 }
 
 func evalFail(par *CallParams) []byte {
