@@ -276,6 +276,13 @@ func init() {
 	}
 	Extend("false", "or")
 	Extend("true", "and")
+
+	Extend("onFalse", "if($0, true, $1)")
+	Extend("onTrue", "if($0, $1, true)")
+	{
+		MustError("onFalse(nil, !!!false_occurred)", "false occurred")
+		MustError("onTrue(true, !!!true_happened)", "true happened")
+	}
 }
 
 func PrintLibraryStats() {
