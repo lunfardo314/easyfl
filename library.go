@@ -277,11 +277,10 @@ func init() {
 	Extend("false", "or")
 	Extend("true", "and")
 
-	Extend("onFalse", "if($0, true, $1)")
-	Extend("onTrue", "if($0, $1, true)")
+	Extend("require", "or($0,$1)")
 	{
-		MustError("onFalse(nil, !!!false_occurred)", "false occurred")
-		MustError("onTrue(true, !!!true_happened)", "true happened")
+		MustError("require(nil, !!!requirement_failed)", "requirement failed")
+		MustEqual("require(true, !!!something_wrong)", "true")
 	}
 }
 
