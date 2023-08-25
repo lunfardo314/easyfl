@@ -22,4 +22,4 @@ most use cases, which are based on the data state stored in the UTXO transaction
 Non-Turing complete computational model of *EasyFL* makes it possible automatic proofs and validation of the ledger state transitions constrained by the _EasyFL_ constraints.
 The constraint-based programmability of the ledger model does not require gas budgets and similar models to put the execution bounds on the program.
 
-Here is a [preliminary language presentation](https://hackmd.io/@Evaldas/S14WHOKMi) of the **EasyFL** language 
+Here is a [preliminary language presentation](https://hackmd.io/@Evaldas/S14WHOKMi) of the **EasyFL** language and [Medium series on constraint-based UTXO model](https://medium.com/@lunfardo/a-constraint-based-utxo-model-1-4-a61df1b0c724) .  
