@@ -947,3 +947,34 @@ func TestLocalLibrary(t *testing.T) {
 	})
 
 }
+
+func TestLibraryHash(t *testing.T) {
+	t.Run("lock", func(t *testing.T) {
+		h := LibraryHash()
+		t.Logf("library hash is: %s", hex.EncodeToString(h[:]))
+		RequirePanicOrErrorWith(t, func() error {
+			Extend("zzzzz", "mmmmmm")
+			return nil
+		}, lockedMsg)
+		PrintLibraryStats()
+	})
+	t.Run("mock modify", func(t *testing.T) {
+		h1 := LibraryHash()
+		t.Logf("library hash before is: %s", hex.EncodeToString(h1[:]))
+		RequirePanicOrErrorWith(t, func() error {
+			Extend("veryDummy", "concat()")
+			return nil
+		}, lockedMsg)
+		PrintLibraryStats()
+
+		// mocking, can't happen from outside
+		libraryLocked = false
+
+		Extend("veryDummy", "concat()")
+		h2 := LibraryHash()
+		t.Logf("library hash after is: %s", hex.EncodeToString(h2[:]))
+
+		require.NotEqualValues(t, h1, h2)
+		PrintLibraryStats()
+	})
+}

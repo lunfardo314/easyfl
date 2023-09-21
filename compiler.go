@@ -531,15 +531,15 @@ func expressionFromBytecode(code []byte, localLib ...*LocalLibrary) (*Expression
 // CompileExpression compiles from sources directly into the evaluation form
 func CompileExpression(source string, localLib ...*LocalLibrary) (*Expression, int, []byte, error) {
 	src := strings.Join(splitLinesStripComments(source), "")
-	code, numParams, err := ExpressionSourceToBinary(stripSpaces(src), localLib...)
+	bytecode, numParams, err := ExpressionSourceToBinary(stripSpaces(src), localLib...)
 	if err != nil {
 		return nil, 0, nil, err
 	}
-	ret, err := ExpressionFromBytecode(code, localLib...)
+	ret, err := ExpressionFromBytecode(bytecode, localLib...)
 	if err != nil {
 		return nil, 0, nil, err
 	}
-	return ret, numParams, code, nil
+	return ret, numParams, bytecode, nil
 }
 
 // DecompileBytecode decompiles canonical binary form into source. Symbols are restored wherever possible

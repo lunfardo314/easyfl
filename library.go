@@ -6,8 +6,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"reflect"
+	"sort"
 
 	"golang.org/x/crypto/blake2b"
 	"golang.org/x/crypto/ed25519"
@@ -41,6 +43,7 @@ type (
 	funDescriptor struct {
 		sym               string
 		funCode           uint16
+		bytecode          []byte
 		requiredNumParams int
 		evalFun           EvalFunction
 		locallyDependent  bool
@@ -62,6 +65,7 @@ var (
 	numEmbeddedShort   = EmbeddedReservedUntil + 1
 	numEmbeddedLong    int
 	numExtended        int
+	libraryLocked      bool // if true, extensions not possible
 )
 
 const traceYN = false
@@ -293,9 +297,12 @@ func PrintLibraryStats() {
 		numEmbeddedShort, MaxNumEmbeddedShort, numEmbeddedLong, MaxNumEmbeddedLong, numExtended, MaxNumExtended)
 }
 
+const lockedMsg = "library is locked, cannot be extended"
+
 // EmbedShort embeds short-callable function inti the library
 // locallyDependent is not used currently, it is intended for caching of values TODO
 func EmbedShort(sym string, requiredNumPar int, evalFun EvalFunction, contextDependent ...bool) byte {
+	Assert(!libraryLocked, lockedMsg)
 	Assert(numEmbeddedShort < MaxNumEmbeddedShort, "too many embedded short functions")
 	Assert(!existsFunction(sym), "!existsFunction(sym)")
 	Assert(requiredNumPar <= 15, "can't be more than 15 parameters")
@@ -331,6 +338,7 @@ func EmbedShort(sym string, requiredNumPar int, evalFun EvalFunction, contextDep
 }
 
 func EmbedLong(sym string, requiredNumPar int, evalFun EvalFunction) uint16 {
+	Assert(!libraryLocked, lockedMsg)
 	Assert(numEmbeddedLong < MaxNumEmbeddedLong, "too many embedded long functions")
 	Assert(!existsFunction(sym), "!existsFunction(sym)")
 	Assert(requiredNumPar <= 15, "can't be more than 15 parameters")
@@ -386,7 +394,9 @@ func evalParamFun(paramNr byte) EvalFunction {
 }
 
 func ExtendErr(sym string, source string) (uint16, error) {
-	f, numParam, _, err := CompileExpression(source)
+	Assert(!libraryLocked, lockedMsg)
+
+	f, numParam, bytecode, err := CompileExpression(source)
 	if err != nil {
 		return 0, fmt.Errorf("error while compiling '%s': %v", sym, err)
 	}
@@ -406,6 +416,7 @@ func ExtendErr(sym string, source string) (uint16, error) {
 	dscr := &funDescriptor{
 		sym:               sym,
 		funCode:           uint16(numExtended + FirstExtendedFun),
+		bytecode:          bytecode,
 		requiredNumParams: numParam,
 		evalFun:           evalFun,
 	}
@@ -450,6 +461,39 @@ func MustExtendMany(source string) {
 	if err := ExtendMany(source); err != nil {
 		panic(err)
 	}
+}
+
+// LibraryHash returns hash of the library code and locks library against modifications.
+// It is used for consistency checking and compatibility check
+// Should not be invoked from func init()
+func LibraryHash() [32]byte {
+	ret := blake2b.Sum256(libraryBytes())
+	libraryLocked = true
+	return ret
+}
+
+func libraryBytes() []byte {
+	var buf bytes.Buffer
+
+	funCodes := make([]uint16, 0, len(globalFunByFunCode))
+	for funCode := range globalFunByFunCode {
+		funCodes = append(funCodes, funCode)
+	}
+	sort.Slice(funCodes, func(i, j int) bool {
+		return funCodes[i] < funCodes[j]
+	})
+	for _, fc := range funCodes {
+		globalFunByFunCode[fc].write(&buf)
+	}
+	return buf.Bytes()
+}
+
+func (fd *funDescriptor) write(w io.Writer) {
+	_, _ = w.Write([]byte(fd.sym))
+	var funCodeBin [2]byte
+	binary.BigEndian.PutUint16(funCodeBin[:], fd.funCode)
+	_, _ = w.Write(funCodeBin[:])
+	_, _ = w.Write(fd.bytecode)
 }
 
 func existsFunction(sym string, localLib ...*LocalLibrary) bool {
