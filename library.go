@@ -238,17 +238,17 @@ func init() {
 	// $2 - number of the parameter to return
 	// Panics if the binary code is not the valid call of the specified function or number of the parameter is out of bounds
 	// Returns code of the argument if it is a call function, or data is it is a constant
-	EmbedLong("parseBytecodeArg", 3, evalParseBytecodeArg)
+	EmbedLong("unwrapBytecodeArg", 3, evalunwrapBytecodeArg)
 	EmbedLong("parseBytecodePrefix", 1, evalParseBytecodePrefix)
 	EmbedLong("evalBytecodeArg", 3, evalEvalBytecodeArg)
 	{
 		_, _, binCode, err := CompileExpression("slice(0x01020304,1,2)")
 		AssertNoError(err)
-		src := fmt.Sprintf("parseBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 0)
+		src := fmt.Sprintf("unwrapBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 0)
 		MustEqual(src, "0x01020304")
-		src = fmt.Sprintf("parseBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 1)
+		src = fmt.Sprintf("unwrapBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 1)
 		MustEqual(src, "1")
-		src = fmt.Sprintf("parseBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 2)
+		src = fmt.Sprintf("unwrapBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 2)
 		MustEqual(src, "2")
 		src = fmt.Sprintf("parseBytecodePrefix(0x%s)", hex.EncodeToString(binCode))
 		MustEqual(src, "#slice")
@@ -993,22 +993,22 @@ func evalBitwiseNOT(par *CallParams) []byte {
 	return ret
 }
 
-func evalParseBytecodeArg(par *CallParams) []byte {
+func evalunwrapBytecodeArg(par *CallParams) []byte {
 	a0 := par.Arg(0)
 	_, prefix, args, err := ParseBytecodeOneLevel(a0)
 	if err != nil {
-		par.TracePanic("evalParseBytecodeArg:: %v", err)
+		par.TracePanic("evalunwrapBytecodeArg:: %v", err)
 	}
 	expectedPrefix := par.Arg(1)
 	idx := par.Arg(2)
 	if !bytes.Equal(prefix, expectedPrefix) {
-		par.TracePanic("evalParseBytecodeArg: unexpected function prefix. Expected '%s', got '%s'", Fmt(expectedPrefix), Fmt(prefix))
+		par.TracePanic("evalunwrapBytecodeArg: unexpected function prefix. Expected '%s', got '%s'", Fmt(expectedPrefix), Fmt(prefix))
 	}
 	if len(idx) != 1 || len(args) <= int(idx[0]) {
-		par.TracePanic("evalParseBytecodeArg: wrong parameter index")
+		par.TracePanic("evalunwrapBytecodeArg: wrong parameter index")
 	}
 	ret := StripDataPrefix(args[idx[0]])
-	par.Trace("parseBytecodeArg:: %s, %s, %s -> %s", Fmt(a0), Fmt(expectedPrefix), Fmt(idx), Fmt(ret))
+	par.Trace("unwrapBytecodeArg:: %s, %s, %s -> %s", Fmt(a0), Fmt(expectedPrefix), Fmt(idx), Fmt(ret))
 	return ret
 }
 
@@ -1026,15 +1026,15 @@ func evalEvalBytecodeArg(par *CallParams) []byte {
 	a0 := par.Arg(0)
 	_, prefix, args, err := ParseBytecodeOneLevel(a0)
 	if err != nil {
-		par.TracePanic("evalParseBytecodeArg:: %v", err)
+		par.TracePanic("evalunwrapBytecodeArg:: %v", err)
 	}
 	expectedPrefix := par.Arg(1)
 	idx := par.Arg(2)
 	if !bytes.Equal(prefix, expectedPrefix) {
-		par.TracePanic("evalParseBytecodeArg: unexpected function prefix. Expected '%s', got '%s'", Fmt(expectedPrefix), Fmt(prefix))
+		par.TracePanic("evalunwrapBytecodeArg: unexpected function prefix. Expected '%s', got '%s'", Fmt(expectedPrefix), Fmt(prefix))
 	}
 	if len(idx) != 1 || len(args) <= int(idx[0]) {
-		par.TracePanic("evalParseBytecodeArg: wrong parameter index")
+		par.TracePanic("evalunwrapBytecodeArg: wrong parameter index")
 	}
 
 	ret, err := EvalFromBinary(par.ctx.glb, args[idx[0]])
