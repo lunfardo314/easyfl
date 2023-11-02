@@ -464,12 +464,12 @@ func writeExpressionSource(w io.Writer, f *Expression) error {
 }
 
 // expressionFromBytecode parses executable binary code into the executable expression tree
-func expressionFromBytecode(code []byte, localLib ...*LocalLibrary) (*Expression, []byte, byte, error) {
-	if len(code) == 0 {
+func expressionFromBytecode(bytecode []byte, localLib ...*LocalLibrary) (*Expression, []byte, byte, error) {
+	if len(bytecode) == 0 {
 		return nil, nil, 0xff, io.EOF
 	}
 
-	dataPrefix, itIsData, err := ParseBytecodeInlineDataPrefix(code)
+	dataPrefix, itIsData, err := ParseBytecodeInlineDataPrefix(bytecode)
 	if err != nil {
 		return nil, nil, 0xff, err
 	}
@@ -488,12 +488,12 @@ func expressionFromBytecode(code []byte, localLib ...*LocalLibrary) (*Expression
 			FunctionName: sym,
 			CallPrefix:   dataPrefix,
 		}
-		return ret, code[len(dataPrefix):], 0xff, nil
+		return ret, bytecode[len(dataPrefix):], 0xff, nil
 	}
 	maxParameterNumber := byte(0xff)
 
 	// function call expected
-	callPrefix, evalFun, arity, sym, err := parseCallPrefix(code, localLib...)
+	callPrefix, evalFun, arity, sym, err := parseCallPrefix(bytecode, localLib...)
 	if err != nil {
 		return nil, nil, 0xff, err
 	}
@@ -508,12 +508,12 @@ func expressionFromBytecode(code []byte, localLib ...*LocalLibrary) (*Expression
 		CallPrefix:   callPrefix,
 	}
 
-	code = code[len(callPrefix):]
+	bytecode = bytecode[len(callPrefix):]
 	// collect call Args
 	var p *Expression
 	var m byte
 	for i := 0; i < arity; i++ {
-		p, code, m, err = expressionFromBytecode(code, localLib...)
+		p, bytecode, m, err = expressionFromBytecode(bytecode, localLib...)
 		if err != nil {
 			return nil, nil, 0xff, err
 		}
@@ -525,7 +525,7 @@ func expressionFromBytecode(code []byte, localLib ...*LocalLibrary) (*Expression
 		ret.Args = append(ret.Args, p)
 	}
 	ret.EvalFunc = evalFun
-	return ret, code, maxParameterNumber, nil
+	return ret, bytecode, maxParameterNumber, nil
 }
 
 // CompileExpression compiles from sources directly into the evaluation form
