@@ -238,7 +238,7 @@ func init() {
 	// $2 - number of the parameter to return
 	// Panics if the binary code is not the valid call of the specified function or number of the parameter is out of bounds
 	// Returns code of the argument if it is a call function, or data is it is a constant
-	EmbedLong("unwrapBytecodeArg", 3, evalunwrapBytecodeArg)
+	EmbedLong("unwrapBytecodeArg", 3, evalUnwrapBytecodeArg)
 	EmbedLong("parseBytecodePrefix", 1, evalParseBytecodePrefix)
 	EmbedLong("evalBytecodeArg", 3, evalEvalBytecodeArg)
 	{
@@ -993,19 +993,19 @@ func evalBitwiseNOT(par *CallParams) []byte {
 	return ret
 }
 
-func evalunwrapBytecodeArg(par *CallParams) []byte {
+func evalUnwrapBytecodeArg(par *CallParams) []byte {
 	a0 := par.Arg(0)
 	_, prefix, args, err := ParseBytecodeOneLevel(a0)
 	if err != nil {
-		par.TracePanic("evalunwrapBytecodeArg:: %v", err)
+		par.TracePanic("evalUnwrapBytecodeArg:: %v", err)
 	}
 	expectedPrefix := par.Arg(1)
 	idx := par.Arg(2)
 	if !bytes.Equal(prefix, expectedPrefix) {
-		par.TracePanic("evalunwrapBytecodeArg: unexpected function prefix. Expected '%s', got '%s'", Fmt(expectedPrefix), Fmt(prefix))
+		par.TracePanic("evalUnwrapBytecodeArg: unexpected function prefix. Expected '%s', got '%s'", Fmt(expectedPrefix), Fmt(prefix))
 	}
 	if len(idx) != 1 || len(args) <= int(idx[0]) {
-		par.TracePanic("evalunwrapBytecodeArg: wrong parameter index")
+		par.TracePanic("evalUnwrapBytecodeArg: wrong parameter index")
 	}
 	ret := StripDataPrefix(args[idx[0]])
 	par.Trace("unwrapBytecodeArg:: %s, %s, %s -> %s", Fmt(a0), Fmt(expectedPrefix), Fmt(idx), Fmt(ret))
@@ -1026,15 +1026,15 @@ func evalEvalBytecodeArg(par *CallParams) []byte {
 	a0 := par.Arg(0)
 	_, prefix, args, err := ParseBytecodeOneLevel(a0)
 	if err != nil {
-		par.TracePanic("evalunwrapBytecodeArg:: %v", err)
+		par.TracePanic("evalUnwrapBytecodeArg:: %v", err)
 	}
 	expectedPrefix := par.Arg(1)
 	idx := par.Arg(2)
 	if !bytes.Equal(prefix, expectedPrefix) {
-		par.TracePanic("evalunwrapBytecodeArg: unexpected function prefix. Expected '%s', got '%s'", Fmt(expectedPrefix), Fmt(prefix))
+		par.TracePanic("evalUnwrapBytecodeArg: unexpected function prefix. Expected '%s', got '%s'", Fmt(expectedPrefix), Fmt(prefix))
 	}
 	if len(idx) != 1 || len(args) <= int(idx[0]) {
-		par.TracePanic("evalunwrapBytecodeArg: wrong parameter index")
+		par.TracePanic("evalUnwrapBytecodeArg: wrong parameter index")
 	}
 
 	ret, err := EvalFromBinary(par.ctx.glb, args[idx[0]])
