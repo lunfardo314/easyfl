@@ -1002,7 +1002,16 @@ func evalUnwrapBytecodeArg(par *CallParams) []byte {
 	expectedPrefix := par.Arg(1)
 	idx := par.Arg(2)
 	if !bytes.Equal(prefix, expectedPrefix) {
-		par.TracePanic("evalUnwrapBytecodeArg: unexpected function prefix. Expected '%s', got '%s'", Fmt(expectedPrefix), Fmt(prefix))
+		_, _, _, symPrefix, err := parseCallPrefix(prefix)
+		if err != nil {
+			par.TracePanic("evalUnwrapBytecodeArg: can't parse prefix '%s': %v", Fmt(prefix), err)
+		}
+		_, _, _, symExpectedPrefix, err := parseCallPrefix(prefix)
+		if err != nil {
+			par.TracePanic("evalUnwrapBytecodeArg: can't parse expected prefix '%s': %v", Fmt(expectedPrefix), err)
+		}
+		par.TracePanic("evalUnwrapBytecodeArg: unexpected function prefix. Expected '%s'('%s'), got '%s'('%s')",
+			Fmt(expectedPrefix), symExpectedPrefix, Fmt(prefix), symPrefix)
 	}
 	if len(idx) != 1 || len(args) <= int(idx[0]) {
 		par.TracePanic("evalUnwrapBytecodeArg: wrong parameter index")
@@ -1033,13 +1042,13 @@ func evalEvalBytecodeArg(par *CallParams) []byte {
 	if !bytes.Equal(prefix, expectedPrefix) {
 		_, _, _, symPrefix, err := parseCallPrefix(prefix)
 		if err != nil {
-			par.TracePanic("evalUnwrapBytecodeArg: can't parse prefix '%s': %v", Fmt(prefix), err)
+			par.TracePanic("evalEvalBytecodeArg: can't parse prefix '%s': %v", Fmt(prefix), err)
 		}
 		_, _, _, symExpectedPrefix, err := parseCallPrefix(prefix)
 		if err != nil {
-			par.TracePanic("evalUnwrapBytecodeArg: can't parse expected prefix '%s': %v", Fmt(expectedPrefix), err)
+			par.TracePanic("evalEvalBytecodeArg: can't parse expected prefix '%s': %v", Fmt(expectedPrefix), err)
 		}
-		par.TracePanic("evalUnwrapBytecodeArg: unexpected function prefix. Expected '%s'('%s'), got '%s'('%s')",
+		par.TracePanic("evalEvalBytecodeArg: unexpected function prefix. Expected '%s'('%s'), got '%s'('%s')",
 			Fmt(expectedPrefix), symExpectedPrefix, Fmt(prefix), symPrefix)
 	}
 	if len(idx) != 1 || len(args) <= int(idx[0]) {
