@@ -191,7 +191,14 @@ func init() {
 	EmbedShort("sub8", 2, evalMustSub8)
 	EmbedShort("mul8_16", 2, evalMul8_16)
 	EmbedShort("mul16_32", 2, evalMul16_32)
-
+	EmbedLong("div64", 2, evalDiv64)
+	{
+		MustEqual("div64(u64/121, u64/11)", "u64/11")
+		MustEqual("div64(u64/5, u64/12)", "u64/0")
+		MustEqual("div64(u64/200, u64/3)", "u64/66")
+		MustError("div64(u64/200, u64/0)", "divide by zero")
+		MustError("div64(u64/0, u64/0)", "divide by zero")
+	}
 	// bitwise
 	EmbedShort("bitwiseOR", 2, evalBitwiseOR)
 	{
@@ -892,6 +899,16 @@ func evalMul16_32(par *CallParams) []byte {
 	op1 := binary.BigEndian.Uint16(a1)
 	binary.BigEndian.PutUint32(ret[:], uint32(op0)*uint32(op1))
 	par.Trace("mul16_32:: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret[:]))
+	return ret[:]
+}
+
+func evalDiv64(par *CallParams) []byte {
+	a0, a1 := mustArithmArgs(par, 8, "div64")
+	var ret [8]byte
+	op0 := binary.BigEndian.Uint64(a0)
+	op1 := binary.BigEndian.Uint64(a1)
+	binary.BigEndian.PutUint64(ret[:], op0/op1)
+	par.Trace("div64:: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret[:]))
 	return ret[:]
 }
 
