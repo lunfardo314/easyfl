@@ -199,6 +199,13 @@ func init() {
 		MustError("div64(u64/200, u64/0)", "divide by zero")
 		MustError("div64(u64/0, u64/0)", "divide by zero")
 	}
+	EmbedLong("mul64", 2, evalMul64)
+	{
+		MustEqual("mul64(u64/11, u64/11)", "u64/121")
+		MustEqual("mul64(u64/5, u64/12)", "u64/60")
+		MustEqual("mul64(u64/0, u64/314156)", "u64/0")
+		MustError("mul64(u64/9223372036854775807, u64/9223372036854775807)", "overflow")
+	}
 	// bitwise
 	EmbedShort("bitwiseOR", 2, evalBitwiseOR)
 	{
@@ -908,7 +915,21 @@ func evalDiv64(par *CallParams) []byte {
 	op0 := binary.BigEndian.Uint64(a0)
 	op1 := binary.BigEndian.Uint64(a1)
 	binary.BigEndian.PutUint64(ret[:], op0/op1)
-	par.Trace("div64:: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret[:]))
+	par.Trace("div64:: %s / %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret[:]))
+	return ret[:]
+}
+
+func evalMul64(par *CallParams) []byte {
+	a0, a1 := mustArithmArgs(par, 8, "mul64")
+	var ret [8]byte
+	op0 := binary.BigEndian.Uint64(a0)
+	op1 := binary.BigEndian.Uint64(a1)
+	// safe arithmetics
+	if op1 != 0 && op0 >= math.MaxUint64/op1 {
+		par.TracePanic("mul64:: %s * %s -> overflow in multiplication", Fmt(a0), Fmt(a1))
+	}
+	binary.BigEndian.PutUint64(ret[:], op0*op1)
+	par.Trace("mul64:: %s * %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret[:]))
 	return ret[:]
 }
 

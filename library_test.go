@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"math/rand"
 	"strings"
 	"testing"
@@ -16,6 +17,11 @@ import (
 )
 
 const formula1 = "func unlockBlock: concat(concat(0x0000, slice(0x01020304050607, 2, 5)))"
+
+func TestAux(t *testing.T) {
+	t.Logf("MaxInt: %d", math.MaxInt)
+	t.Logf("MaxInt64: %d", math.MaxInt64)
+}
 
 func TestInit(t *testing.T) {
 	PrintLibraryStats()
