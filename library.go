@@ -189,6 +189,13 @@ func init() {
 	EmbedShort("sum32_64", 2, evalSum32_64)
 	EmbedShort("sum64", 2, evalMustSum64)
 	EmbedShort("sub8", 2, evalMustSub8)
+	EmbedShort("sub64", 2, evalMustSub64)
+	{
+		MustEqual("sub64(u64/121, u64/11)", "u64/110")
+		MustEqual("sub64(u64/11, u64/0)", "u64/11")
+		MustError("sub64(u64/121, 11)", "8-bytes size parameters expected")
+		MustError("sub64(u64/11, u64/121)", "underflow")
+	}
 	EmbedShort("mul8_16", 2, evalMul8_16)
 	EmbedShort("mul16_32", 2, evalMul16_32)
 	EmbedLong("div64", 2, evalDiv64)
@@ -884,10 +891,23 @@ func evalMustSum64(par *CallParams) []byte {
 func evalMustSub8(par *CallParams) []byte {
 	a0, a1 := mustArithmArgs(par, 1, "sub8")
 	if a0[0] < a1[0] {
-		par.TracePanic("_mustSub8:: %s, %s -> underflow in subtraction", Fmt(a0), Fmt(a1))
+		par.TracePanic("mustSub8:: %s, %s -> underflow in subtraction", Fmt(a0), Fmt(a1))
 	}
 	ret := []byte{a0[0] - a1[0]}
 	par.Trace("sub8:: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
+	return ret
+}
+
+func evalMustSub64(par *CallParams) []byte {
+	a0, a1 := mustArithmArgs(par, 8, "sub64")
+	op0 := binary.BigEndian.Uint64(a0)
+	op1 := binary.BigEndian.Uint64(a1)
+	if op0 < op1 {
+		par.TracePanic("mustSub64:: %s, %s -> underflow in subtraction", Fmt(a0), Fmt(a1))
+	}
+	ret := make([]byte, 8)
+	binary.BigEndian.PutUint64(ret, op0-op1)
+	par.Trace("sub64:: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
 	return ret
 }
 
