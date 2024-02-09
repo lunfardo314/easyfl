@@ -65,7 +65,6 @@ var (
 	numEmbeddedShort   = EmbeddedReservedUntil + 1
 	numEmbeddedLong    int
 	numExtended        int
-	libraryLocked      bool // if true, extensions not possible
 )
 
 const traceYN = false
@@ -310,12 +309,13 @@ func init() {
 }
 
 func PrintLibraryStats() {
-	fmt.Printf(`EasyFL function library:
+	h := LibraryHash()
+	fmt.Printf(`EasyFL function library (hash: %s):
     number of short embedded: %d out of max %d
     number of long embedded: %d out of max %d
     number of extended: %d out of max %d
 `,
-		numEmbeddedShort, MaxNumEmbeddedShort, numEmbeddedLong, MaxNumEmbeddedLong, numExtended, MaxNumExtended)
+		hex.EncodeToString(h[:]), numEmbeddedShort, MaxNumEmbeddedShort, numEmbeddedLong, MaxNumEmbeddedLong, numExtended, MaxNumExtended)
 }
 
 const lockedMsg = "library is locked, cannot be extended"
@@ -323,11 +323,9 @@ const lockedMsg = "library is locked, cannot be extended"
 // EmbedShort embeds short-callable function inti the library
 // locallyDependent is not used currently, it is intended for caching of values TODO
 func EmbedShort(sym string, requiredNumPar int, evalFun EvalFunction, contextDependent ...bool) byte {
-	Assert(!libraryLocked, lockedMsg)
 	Assert(numEmbeddedShort < MaxNumEmbeddedShort, "too many embedded short functions")
 	Assert(!existsFunction(sym), "!existsFunction(sym)")
 	Assert(requiredNumPar <= 15, "can't be more than 15 parameters")
-
 	if traceYN {
 		evalFun = wrapWithTracing(evalFun, sym)
 	}
@@ -359,7 +357,6 @@ func EmbedShort(sym string, requiredNumPar int, evalFun EvalFunction, contextDep
 }
 
 func EmbedLong(sym string, requiredNumPar int, evalFun EvalFunction) uint16 {
-	Assert(!libraryLocked, lockedMsg)
 	Assert(numEmbeddedLong < MaxNumEmbeddedLong, "too many embedded long functions")
 	Assert(!existsFunction(sym), "!existsFunction(sym)")
 	Assert(requiredNumPar <= 15, "can't be more than 15 parameters")
@@ -415,8 +412,6 @@ func evalParamFun(paramNr byte) EvalFunction {
 }
 
 func ExtendErr(sym string, source string) (uint16, error) {
-	Assert(!libraryLocked, lockedMsg)
-
 	f, numParam, bytecode, err := CompileExpression(source)
 	if err != nil {
 		return 0, fmt.Errorf("error while compiling '%s': %v", sym, err)
@@ -489,7 +484,6 @@ func MustExtendMany(source string) {
 // Should not be invoked from func init()
 func LibraryHash() [32]byte {
 	ret := blake2b.Sum256(libraryBytes())
-	libraryLocked = true
 	return ret
 }
 
