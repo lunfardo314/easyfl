@@ -142,10 +142,10 @@ func EvalExpression(glb GlobalData, f *Expression, args ...[]byte) []byte {
 
 // EvalFromSource compiles source of the expression and evaluates it
 // Never panics
-func EvalFromSource(glb GlobalData, source string, args ...[]byte) ([]byte, error) {
+func (lib *Library) EvalFromSource(glb GlobalData, source string, args ...[]byte) ([]byte, error) {
 	var ret []byte
 	err := CatchPanicOrError(func() error {
-		f, requiredNumArgs, _, err := CompileExpression(source)
+		f, requiredNumArgs, _, err := lib.CompileExpression(source)
 		if err != nil {
 			return err
 		}
@@ -162,8 +162,8 @@ func EvalFromSource(glb GlobalData, source string, args ...[]byte) ([]byte, erro
 }
 
 // MustEvalFromSource evaluates the source of the expression and panics on any error
-func MustEvalFromSource(glb GlobalData, source string, args ...[]byte) []byte {
-	ret, err := EvalFromSource(glb, source, args...)
+func (lib *Library) MustEvalFromSource(glb GlobalData, source string, args ...[]byte) []byte {
+	ret, err := lib.EvalFromSource(glb, source, args...)
 	if err != nil {
 		panic(err)
 	}
@@ -171,8 +171,8 @@ func MustEvalFromSource(glb GlobalData, source string, args ...[]byte) []byte {
 }
 
 // MustEvalFromBinary interprets expression in the binary form. Will panic on any compile and runtime error
-func MustEvalFromBinary(glb GlobalData, code []byte, args ...[]byte) []byte {
-	expr, err := ExpressionFromBytecode(code)
+func (lib *Library) MustEvalFromBinary(glb GlobalData, code []byte, args ...[]byte) []byte {
+	expr, err := lib.ExpressionFromBytecode(code)
 	if err != nil {
 		panic(err)
 	}
@@ -180,56 +180,56 @@ func MustEvalFromBinary(glb GlobalData, code []byte, args ...[]byte) []byte {
 }
 
 // EvalFromBinary evaluates expression, never panics but return an error
-func EvalFromBinary(glb GlobalData, code []byte, args ...[]byte) ([]byte, error) {
+func (lib *Library) EvalFromBinary(glb GlobalData, code []byte, args ...[]byte) ([]byte, error) {
 	var ret []byte
 	err := CatchPanicOrError(func() error {
-		ret = MustEvalFromBinary(glb, code, args...)
+		ret = lib.MustEvalFromBinary(glb, code, args...)
 		return nil
 	})
 	return ret, err
 }
 
-func expressionFromLibrary(libraryBin [][]byte, funIndex int) (*Expression, error) {
-	lib, err := LocalLibraryFromBytes(libraryBin[:funIndex])
+func (lib *Library) expressionFromLibrary(libraryBin [][]byte, funIndex int) (*Expression, error) {
+	libLoc, err := lib.LocalLibraryFromBytes(libraryBin[:funIndex])
 	if err != nil {
 		return nil, err
 	}
-	expr, err := ExpressionFromBytecode(libraryBin[funIndex], lib)
+	expr, err := lib.ExpressionFromBytecode(libraryBin[funIndex], libLoc)
 	if err != nil {
 		return nil, err
 	}
 	return expr, nil
 }
 
-func MustEvalFromLibrary(glb GlobalData, libraryBin [][]byte, funIndex int, args ...[]byte) []byte {
+func (lib *Library) MustEvalFromLibrary(glb GlobalData, libraryBin [][]byte, funIndex int, args ...[]byte) []byte {
 	if funIndex < 0 || funIndex >= len(libraryBin) {
 		panic("function index is out of library bounds")
 	}
 	if funIndex == 0 {
-		return MustEvalFromBinary(glb, libraryBin[0], args...)
+		return lib.MustEvalFromBinary(glb, libraryBin[0], args...)
 	}
-	expr, err := expressionFromLibrary(libraryBin, funIndex)
+	expr, err := lib.expressionFromLibrary(libraryBin, funIndex)
 	if err != nil {
 		panic(err)
 	}
 	return EvalExpression(glb, expr, args...)
 }
 
-func EvalFromLibrary(glb GlobalData, libraryBin [][]byte, funIndex int, args ...[]byte) ([]byte, error) {
+func (lib *Library) EvalFromLibrary(glb GlobalData, libraryBin [][]byte, funIndex int, args ...[]byte) ([]byte, error) {
 	var ret []byte
 	err := CatchPanicOrError(func() error {
-		ret = MustEvalFromLibrary(glb, libraryBin, funIndex, args...)
+		ret = lib.MustEvalFromLibrary(glb, libraryBin, funIndex, args...)
 		return nil
 	})
 	return ret, err
 }
 
 // CallLocalLibrary to be called from the extension outside the easyfl.
-func CallLocalLibrary(ctx *CallParams, libBin [][]byte, idx int) []byte {
+func (lib *Library) CallLocalLibrary(ctx *CallParams, libBin [][]byte, idx int) []byte {
 	if idx < 0 || idx >= len(libBin) {
 		panic("function index is out of library bounds")
 	}
-	expr, err := expressionFromLibrary(libBin, idx)
+	expr, err := lib.expressionFromLibrary(libBin, idx)
 	if err != nil {
 		ctx.TracePanic("error while parsing local library: %v", err)
 	}
@@ -242,22 +242,22 @@ func CallLocalLibrary(ctx *CallParams, libBin [][]byte, idx int) []byte {
 	return ret
 }
 
-func MustEqual(source1, source2 string) {
-	res1, err := EvalFromSource(nil, source1)
+func (lib *Library) MustEqual(source1, source2 string) {
+	res1, err := lib.EvalFromSource(nil, source1)
 	Assert(err == nil, "expression '%s' resulted in error: '%v'", source1, err)
-	res2, err := EvalFromSource(nil, source2)
+	res2, err := lib.EvalFromSource(nil, source2)
 	Assert(err == nil, "expression '%s' resulted in error: '%v'", source2, err)
 	Assert(bytes.Equal(res1, res2), "must be equal %s and %s: %s != %s", source1, source2, Fmt(res1), Fmt(res2))
 }
 
-func MustTrue(source string) {
-	res, err := EvalFromSource(nil, source)
+func (lib *Library) MustTrue(source string) {
+	res, err := lib.EvalFromSource(nil, source)
 	Assert(err == nil, "expression '%s' resulted in error: '%v'", source, err)
 	Assert(len(res) > 0, "expression '%s' must be true", res)
 }
 
-func MustError(source string, mustContain ...string) {
-	_, err := EvalFromSource(nil, source)
+func (lib *Library) MustError(source string, mustContain ...string) {
+	_, err := lib.EvalFromSource(nil, source)
 	Assert(err != nil, "expression '%s' is expected to return an error", source)
 	if len(mustContain) > 0 {
 		Assert(strings.Contains(err.Error(), mustContain[0]), fmt.Sprintf("error must contain '%s' (instead got %s)", mustContain[0], err.Error()))

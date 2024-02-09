@@ -19,22 +19,22 @@ func NewLocalLibrary() *LocalLibrary {
 	}
 }
 
-func CompileLocalLibrary(source string) ([][]byte, error) {
-	lib := NewLocalLibrary()
+func (lib *Library) CompileLocalLibrary(source string) ([][]byte, error) {
+	libLoc := NewLocalLibrary()
 	ret := make([][]byte, 0)
 	parsed, err := parseFunctions(source)
 	if err != nil {
 		return nil, err
 	}
 	for _, pf := range parsed {
-		f, numParam, binCode, err := CompileExpression(pf.SourceCode, lib)
+		f, numParam, binCode, err := lib.CompileExpression(pf.SourceCode, libLoc)
 		if err != nil {
 			return nil, fmt.Errorf("error while compiling '%s': %v", pf.Sym, err)
 		}
 
 		Assert(len(lib.funByName) <= 255, "a local library can contain uo to 255 functions")
 
-		if existsFunction(pf.Sym, lib) {
+		if lib.existsFunction(pf.Sym, libLoc) {
 			return nil, errors.New("repeating symbol '" + pf.Sym + "'")
 		}
 		if numParam > 15 {
@@ -44,28 +44,28 @@ func CompileLocalLibrary(source string) ([][]byte, error) {
 		if traceYN {
 			evalFun = wrapWithTracing(evalFun, pf.Sym)
 		}
-		funCode := FirstLocalFunCode + uint16(len(lib.funByName))
+		funCode := FirstLocalFunCode + uint16(len(libLoc.funByName))
 		dscr := &funDescriptor{
 			sym:               pf.Sym,
 			funCode:           funCode,
 			requiredNumParams: numParam,
 			evalFun:           evalFun,
 		}
-		lib.funByName[pf.Sym] = dscr
-		lib.funByFunCode = append(lib.funByFunCode, dscr)
+		libLoc.funByName[pf.Sym] = dscr
+		libLoc.funByFunCode = append(libLoc.funByFunCode, dscr)
 		ret = append(ret, binCode)
 	}
 	return ret, nil
 }
 
-func LocalLibraryFromBytes(bin [][]byte) (*LocalLibrary, error) {
+func (lib *Library) LocalLibraryFromBytes(bin [][]byte) (*LocalLibrary, error) {
 	if len(bin) > 255 {
 		return nil, fmt.Errorf("local library can contain up to 255 elements")
 	}
 	ret := NewLocalLibrary()
 
 	for i, data := range bin {
-		expr, remaining, maxParam, err := expressionFromBytecode(data, ret)
+		expr, remaining, maxParam, err := lib.expressionFromBytecode(data, ret)
 		if err != nil {
 			return nil, err
 		}

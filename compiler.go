@@ -185,10 +185,10 @@ const (
 )
 
 // bytecodeFromParsedExpression takes parsed expression and generates binary code of it
-func (f *parsedExpression) bytecodeFromParsedExpression(w io.Writer, localLib ...*LocalLibrary) (int, error) {
+func (f *parsedExpression) bytecodeFromParsedExpression(lib *Library, w io.Writer, localLib ...*LocalLibrary) (int, error) {
 	numArgs := 0
 	if len(f.params) == 0 {
-		isLiteral, nArgs, err := parseLiteral(f.sym, w)
+		isLiteral, nArgs, err := parseLiteral(lib, f.sym, w)
 		if err != nil {
 			return 0, err
 		}
@@ -198,7 +198,7 @@ func (f *parsedExpression) bytecodeFromParsedExpression(w io.Writer, localLib ..
 	}
 	// either has arguments or not literal
 	// try if it is a short call
-	fi, err := functionByName(f.sym, localLib...)
+	fi, err := lib.functionByName(f.sym, localLib...)
 	if err != nil {
 		return 0, err
 	}
@@ -216,7 +216,7 @@ func (f *parsedExpression) bytecodeFromParsedExpression(w io.Writer, localLib ..
 	}
 	// generate code for call parameters
 	for _, ff := range f.params {
-		n, err := ff.bytecodeFromParsedExpression(w, localLib...)
+		n, err := ff.bytecodeFromParsedExpression(lib, w, localLib...)
 		if err != nil {
 			return 0, err
 		}
@@ -227,7 +227,7 @@ func (f *parsedExpression) bytecodeFromParsedExpression(w io.Writer, localLib ..
 	return numArgs, nil
 }
 
-func parseLiteral(sym string, w io.Writer) (bool, int, error) {
+func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 	// write inline data
 	n, err := strconv.Atoi(sym)
 	itIsANumber := err == nil
@@ -336,7 +336,7 @@ func parseLiteral(sym string, w io.Writer) (bool, int, error) {
 	case strings.HasPrefix(sym, "#"):
 		// function call prefix literal
 		funName := strings.TrimPrefix(sym, "#")
-		fi, err := functionByName(funName)
+		fi, err := lib.functionByName(funName)
 		if err != nil {
 			return false, 0, err
 		}
@@ -362,7 +362,7 @@ func parseLiteral(sym string, w io.Writer) (bool, int, error) {
 		if len(msgData) > 127 {
 			return false, 0, fmt.Errorf("fail message can't be longer than 127 bytes: '%s'", sym)
 		}
-		fi, err := functionByName("fail")
+		fi, err := lib.functionByName("fail")
 		AssertNoError(err)
 		funCallPrefix, err := fi.callPrefix(1)
 		AssertNoError(err)
@@ -382,14 +382,14 @@ func parseLiteral(sym string, w io.Writer) (bool, int, error) {
 }
 
 // ExpressionSourceToBinary compiles expression from source form into the canonical binary representation
-func ExpressionSourceToBinary(formulaSource string, localLib ...*LocalLibrary) ([]byte, int, error) {
+func (lib *Library) ExpressionSourceToBinary(formulaSource string, localLib ...*LocalLibrary) ([]byte, int, error) {
 	f, err := parseExpression(formulaSource)
 	if err != nil {
 		return nil, 0, err
 	}
 
 	var buf bytes.Buffer
-	numArgs, err := f.bytecodeFromParsedExpression(&buf, localLib...)
+	numArgs, err := f.bytecodeFromParsedExpression(lib, &buf, localLib...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -397,8 +397,8 @@ func ExpressionSourceToBinary(formulaSource string, localLib ...*LocalLibrary) (
 }
 
 // ExpressionFromBytecode creates evaluation form of the expression from its canonical representation
-func ExpressionFromBytecode(code []byte, localLib ...*LocalLibrary) (*Expression, error) {
-	ret, remaining, _, err := expressionFromBytecode(code, localLib...)
+func (lib *Library) ExpressionFromBytecode(code []byte, localLib ...*LocalLibrary) (*Expression, error) {
+	ret, remaining, _, err := lib.expressionFromBytecode(code, localLib...)
 	if err != nil {
 		return nil, err
 	}
@@ -464,7 +464,7 @@ func writeExpressionSource(w io.Writer, f *Expression) error {
 }
 
 // expressionFromBytecode parses executable binary code into the executable expression tree
-func expressionFromBytecode(bytecode []byte, localLib ...*LocalLibrary) (*Expression, []byte, byte, error) {
+func (lib *Library) expressionFromBytecode(bytecode []byte, localLib ...*LocalLibrary) (*Expression, []byte, byte, error) {
 	if len(bytecode) == 0 {
 		return nil, nil, 0xff, io.EOF
 	}
@@ -493,7 +493,7 @@ func expressionFromBytecode(bytecode []byte, localLib ...*LocalLibrary) (*Expres
 	maxParameterNumber := byte(0xff)
 
 	// function call expected
-	callPrefix, evalFun, arity, sym, err := parseCallPrefix(bytecode, localLib...)
+	callPrefix, evalFun, arity, sym, err := lib.parseCallPrefix(bytecode, localLib...)
 	if err != nil {
 		return nil, nil, 0xff, err
 	}
@@ -513,7 +513,7 @@ func expressionFromBytecode(bytecode []byte, localLib ...*LocalLibrary) (*Expres
 	var p *Expression
 	var m byte
 	for i := 0; i < arity; i++ {
-		p, bytecode, m, err = expressionFromBytecode(bytecode, localLib...)
+		p, bytecode, m, err = lib.expressionFromBytecode(bytecode, localLib...)
 		if err != nil {
 			return nil, nil, 0xff, err
 		}
@@ -529,13 +529,13 @@ func expressionFromBytecode(bytecode []byte, localLib ...*LocalLibrary) (*Expres
 }
 
 // CompileExpression compiles from sources directly into the evaluation form
-func CompileExpression(source string, localLib ...*LocalLibrary) (*Expression, int, []byte, error) {
+func (lib *Library) CompileExpression(source string, localLib ...*LocalLibrary) (*Expression, int, []byte, error) {
 	src := strings.Join(splitLinesStripComments(source), "")
-	bytecode, numParams, err := ExpressionSourceToBinary(stripSpaces(src), localLib...)
+	bytecode, numParams, err := lib.ExpressionSourceToBinary(stripSpaces(src), localLib...)
 	if err != nil {
 		return nil, 0, nil, err
 	}
-	ret, err := ExpressionFromBytecode(bytecode, localLib...)
+	ret, err := lib.ExpressionFromBytecode(bytecode, localLib...)
 	if err != nil {
 		return nil, 0, nil, err
 	}
@@ -543,8 +543,8 @@ func CompileExpression(source string, localLib ...*LocalLibrary) (*Expression, i
 }
 
 // DecompileBytecode decompiles canonical binary form into source. Symbols are restored wherever possible
-func DecompileBytecode(code []byte) (string, error) {
-	f, err := ExpressionFromBytecode(code)
+func (lib *Library) DecompileBytecode(code []byte) (string, error) {
+	f, err := lib.ExpressionFromBytecode(code)
 	if err != nil {
 		return "", err
 	}
@@ -559,7 +559,7 @@ func dataFunction(data []byte) EvalFunction {
 	}
 }
 
-func parseCallPrefix(code []byte, localLib ...*LocalLibrary) ([]byte, EvalFunction, int, string, error) {
+func (lib *Library) parseCallPrefix(code []byte, localLib ...*LocalLibrary) ([]byte, EvalFunction, int, string, error) {
 	if len(code) == 0 || IsDataPrefix(code) {
 		return nil, nil, 0, "", fmt.Errorf("parseCallPrefix: not a function call")
 	}
@@ -577,7 +577,7 @@ func parseCallPrefix(code []byte, localLib ...*LocalLibrary) ([]byte, EvalFuncti
 			evalFun = evalParamFun(code[0])
 			sym = fmt.Sprintf("$%d", code[0])
 		} else {
-			evalFun, arity, sym, err = functionByCode(uint16(code[0]))
+			evalFun, arity, sym, err = lib.functionByCode(uint16(code[0]))
 			if err != nil {
 				return nil, nil, 0, sym, err
 			}
@@ -606,7 +606,7 @@ func parseCallPrefix(code []byte, localLib ...*LocalLibrary) ([]byte, EvalFuncti
 			idx = uint16(FirstLocalFunCode) + uint16(code[2])
 			callPrefix = code[:3]
 		}
-		evalFun, numParams, sym, err = functionByCode(idx, localLib...)
+		evalFun, numParams, sym, err = lib.functionByCode(idx, localLib...)
 		if err != nil {
 			return nil, nil, 0, "", err
 		}
@@ -660,8 +660,8 @@ func StripDataPrefix(data []byte) []byte {
 // 1 byte for short call
 // 2 bytes for long calls
 // 3 bytes for local library call
-func ParseBytecodePrefix(code []byte) ([]byte, error) {
-	callPrefix, _, _, _, err := parseCallPrefix(code)
+func (lib *Library) ParseBytecodePrefix(code []byte) ([]byte, error) {
+	callPrefix, _, _, _, err := lib.parseCallPrefix(code)
 	if err != nil {
 		return nil, err
 	}
@@ -676,8 +676,8 @@ func ParseBytecodePrefix(code []byte) ([]byte, error) {
 // Note, that argi is a canonical form of some expression too and the original expression is a concatenation
 // of its on-level parsed form.
 // To have next level, the argument can be parsed one level again
-func ParseBytecodeOneLevel(code []byte, expectedNumArgs ...int) (string, []byte, [][]byte, error) {
-	f, err := ExpressionFromBytecode(code)
+func (lib *Library) ParseBytecodeOneLevel(code []byte, expectedNumArgs ...int) (string, []byte, [][]byte, error) {
+	f, err := lib.ExpressionFromBytecode(code)
 	if err != nil {
 		return "", nil, nil, err
 	}
