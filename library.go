@@ -191,6 +191,13 @@ func (lib *Library) init() {
 	lib.EmbedShort("sum32_64", 2, evalSum32_64)
 	lib.EmbedShort("sum64", 2, evalMustSum64)
 	lib.EmbedShort("sub8", 2, evalMustSub8)
+	lib.EmbedShort("sub32", 2, evalMustSub32)
+	{
+		lib.MustEqual("sub32(u32/121, u32/11)", "u32/110")
+		lib.MustEqual("sub32(u32/11, u32/0)", "u32/11")
+		lib.MustError("sub32(u64/121, 11)", "4-bytes size parameters expected")
+		lib.MustError("sub32(u32/11, u32/121)", "underflow")
+	}
 	lib.EmbedShort("sub64", 2, evalMustSub64)
 	{
 		lib.MustEqual("sub64(u64/121, u64/11)", "u64/110")
@@ -328,8 +335,6 @@ func (lib *Library) PrintLibraryStats() {
 `,
 		hex.EncodeToString(h[:]), lib.numEmbeddedShort, MaxNumEmbeddedShort, lib.numEmbeddedLong, MaxNumEmbeddedLong, lib.numExtended, MaxNumExtended)
 }
-
-const lockedMsg = "library is locked, cannot be extended"
 
 // EmbedShort embeds short-callable function inti the library
 // locallyDependent is not used currently, it is intended for caching of values TODO

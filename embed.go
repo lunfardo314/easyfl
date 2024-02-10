@@ -276,10 +276,23 @@ func evalMustSum64(par *CallParams) []byte {
 func evalMustSub8(par *CallParams) []byte {
 	a0, a1 := mustArithmArgs(par, 1, "sub8")
 	if a0[0] < a1[0] {
-		par.TracePanic("mustSub8:: %s, %s -> underflow in subtraction", Fmt(a0), Fmt(a1))
+		par.TracePanic("mustSub8:: %s - %s -> underflow in subtraction", Fmt(a0), Fmt(a1))
 	}
 	ret := []byte{a0[0] - a1[0]}
 	par.Trace("sub8:: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
+	return ret
+}
+
+func evalMustSub32(par *CallParams) []byte {
+	a0, a1 := mustArithmArgs(par, 4, "sub32")
+	op0 := binary.BigEndian.Uint32(a0)
+	op1 := binary.BigEndian.Uint32(a1)
+	if op0 < op1 {
+		par.TracePanic("mustSub32:: %s - %s -> underflow in subtraction", Fmt(a0), Fmt(a1))
+	}
+	ret := make([]byte, 4)
+	binary.BigEndian.PutUint32(ret, op0-op1)
+	par.Trace("sub32:: %s - %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
 	return ret
 }
 
@@ -288,11 +301,11 @@ func evalMustSub64(par *CallParams) []byte {
 	op0 := binary.BigEndian.Uint64(a0)
 	op1 := binary.BigEndian.Uint64(a1)
 	if op0 < op1 {
-		par.TracePanic("mustSub64:: %s, %s -> underflow in subtraction", Fmt(a0), Fmt(a1))
+		par.TracePanic("mustSub64:: %s - %s -> underflow in subtraction", Fmt(a0), Fmt(a1))
 	}
 	ret := make([]byte, 8)
 	binary.BigEndian.PutUint64(ret, op0-op1)
-	par.Trace("sub64:: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
+	par.Trace("sub64:: %s - %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
 	return ret
 }
 
