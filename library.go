@@ -404,6 +404,14 @@ func (lib *Library) Extend(sym string, source string) uint16 {
 	return ret
 }
 
+func (lib *Library) Extendf(sym string, template string, args ...any) uint16 {
+	ret, err := lib.ExtendErr(sym, fmt.Sprintf(template, args...))
+	if err != nil {
+		panic(err)
+	}
+	return ret
+}
+
 func makeEvalFunForExpression(sym string, expr *Expression) EvalFunction {
 	return func(par *CallParams) []byte {
 		varScope := make([]*call, len(par.args))
