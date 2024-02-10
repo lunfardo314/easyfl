@@ -254,6 +254,22 @@ func (lib *Library) init() {
 	lib.Extend("greaterOrEqualThan", "not(lessThan($0,$1))")
 	// other
 
+	lib.EmbedLong("lshift64", 2, evalLShift64)
+	{
+		lib.MustEqual("lshift64(u64/3, u64/2)", "u64/12")
+		lib.MustTrue("isZero(lshift64(u64/2001, u64/64))")
+		lib.MustTrue("equal(lshift64(u64/2001, u64/4), mul64(u64/2001, u64/16))")
+		lib.MustError("lshift64(u64/2001, 4)", "8-bytes size parameters expected")
+	}
+
+	lib.EmbedLong("rshift64", 2, evalRShift64)
+	{
+		lib.MustEqual("rshift64(u64/15, u64/2)", "u64/3")
+		lib.MustTrue("isZero(rshift64(0xffffffffffffffff, u64/64))")
+		lib.MustTrue("equal(rshift64(u64/2001, u64/3), div64(u64/2001, u64/8))")
+		lib.MustError("rshift64(u64/2001, 4)", "8-bytes size parameters expected")
+	}
+
 	lib.EmbedLong("validSignatureED25519", 3, evalValidSigED25519)
 
 	lib.EmbedLong("blake2b", -1, evalBlake2b)

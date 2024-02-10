@@ -449,6 +449,26 @@ func evalBitwiseNOT(par *CallParams) []byte {
 	return ret
 }
 
+func evalLShift64(par *CallParams) []byte {
+	a0, a1 := mustArithmArgs(par, 8, "lshift64")
+	op0 := binary.BigEndian.Uint64(a0)
+	op1 := binary.BigEndian.Uint64(a1)
+	ret := make([]byte, len(a0))
+	binary.BigEndian.PutUint64(ret, op0<<op1)
+	par.Trace("lshift64: %s << %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
+	return ret
+}
+
+func evalRShift64(par *CallParams) []byte {
+	a0, a1 := mustArithmArgs(par, 8, "rshift64")
+	op0 := binary.BigEndian.Uint64(a0)
+	op1 := binary.BigEndian.Uint64(a1)
+	ret := make([]byte, len(a0))
+	binary.BigEndian.PutUint64(ret, op0>>op1)
+	par.Trace("rshift64: %s >> %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
+	return ret
+}
+
 func (lib *Library) evalUnwrapBytecodeArg(par *CallParams) []byte {
 	a0 := par.Arg(0)
 	_, prefix, args, err := lib.ParseBytecodeOneLevel(a0)
