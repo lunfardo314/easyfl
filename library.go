@@ -222,6 +222,16 @@ func (lib *Library) init() {
 		lib.MustEqual("mul64(u64/0, u64/314156)", "u64/0")
 		lib.MustError("mul64(u64/9223372036854775807, u64/9223372036854775807)", "overflow")
 	}
+	lib.EmbedLong("modulo", 2, evalModulo)
+	{
+		lib.MustEqual("modulo(u64/121, u64/11)", "u64/0")
+		lib.MustEqual("modulo(u64/125, u64/11)", "u64/4")
+		// check a == (a / b ) * b + a % b
+		lib.MustEqual("sum64(mul64(div64(u64/31415926, u64/513), u64/513), modulo(u64/31415926, u64/513))", "u64/31415926")
+		lib.MustError("modulo(u64/200, u64/0)", "divide by zero")
+		lib.MustError("modulo(u64/0, u64/0)", "divide by zero")
+	}
+
 	// bitwise
 	lib.EmbedShort("bitwiseOR", 2, evalBitwiseOR)
 	{

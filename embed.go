@@ -351,6 +351,33 @@ func evalMul64(par *CallParams) []byte {
 	return ret[:]
 }
 
+func _mustToInt(par *CallParams, n byte) (ret uint64) {
+	a := par.Arg(n)
+	switch len(a) {
+	case 1:
+		ret = uint64(a[0])
+	case 2:
+		ret = uint64(binary.BigEndian.Uint16(a))
+	case 4:
+		ret = uint64(binary.BigEndian.Uint32(a))
+	case 8:
+		ret = binary.BigEndian.Uint64(a)
+	default:
+		par.TracePanic("evalModuloUint: args must be 1, 2, 4, or 8 bytes long")
+	}
+	return
+}
+
+// takes arguments of any integer size
+func evalModulo(par *CallParams) []byte {
+	op0 := _mustToInt(par, 0)
+	op1 := _mustToInt(par, 1)
+	var ret [8]byte
+	binary.BigEndian.PutUint64(ret[:], op0%op1)
+	par.Trace("modulo64:: %s / %s -> %s", Fmt(par.Arg(0)), Fmt(par.Arg(1)), Fmt(ret[:]))
+	return ret[:]
+}
+
 // lexicographical comparison of two slices of equal length
 func evalLessThan(par *CallParams) []byte {
 	a0 := par.Arg(0)
