@@ -190,192 +190,73 @@ func evalOr(par *CallParams) []byte {
 	return nil
 }
 
-func mustArithmArgs(par *CallParams, bytesSize int, name string) ([]byte, []byte) {
+// mustArithmeticArgs makes uint64 from both params (bigendian)
+// Parameters must be not nil with size <= 8. They are padded with 0 in upper bytes, if necessary
+func mustArithmeticArgs(par *CallParams, name string) (uint64, uint64) {
+	a0 := par.Arg(0)
+	a1 := par.Arg(1)
+	if len(a0) == 0 || len(a1) == 0 || len(a0) > 8 || len(a1) > 8 {
+		par.TracePanic("%s:: wrong size of parameters", name)
+	}
+	var a0b, a1b [8]byte
+	copy(a0b[8-len(a0):], a0)
+	copy(a1b[8-len(a1):], a1)
+	return binary.BigEndian.Uint64(a0b[:]), binary.BigEndian.Uint64(a1b[:])
+}
+
+func evalAddUint(par *CallParams) []byte {
+	a0, a1 := mustArithmeticArgs(par, "sumUint")
+	var ret [8]byte
+	binary.BigEndian.PutUint64(ret[:], a0+a1)
+	return ret[:]
+}
+
+func evalSubUint(par *CallParams) []byte {
+	a0, a1 := mustArithmeticArgs(par, "subUint")
+	if a0 < a1 {
+		par.TracePanic("evalSubUint:: %d - %d -> underflow in subtraction", a0, a1)
+	}
+	var ret [8]byte
+	binary.BigEndian.PutUint64(ret[:], a0-a1)
+	return ret[:]
+}
+
+func evalMulUint(par *CallParams) []byte {
+	a0, a1 := mustArithmeticArgs(par, "mulUint")
+	var ret [8]byte
+	binary.BigEndian.PutUint64(ret[:], a0*a1)
+	return ret[:]
+}
+
+func evalDivUint(par *CallParams) []byte {
+	a0, a1 := mustArithmeticArgs(par, "divUint")
+	var ret [8]byte
+	binary.BigEndian.PutUint64(ret[:], a0/a1)
+	return ret[:]
+}
+
+func evalModuloUint(par *CallParams) []byte {
+	a0, a1 := mustArithmeticArgs(par, "moduloUint")
+	var ret [8]byte
+	binary.BigEndian.PutUint64(ret[:], a0%a1)
+	return ret[:]
+}
+
+func evalEqualUint(par *CallParams) []byte {
+	a0, a1 := mustArithmeticArgs(par, "equalUint")
+	if a0 == a1 {
+		return []byte{0xff}
+	}
+	return nil
+}
+
+func mustArithmArgsOld(par *CallParams, bytesSize int, name string) ([]byte, []byte) {
 	a0 := par.Arg(0)
 	a1 := par.Arg(1)
 	if len(a0) != bytesSize || len(a1) != bytesSize {
 		par.TracePanic("%s:: %d-bytes size parameters expected", name, bytesSize)
 	}
 	return a0, a1
-}
-
-func evalSum8_16(par *CallParams) []byte {
-	a0, a1 := mustArithmArgs(par, 1, "sum8_16")
-	sum := uint16(a0[0]) + uint16(a1[0])
-	ret := make([]byte, 2)
-	binary.BigEndian.PutUint16(ret, sum)
-	return ret
-}
-
-func evalMustSum8(par *CallParams) []byte {
-	a0, a1 := mustArithmArgs(par, 1, "sum8")
-	sum := int(a0[0]) + int(a1[0])
-	if sum > 255 {
-		par.TracePanic("_mustSum8:: %s, %s -> arithmetic overflow", Fmt(a0), Fmt(a1))
-	}
-	ret := []byte{byte(sum)}
-	par.Trace("sum8:: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
-	return ret
-}
-
-func evalSum16_32(par *CallParams) []byte {
-	a0, a1 := mustArithmArgs(par, 2, "sum16_32")
-	sum := uint32(binary.BigEndian.Uint16(a0)) + uint32(binary.BigEndian.Uint16(a1))
-	ret := make([]byte, 4)
-	binary.BigEndian.PutUint32(ret, sum)
-	par.Trace("sum16_32:: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
-	return ret
-}
-
-func evalMustSum16(par *CallParams) []byte {
-	a0, a1 := mustArithmArgs(par, 2, "sum_16")
-	sum := uint32(binary.BigEndian.Uint16(a0)) + uint32(binary.BigEndian.Uint16(a1))
-	if sum > math.MaxUint16 {
-		par.TracePanic("_mustSum16: %s, %s -> arithmetic overflow", Fmt(a0), Fmt(a1))
-	}
-	ret := make([]byte, 2)
-	binary.BigEndian.PutUint16(ret, uint16(sum))
-	par.Trace("sum16:: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
-	return ret
-}
-
-func evalSum32_64(par *CallParams) []byte {
-	a0, a1 := mustArithmArgs(par, 4, "sum32_64")
-	sum := uint64(binary.BigEndian.Uint32(a0)) + uint64(binary.BigEndian.Uint32(a1))
-	ret := make([]byte, 8)
-	binary.BigEndian.PutUint64(ret, sum)
-	par.Trace("sum32_64:: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
-	return ret
-}
-
-func evalMustSum32(par *CallParams) []byte {
-	a0, a1 := mustArithmArgs(par, 4, "sum32")
-	sum := uint64(binary.BigEndian.Uint32(a0)) + uint64(binary.BigEndian.Uint32(a1))
-	if sum > math.MaxUint32 {
-		par.TracePanic("_mustSum32:: %s, %s -> arithmetic overflow", Fmt(a0), Fmt(a1))
-	}
-	ret := make([]byte, 4)
-	binary.BigEndian.PutUint32(ret, uint32(sum))
-	par.Trace("sum32:: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
-	return ret
-}
-
-func evalMustSum64(par *CallParams) []byte {
-	a0, a1 := mustArithmArgs(par, 8, "sum64")
-	s0 := binary.BigEndian.Uint64(a0)
-	s1 := binary.BigEndian.Uint64(a1)
-	if s0 > math.MaxUint64-s1 {
-		par.TracePanic("_mustSum64: arithmetic overflow")
-	}
-	ret := make([]byte, 8)
-	binary.BigEndian.PutUint64(ret, s0+s1)
-	par.Trace("sum64:: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
-	return ret
-}
-
-func evalMustSub8(par *CallParams) []byte {
-	a0, a1 := mustArithmArgs(par, 1, "sub8")
-	if a0[0] < a1[0] {
-		par.TracePanic("mustSub8:: %s - %s -> underflow in subtraction", Fmt(a0), Fmt(a1))
-	}
-	ret := []byte{a0[0] - a1[0]}
-	par.Trace("sub8:: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
-	return ret
-}
-
-func evalMustSub32(par *CallParams) []byte {
-	a0, a1 := mustArithmArgs(par, 4, "sub32")
-	op0 := binary.BigEndian.Uint32(a0)
-	op1 := binary.BigEndian.Uint32(a1)
-	if op0 < op1 {
-		par.TracePanic("mustSub32:: %s - %s -> underflow in subtraction", Fmt(a0), Fmt(a1))
-	}
-	ret := make([]byte, 4)
-	binary.BigEndian.PutUint32(ret, op0-op1)
-	par.Trace("sub32:: %s - %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
-	return ret
-}
-
-func evalMustSub64(par *CallParams) []byte {
-	a0, a1 := mustArithmArgs(par, 8, "sub64")
-	op0 := binary.BigEndian.Uint64(a0)
-	op1 := binary.BigEndian.Uint64(a1)
-	if op0 < op1 {
-		par.TracePanic("mustSub64:: %s - %s -> underflow in subtraction", Fmt(a0), Fmt(a1))
-	}
-	ret := make([]byte, 8)
-	binary.BigEndian.PutUint64(ret, op0-op1)
-	par.Trace("sub64:: %s - %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
-	return ret
-}
-
-func evalMul8_16(par *CallParams) []byte {
-	a0, a1 := mustArithmArgs(par, 1, "mul8_16")
-	var ret [2]byte
-	binary.BigEndian.PutUint16(ret[:], uint16(a0[0])*uint16(a1[0]))
-	par.Trace("mul8_16:: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret[:]))
-	return ret[:]
-}
-
-func evalMul16_32(par *CallParams) []byte {
-	a0, a1 := mustArithmArgs(par, 2, "mul16_32")
-	var ret [4]byte
-	op0 := binary.BigEndian.Uint16(a0)
-	op1 := binary.BigEndian.Uint16(a1)
-	binary.BigEndian.PutUint32(ret[:], uint32(op0)*uint32(op1))
-	par.Trace("mul16_32:: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret[:]))
-	return ret[:]
-}
-
-func evalDiv64(par *CallParams) []byte {
-	a0, a1 := mustArithmArgs(par, 8, "div64")
-	var ret [8]byte
-	op0 := binary.BigEndian.Uint64(a0)
-	op1 := binary.BigEndian.Uint64(a1)
-	binary.BigEndian.PutUint64(ret[:], op0/op1)
-	par.Trace("div64:: %s / %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret[:]))
-	return ret[:]
-}
-
-func evalMul64(par *CallParams) []byte {
-	a0, a1 := mustArithmArgs(par, 8, "mul64")
-	var ret [8]byte
-	op0 := binary.BigEndian.Uint64(a0)
-	op1 := binary.BigEndian.Uint64(a1)
-	// safe arithmetics
-	if op1 != 0 && op0 >= math.MaxUint64/op1 {
-		par.TracePanic("mul64:: %s * %s -> overflow in multiplication", Fmt(a0), Fmt(a1))
-	}
-	binary.BigEndian.PutUint64(ret[:], op0*op1)
-	par.Trace("mul64:: %s * %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret[:]))
-	return ret[:]
-}
-
-func _mustToInt(par *CallParams, n byte) (ret uint64) {
-	a := par.Arg(n)
-	switch len(a) {
-	case 1:
-		ret = uint64(a[0])
-	case 2:
-		ret = uint64(binary.BigEndian.Uint16(a))
-	case 4:
-		ret = uint64(binary.BigEndian.Uint32(a))
-	case 8:
-		ret = binary.BigEndian.Uint64(a)
-	default:
-		par.TracePanic("evalModuloUint: args must be 1, 2, 4, or 8 bytes long")
-	}
-	return
-}
-
-// takes arguments of any integer size
-func evalModulo(par *CallParams) []byte {
-	op0 := _mustToInt(par, 0)
-	op1 := _mustToInt(par, 1)
-	var ret [8]byte
-	binary.BigEndian.PutUint64(ret[:], op0%op1)
-	par.Trace("modulo64:: %s / %s -> %s", Fmt(par.Arg(0)), Fmt(par.Arg(1)), Fmt(ret[:]))
-	return ret[:]
 }
 
 // lexicographical comparison of two slices of equal length
@@ -477,23 +358,17 @@ func evalBitwiseNOT(par *CallParams) []byte {
 }
 
 func evalLShift64(par *CallParams) []byte {
-	a0, a1 := mustArithmArgs(par, 8, "lshift64")
-	op0 := binary.BigEndian.Uint64(a0)
-	op1 := binary.BigEndian.Uint64(a1)
-	ret := make([]byte, len(a0))
-	binary.BigEndian.PutUint64(ret, op0<<op1)
-	par.Trace("lshift64: %s << %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
-	return ret
+	a0, a1 := mustArithmeticArgs(par, "lshift64")
+	var ret [8]byte
+	binary.BigEndian.PutUint64(ret[:], a0<<a1)
+	return ret[:]
 }
 
 func evalRShift64(par *CallParams) []byte {
-	a0, a1 := mustArithmArgs(par, 8, "rshift64")
-	op0 := binary.BigEndian.Uint64(a0)
-	op1 := binary.BigEndian.Uint64(a1)
-	ret := make([]byte, len(a0))
-	binary.BigEndian.PutUint64(ret, op0>>op1)
-	par.Trace("rshift64: %s >> %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
-	return ret
+	a0, a1 := mustArithmeticArgs(par, "lshift64")
+	var ret [8]byte
+	binary.BigEndian.PutUint64(ret[:], a0>>a1)
+	return ret[:]
 }
 
 func (lib *Library) evalUnwrapBytecodeArg(par *CallParams) []byte {

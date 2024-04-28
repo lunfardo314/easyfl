@@ -100,9 +100,9 @@ func TestEval(t *testing.T) {
 		require.EqualValues(t, []byte{125}, ret)
 	})
 	t.Run("2", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(nil, "sum8(125, 6)")
+		ret, err := lib.EvalFromSource(nil, "add(125, 6)")
 		require.NoError(t, err)
-		require.EqualValues(t, []byte{131}, ret)
+		require.EqualValues(t, []byte{0, 0, 0, 0, 0, 0, 0, 131}, ret)
 	})
 	t.Run("3", func(t *testing.T) {
 		ret, err := lib.EvalFromSource(nil, "$0", []byte{222})
@@ -209,15 +209,11 @@ func TestEval(t *testing.T) {
 		require.True(t, len(ret) == 0)
 	})
 	t.Run("21", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "sum8_16($0, $1)", []byte{160}, []byte{160})
+		ret, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "add($0, $1)", []byte{160}, []byte{160})
 		require.NoError(t, err)
-		var b [2]byte
-		binary.BigEndian.PutUint16(b[:], 320)
+		var b [8]byte
+		binary.BigEndian.PutUint64(b[:], 320)
 		require.EqualValues(t, b[:], ret)
-	})
-	t.Run("22", func(t *testing.T) {
-		_, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "sum8($0, $1)", []byte{160}, []byte{160})
-		RequireErrorWith(t, err, "arithmetic overflow")
 	})
 	var blake2bInvokedNum int
 	lib.EmbedLong("blake2b-test", 1, func(par *CallParams) []byte {
@@ -522,27 +518,6 @@ func TestTracing(t *testing.T) {
 		require.EqualValues(t, bytes.Repeat([]byte{1}, 36), res)
 		require.EqualValues(t, 1, counter)
 	})
-}
-
-func TestArithmetics(t *testing.T) {
-	lib := NewBase()
-	runTest := func(s string, a0, a1, exp []byte) {
-		name := fmt.Sprintf("%s: %s, %s -> %s", s, Fmt(a0), Fmt(a1), Fmt(exp))
-		t.Run(name, func(t *testing.T) {
-			ret, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), s, a0, a1)
-			require.NoError(t, err)
-			require.EqualValues(t, exp, ret)
-		})
-	}
-	runTest("mul8_16($0,$1)", num(byte(1)), num(byte(1)), num(uint16(1)))
-	runTest("mul8_16($0,$1)", num(byte(10)), num(byte(1)), num(uint16(10)))
-	runTest("mul8_16($0,$1)", num(byte(11)), num(byte(11)), num(uint16(121)))
-	runTest("mul8_16($0,$1)", num(byte(255)), num(byte(255)), num(uint16(255*255)))
-
-	runTest("mul16_32($0,$1)", num(uint16(1)), num(uint16(1)), num(uint32(1)))
-	runTest("mul16_32($0,$1)", num(uint16(11)), num(uint16(11)), num(uint32(121)))
-	runTest("mul16_32($0,$1)", num(uint16(255)), num(uint16(255)), num(uint32(255*255)))
-	runTest("mul16_32($0,$1)", num(uint16(255*255)), num(uint16(255*255)), num(uint32(255*255*255*255)))
 }
 
 func TestParseBin(t *testing.T) {

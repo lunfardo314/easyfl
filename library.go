@@ -171,65 +171,56 @@ func (lib *Library) init() {
 		lib.MustTrue("not(equiv(nil, 0))")
 	}
 	// safe arithmetics
-	lib.EmbedShort("sum8", 2, evalMustSum8)
+	lib.EmbedShort("add", 2, evalAddUint)
 	{
-		lib.MustEqual("sum8(5,6)", "sum8(10,1)")
-		lib.MustEqual("sum8(5,6)", "11")
+		lib.MustEqual("add(5,6)", "add(10,1)")
+		lib.MustEqual("add(5,6)", "u64/11")
+		lib.MustEqual("add(0, 0)", "u64/0")
+		lib.MustEqual("add(u16/1337, 0)", "u64/1337")
+		lib.MustError("add(nil, 0)", "wrong size of parameters")
 	}
-	lib.EmbedShort("sum8_16", 2, evalSum8_16)
+	lib.EmbedShort("sub", 2, evalSubUint)
 	{
-		lib.MustEqual("sum8_16(5,6)", "sum8_16(10,1)")
-		lib.MustEqual("sum8_16(5,6)", "u16/11")
+		lib.MustEqual("sub(6,6)", "u64/0")
+		lib.MustEqual("sub(6,5)", "u64/1")
+		lib.MustEqual("sub(0, 0)", "u64/0")
+		lib.MustEqual("sub(u16/1337, 0)", "u64/1337")
+		lib.MustError("sub(nil, 0)", "wrong size of parameters")
+		lib.MustError("sub(10, 100)", "underflow in subtraction")
 	}
-	lib.EmbedShort("sum16", 2, evalMustSum16)
+	lib.EmbedShort("mul", 2, evalMulUint)
 	{
-		lib.MustEqual("sum16(u16/5,u16/6)", "sum16(u16/10,u16/1)")
-		lib.MustEqual("sum16(u16/5,u16/6)", "u16/11")
+		lib.MustEqual("mul(5,6)", "mul(15,2)")
+		lib.MustEqual("mul(5,6)", "u64/30")
+		lib.MustEqual("mul(u16/1337, 0)", "u64/0")
+		lib.MustEqual("mul(0, u32/1337133700)", "u64/0")
+		lib.MustError("mul(nil, 5)", "wrong size of parameters")
 	}
-	lib.EmbedShort("sum16_32", 2, evalSum16_32)
-	lib.EmbedShort("sum32", 2, evalMustSum32)
-	lib.EmbedShort("sum32_64", 2, evalSum32_64)
-	lib.EmbedShort("sum64", 2, evalMustSum64)
-	lib.EmbedShort("sub8", 2, evalMustSub8)
-	lib.EmbedShort("sub32", 2, evalMustSub32)
+	lib.EmbedShort("div", 2, evalDivUint)
 	{
-		lib.MustEqual("sub32(u32/121, u32/11)", "u32/110")
-		lib.MustEqual("sub32(u32/11, u32/0)", "u32/11")
-		lib.MustError("sub32(u64/121, 11)", "4-bytes size parameters expected")
-		lib.MustError("sub32(u32/11, u32/121)", "underflow")
+		lib.MustEqual("div(100,100)", "u64/1")
+		lib.MustEqual("div(100,110)", "u64/0")
+		lib.MustEqual("div(u32/10000,u16/10000)", "u64/1")
+		lib.MustEqual("div(0, u32/1337133700)", "u64/0")
+		lib.MustError("div(u32/1337133700, 0)", "integer divide by zero")
+		lib.MustError("div(nil, 5)", "wrong size of parameters")
 	}
-	lib.EmbedShort("sub64", 2, evalMustSub64)
+	lib.EmbedShort("mod", 2, evalModuloUint)
 	{
-		lib.MustEqual("sub64(u64/121, u64/11)", "u64/110")
-		lib.MustEqual("sub64(u64/11, u64/0)", "u64/11")
-		lib.MustError("sub64(u64/121, 11)", "8-bytes size parameters expected")
-		lib.MustError("sub64(u64/11, u64/121)", "underflow")
+		lib.MustEqual("mod(100,100)", "u64/0")
+		lib.MustEqual("mod(107,100)", "u64/7")
+		lib.MustEqual("mod(u32/10100,u16/10000)", "u64/100")
+		lib.MustEqual("mod(0, u32/1337133700)", "u64/0")
+		lib.MustError("mod(u32/1337133700, 0)", "integer divide by zero")
+		lib.MustError("mod(nil, 5)", "wrong size of parameters")
+		lib.MustEqual("add(mul(div(u32/27, u16/4), 4), mod(u32/27, 4))", "u64/27")
 	}
-	lib.EmbedShort("mul8_16", 2, evalMul8_16)
-	lib.EmbedShort("mul16_32", 2, evalMul16_32)
-	lib.EmbedLong("div64", 2, evalDiv64)
+	lib.EmbedShort("equalUint", 2, evalEqualUint)
 	{
-		lib.MustEqual("div64(u64/121, u64/11)", "u64/11")
-		lib.MustEqual("div64(u64/5, u64/12)", "u64/0")
-		lib.MustEqual("div64(u64/200, u64/3)", "u64/66")
-		lib.MustError("div64(u64/200, u64/0)", "divide by zero")
-		lib.MustError("div64(u64/0, u64/0)", "divide by zero")
-	}
-	lib.EmbedLong("mul64", 2, evalMul64)
-	{
-		lib.MustEqual("mul64(u64/11, u64/11)", "u64/121")
-		lib.MustEqual("mul64(u64/5, u64/12)", "u64/60")
-		lib.MustEqual("mul64(u64/0, u64/314156)", "u64/0")
-		lib.MustError("mul64(u64/9223372036854775807, u64/9223372036854775807)", "overflow")
-	}
-	lib.EmbedLong("modulo", 2, evalModulo)
-	{
-		lib.MustEqual("modulo(u64/121, u64/11)", "u64/0")
-		lib.MustEqual("modulo(u64/125, u64/11)", "u64/4")
-		// check a == (a / b ) * b + a % b
-		lib.MustEqual("sum64(mul64(div64(u64/31415926, u64/513), u64/513), modulo(u64/31415926, u64/513))", "u64/31415926")
-		lib.MustError("modulo(u64/200, u64/0)", "divide by zero")
-		lib.MustError("modulo(u64/0, u64/0)", "divide by zero")
+		lib.MustTrue("equalUint(100,100)")
+		lib.MustTrue("equalUint(100,u32/100)")
+		lib.MustTrue("not(equalUint(100,u32/1337))")
+		lib.MustError("equalUint(nil, 5)", "wrong size of parameters")
 	}
 
 	// bitwise
@@ -268,16 +259,16 @@ func (lib *Library) init() {
 	{
 		lib.MustEqual("lshift64(u64/3, u64/2)", "u64/12")
 		lib.MustTrue("isZero(lshift64(u64/2001, u64/64))")
-		lib.MustTrue("equal(lshift64(u64/2001, u64/4), mul64(u64/2001, u64/16))")
-		lib.MustError("lshift64(u64/2001, 4)", "8-bytes size parameters expected")
+		lib.MustTrue("equal(lshift64(u64/2001, u64/4), mul(u64/2001, u16/16))")
+		lib.MustError("lshift64(u64/2001, nil)", "wrong size of parameters")
 	}
 
 	lib.EmbedLong("rshift64", 2, evalRShift64)
 	{
 		lib.MustEqual("rshift64(u64/15, u64/2)", "u64/3")
 		lib.MustTrue("isZero(rshift64(0xffffffffffffffff, u64/64))")
-		lib.MustTrue("equal(rshift64(u64/2001, u64/3), div64(u64/2001, u64/8))")
-		lib.MustError("rshift64(u64/2001, 4)", "8-bytes size parameters expected")
+		lib.MustTrue("equal(rshift64(u64/2001, u64/3), div(u64/2001, 8))")
+		lib.MustError("rshift64(u64/2001, nil)", "wrong size of parameters")
 	}
 
 	lib.EmbedLong("validSignatureED25519", 3, evalValidSigED25519)
@@ -325,14 +316,14 @@ func (lib *Library) init() {
 		src = fmt.Sprintf("evalBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 2)
 		lib.MustEqual(src, "2")
 
-		_, _, binCode, err = lib.CompileExpression("slice(concat(1,concat(2,3),4),byte(0x020301, 2),sum8(1,1))")
+		_, _, binCode, err = lib.CompileExpression("slice(concat(1,concat(2,3),4),byte(0x020301, 2),add(1,1))")
 		AssertNoError(err)
 		src = fmt.Sprintf("evalBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 0)
 		lib.MustEqual(src, "0x01020304")
 		src = fmt.Sprintf("evalBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 1)
 		lib.MustEqual(src, "1")
 		src = fmt.Sprintf("evalBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 2)
-		lib.MustEqual(src, "2")
+		lib.MustEqual(src, "u64/2")
 	}
 	lib.Extend("false", "or")
 	lib.Extend("true", "and")
