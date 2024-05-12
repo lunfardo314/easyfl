@@ -102,14 +102,14 @@ func (lib *Library) init() {
 }
 
 func (lib *Library) extendWithUtilityFunctions() {
-	lib.Extend("equiv", "or(and($0,$1), and(not($0),not($1)))")
-	{
-		lib.MustTrue("equiv(0x, 0x)")
-		lib.MustTrue("equiv(2, 100)")
-		lib.MustTrue("not(equiv(0x, 0))")
-	}
-	lib.Extend("false", "or")
-	lib.Extend("true", "and")
+	//lib.Extend("equiv", "or(and($0,$1), and(not($0),not($1)))")
+	//{
+	//	lib.MustTrue("equiv(0x, 0x)")
+	//	lib.MustTrue("equiv(2, 100)")
+	//	lib.MustTrue("not(equiv(0x, 0))")
+	//}
+	lib.Extend("false", "0x")
+	lib.Extend("true", "0xff")
 
 	lib.Extend("require", "or($0,$1)")
 	{
@@ -161,9 +161,11 @@ func (lib *Library) embedBase() {
 	{
 		lib.MustEqual("repeat(1,5)", "0x0101010101")
 	}
-	// 'len8' returns length up until 255 (256 and more panics)
-	lib.EmbedShort("len8", 1, evalLen8)
-	lib.EmbedShort("len16", 1, evalLen16)
+	// 'len' returns length as uint64 (8 bytes big endian)
+	lib.EmbedShort("len", 1, evalLen)
+	{
+		lib.MustTrue("equal(len(nil), u64/0)")
+	}
 	lib.EmbedShort("not", 1, evalNot)
 	{
 		lib.MustEqual("not(1)", "0x")
@@ -296,7 +298,7 @@ func (lib *Library) embedBaseCrypto() {
 	lib.EmbedLong("blake2b", -1, evalBlake2b)
 	h := blake2b.Sum256([]byte{1})
 	{
-		lib.MustEqual("len8(blake2b(1))", "32")
+		lib.MustEqual("len(blake2b(1))", "u64/32")
 		lib.MustEqual("blake2b(1)", fmt.Sprintf("0x%s", hex.EncodeToString(h[:])))
 	}
 }

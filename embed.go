@@ -113,14 +113,11 @@ func evalLen8(par *CallParams) []byte {
 	return ret
 }
 
-func evalLen16(par *CallParams) []byte {
+func evalLen(par *CallParams) []byte {
 	data := par.Arg(0)
-	if len(data) > math.MaxUint16 {
-		par.TracePanic("len16:: size of the data > uint16: %s", Fmt(data))
-	}
-	var ret [2]byte
-	binary.BigEndian.PutUint16(ret[:], uint16(len(data)))
-	par.Trace("len16:: %s -> %s", Fmt(data), Fmt(ret[:]))
+	var ret [8]byte
+	binary.BigEndian.PutUint64(ret[:], uint64(len(data)))
+	par.Trace("len:: %s -> %s", Fmt(data), Fmt(ret[:]))
 	return ret[:]
 }
 
@@ -248,15 +245,6 @@ func evalEqualUint(par *CallParams) []byte {
 		return []byte{0xff}
 	}
 	return nil
-}
-
-func mustArithmArgsOld(par *CallParams, bytesSize int, name string) ([]byte, []byte) {
-	a0 := par.Arg(0)
-	a1 := par.Arg(1)
-	if len(a0) != bytesSize || len(a1) != bytesSize {
-		par.TracePanic("%s:: %d-bytes size parameters expected", name, bytesSize)
-	}
-	return a0, a1
 }
 
 // lexicographical comparison of two slices of equal length

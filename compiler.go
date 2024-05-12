@@ -13,6 +13,8 @@ import (
 	"unicode"
 )
 
+// TODO inline bytecode literal + 'eval' embedded function + $$ bytecode parameter
+
 // funParsed is an interim representation of the source code
 type funParsed struct {
 	Sym        string
@@ -106,9 +108,9 @@ func parseExpression(s string) (*parsedExpression, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, call := range spl {
-		ff, err := parseExpression(call)
-		if err != nil {
+	var ff *parsedExpression
+	for _, _call := range spl {
+		if ff, err = parseExpression(_call); err != nil {
 			return nil, err
 		}
 		f.params = append(f.params, ff)
@@ -215,9 +217,9 @@ func (f *parsedExpression) bytecodeFromParsedExpression(lib *Library, w io.Write
 		return 0, err
 	}
 	// generate code for call parameters
+	var n int
 	for _, ff := range f.params {
-		n, err := ff.bytecodeFromParsedExpression(lib, w, localLib...)
-		if err != nil {
+		if n, err = ff.bytecodeFromParsedExpression(lib, w, localLib...); err != nil {
 			return 0, err
 		}
 		if n > numArgs {
@@ -232,6 +234,10 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 	n, err := strconv.Atoi(sym)
 	itIsANumber := err == nil
 
+	var b, funCallPrefix []byte
+	var un uint64
+	var fi *funInfo
+
 	switch {
 	case itIsANumber:
 		if n < 0 || n >= 256 {
@@ -244,7 +250,7 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 		return true, 0, nil
 	case strings.HasPrefix(sym, "$"):
 		// parameter reference function
-		n, err := strconv.Atoi(sym[1:])
+		n, err = strconv.Atoi(sym[1:])
 		if err != nil {
 			return false, 0, err
 		}
@@ -262,8 +268,7 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 		return true, 0, nil
 	case strings.HasPrefix(sym, "0x"):
 		// it is hexadecimal constant
-		b, err := hex.DecodeString(sym[2:])
-		if err != nil {
+		if b, err = hex.DecodeString(sym[2:]); err != nil {
 			return false, 0, fmt.Errorf("%v: '%s'", err, sym)
 		}
 		if len(b) > 127 {
@@ -278,8 +283,7 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 		return true, 0, nil
 	case strings.HasPrefix(sym, "x/"):
 		// it is an inline binary executable code
-		b, err := hex.DecodeString(sym[2:])
-		if err != nil {
+		if b, err = hex.DecodeString(sym[2:]); err != nil {
 			return false, 0, fmt.Errorf("%v: '%s'", err, sym)
 		}
 		// write the code as is
@@ -296,7 +300,7 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 		if n < 0 || n > math.MaxUint16 {
 			return false, 0, fmt.Errorf("wrong u16 constant: '%s'", sym)
 		}
-		b := make([]byte, 2)
+		b = make([]byte, 2)
 		binary.BigEndian.PutUint16(b, uint16(n))
 		if _, err = w.Write([]byte{FirstByteDataMask | byte(2)}); err != nil {
 			return false, 0, err
@@ -314,7 +318,7 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 		if n < 0 || n > math.MaxUint32 {
 			return false, 0, fmt.Errorf("wrong u32 constant: '%s'", sym)
 		}
-		b := make([]byte, 4)
+		b = make([]byte, 4)
 		binary.BigEndian.PutUint32(b, uint32(n))
 		if _, err = w.Write([]byte{FirstByteDataMask | byte(4)}); err != nil {
 			return false, 0, err
@@ -325,11 +329,10 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 		return true, 0, nil
 	case strings.HasPrefix(sym, "u64/"):
 		// it is u16 constant big endian
-		un, err := strconv.ParseUint(strings.TrimPrefix(sym, "u64/"), 10, 64)
-		if err != nil {
+		if un, err = strconv.ParseUint(strings.TrimPrefix(sym, "u64/"), 10, 64); err != nil {
 			return false, 0, fmt.Errorf("%v: '%s'", err, sym)
 		}
-		b := make([]byte, 8)
+		b = make([]byte, 8)
 		binary.BigEndian.PutUint64(b, un)
 		if _, err = w.Write([]byte{FirstByteDataMask | byte(8)}); err != nil {
 			return false, 0, err
@@ -341,16 +344,14 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 	case strings.HasPrefix(sym, "#"):
 		// function call prefix literal
 		funName := strings.TrimPrefix(sym, "#")
-		fi, err := lib.functionByName(funName)
-		if err != nil {
+		if fi, err = lib.functionByName(funName); err != nil {
 			return false, 0, err
 		}
 		numArgs := fi.NumParams
 		if numArgs < 0 {
 			numArgs = 0
 		}
-		funCallPrefix, err := fi.callPrefix(byte(numArgs))
-		if err != nil {
+		if funCallPrefix, err = fi.callPrefix(byte(numArgs)); err != nil {
 			return false, 0, err
 		}
 		if _, err = w.Write([]byte{FirstByteDataMask | byte(len(funCallPrefix))}); err != nil {
@@ -367,9 +368,9 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 		if len(msgData) > 127 {
 			return false, 0, fmt.Errorf("fail message can't be longer than 127 bytes: '%s'", sym)
 		}
-		fi, err := lib.functionByName("fail")
+		fi, err = lib.functionByName("fail")
 		AssertNoError(err)
-		funCallPrefix, err := fi.callPrefix(1)
+		funCallPrefix, err = fi.callPrefix(1)
 		AssertNoError(err)
 		if _, err = w.Write(funCallPrefix); err != nil {
 			return false, 0, err
@@ -382,7 +383,6 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 		}
 		return true, 0, nil
 	}
-	// TODO other types of literals
 	return false, 0, nil
 }
 
@@ -509,6 +509,8 @@ func (lib *Library) expressionFromBytecode(bytecode []byte, localLib ...*LocalLi
 	if len(callPrefix) == 1 && arity < 0 {
 		return nil, nil, 0xff, fmt.Errorf("EasyFL: short embedded with vararg is not allowed")
 	}
+	Assert(arity >= 0, "EasyFL: arity >= 0")
+
 	ret := &Expression{
 		Args:         make([]*Expression, 0),
 		EvalFunc:     nil,

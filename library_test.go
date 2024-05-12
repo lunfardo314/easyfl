@@ -127,9 +127,9 @@ func TestEval(t *testing.T) {
 		require.EqualValues(t, []byte{234, 123, 111, 111}, ret)
 	})
 	t.Run("7", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(nil, "len8($1)", nil, []byte("123456789"))
+		ret, err := lib.EvalFromSource(nil, "len($1)", nil, []byte("123456789"))
 		require.NoError(t, err)
-		require.EqualValues(t, []byte{9}, ret)
+		require.EqualValues(t, []byte{0, 0, 0, 0, 0, 0, 0, 9}, ret)
 	})
 	t.Run("8", func(t *testing.T) {
 		ret, err := lib.EvalFromSource(nil, "concat(1,2,3,4,5)")
@@ -143,18 +143,18 @@ func TestEval(t *testing.T) {
 	})
 	t.Run("10", func(t *testing.T) {
 		tr := NewGlobalDataTracePrint(nil)
-		ret, err := lib.EvalFromSource(tr, "if(equal(len8($0),3), 0x01, 0x05)", []byte("abc"))
+		ret, err := lib.EvalFromSource(tr, "if(equal(len($0),u64/3), 0x01, 0x05)", []byte("abc"))
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{1}, ret)
 	})
 	t.Run("11", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(nil, "if(equal(len8($0),3), 0x01, 0x05)", []byte("abcdef"))
+		ret, err := lib.EvalFromSource(nil, "if(equal(len($0),u64/3), 0x01, 0x05)", []byte("abcdef"))
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{5}, ret)
 	})
 	const longer = `
 			if(
-				not(equal(len8($0),5)),   // comment 1
+				not(equal(len($0),u64/5)),   // comment 1
 				0x01,
 				// comment without code
 				0x0506     // comment2
@@ -465,24 +465,24 @@ func TestTracing(t *testing.T) {
 	})
 	t.Run("no panic 5", func(t *testing.T) {
 		tr := NewGlobalDataLog(nil)
-		_, err := lib.EvalFromSource(tr, "equal(len8(slice(tail(0x0102030405,2),1,2)), 2)")
+		_, err := lib.EvalFromSource(tr, "equal(len(slice(tail(0x0102030405,2),1,2)), u64/2)")
 		require.NoError(t, err)
 		tr.PrintLog()
 	})
 	t.Run("no panic 6", func(t *testing.T) {
 		tr := NewGlobalDataLog(nil)
-		_, err := lib.EvalFromSource(tr, "equal(len16(slice(tail(0x0102030405,2),1,2)), u16/2)")
+		_, err := lib.EvalFromSource(tr, "equal(len(slice(tail(0x0102030405,2),1,2)), u64/2)")
 		require.NoError(t, err)
 		tr.PrintLog()
 	})
 	t.Run("no trace", func(t *testing.T) {
 		tr := NewGlobalDataNoTrace(nil)
-		_, err := lib.EvalFromSource(tr, "equal(len16(slice(tail(0x0102030405,2),1,2)), u16/2)")
+		_, err := lib.EvalFromSource(tr, "equal(len(slice(tail(0x0102030405,2),1,2)), u64/2)")
 		require.NoError(t, err)
 	})
 	t.Run("trace print", func(t *testing.T) {
 		tr := NewGlobalDataTracePrint(nil)
-		_, err := lib.EvalFromSource(tr, "equal(len16(slice(tail(0x0102030405,2),1,2)), u16/2)")
+		_, err := lib.EvalFromSource(tr, "equal(len(slice(tail(0x0102030405,2),1,2)), u64/2)")
 		require.NoError(t, err)
 	})
 	t.Run("trace if", func(t *testing.T) {
