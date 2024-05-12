@@ -170,8 +170,8 @@ func (lib *Library) MustEvalFromSource(glb GlobalData, source string, args ...[]
 	return ret
 }
 
-// MustEvalFromBinary interprets expression in the binary form. Will panic on any compile and runtime error
-func (lib *Library) MustEvalFromBinary(glb GlobalData, code []byte, args ...[]byte) []byte {
+// MustEvalFromBytecode interprets expression in the bytecode form. Will panic on any compile and runtime error
+func (lib *Library) MustEvalFromBytecode(glb GlobalData, code []byte, args ...[]byte) []byte {
 	expr, err := lib.ExpressionFromBytecode(code)
 	if err != nil {
 		panic(err)
@@ -179,11 +179,11 @@ func (lib *Library) MustEvalFromBinary(glb GlobalData, code []byte, args ...[]by
 	return EvalExpression(glb, expr, args...)
 }
 
-// EvalFromBinary evaluates expression, never panics but return an error
-func (lib *Library) EvalFromBinary(glb GlobalData, code []byte, args ...[]byte) ([]byte, error) {
+// EvalFromBytecode evaluates expression, never panics but return an error
+func (lib *Library) EvalFromBytecode(glb GlobalData, code []byte, args ...[]byte) ([]byte, error) {
 	var ret []byte
 	err := CatchPanicOrError(func() error {
-		ret = lib.MustEvalFromBinary(glb, code, args...)
+		ret = lib.MustEvalFromBytecode(glb, code, args...)
 		return nil
 	})
 	return ret, err
@@ -206,7 +206,7 @@ func (lib *Library) MustEvalFromLibrary(glb GlobalData, libraryBin [][]byte, fun
 		panic("function index is out of library bounds")
 	}
 	if funIndex == 0 {
-		return lib.MustEvalFromBinary(glb, libraryBin[0], args...)
+		return lib.MustEvalFromBytecode(glb, libraryBin[0], args...)
 	}
 	expr, err := lib.expressionFromLibrary(libraryBin, funIndex)
 	if err != nil {

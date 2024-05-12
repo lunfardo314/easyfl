@@ -38,7 +38,7 @@ func TestCompile(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, 1, len(ret))
 
-		code, numParams, err := NewBase().ExpressionSourceToBinary(ret[0].SourceCode)
+		code, numParams, err := NewBase().ExpressionSourceToBytecode(ret[0].SourceCode)
 		require.NoError(t, err)
 		require.EqualValues(t, 0, numParams)
 		t.Logf("code len: %d", len(code))
@@ -49,7 +49,7 @@ func TestCompile(t *testing.T) {
 		require.EqualValues(t, 1, len(parsed))
 
 		lib := NewBase()
-		code, numParams, err := lib.ExpressionSourceToBinary(parsed[0].SourceCode)
+		code, numParams, err := lib.ExpressionSourceToBytecode(parsed[0].SourceCode)
 		require.NoError(t, err)
 		require.EqualValues(t, 0, numParams)
 		t.Logf("code len: %d", len(code))
@@ -83,7 +83,7 @@ func TestCompile(t *testing.T) {
 		_, _, code, err := lib.CompileExpression("!!!ciao!")
 		require.NoError(t, err)
 		t.Logf("!!!ciao! code = %s", Fmt(code))
-		_, err = lib.EvalFromBinary(nil, code)
+		_, err = lib.EvalFromBytecode(nil, code)
 		RequireErrorWith(t, err, "SCRIPT FAIL: 'ciao!'")
 
 		src := fmt.Sprintf("x/%s", hex.EncodeToString(code))
@@ -295,13 +295,13 @@ func TestExtendLib(t *testing.T) {
 		exp := compl(d(0), d(1), compl(d(2), d(1), d(0)))
 		require.EqualValues(t, exp, ret)
 	})
-	t.Run("eval from binary", func(t *testing.T) {
+	t.Run("eval from bytecode", func(t *testing.T) {
 		source := "concat($2, $1, $0)"
 		_, arity, code, err := lib.CompileExpression(source)
 		require.NoError(t, err)
 		require.EqualValues(t, 3, arity)
-		t.Logf("compiled binary code of '%s' is %d-bytes long", source, len(code))
-		ret, err := lib.EvalFromBinary(NewGlobalDataTracePrint(nil), code, []byte{1}, []byte{2}, []byte{3})
+		t.Logf("compiled bytecode of '%s' is %d-bytes long", source, len(code))
+		ret, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), code, []byte{1}, []byte{2}, []byte{3})
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{3, 2, 1}, ret)
 	})
@@ -529,7 +529,7 @@ func TestParseBin(t *testing.T) {
 		_, _, bin, err := lib.CompileExpression("fun1par(0x00)")
 		require.NoError(t, err)
 		t.Logf("code: %s", Fmt(bin))
-		res, err := lib.EvalFromBinary(NewGlobalDataTracePrint(nil), bin)
+		res, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin)
 		require.NoError(t, err)
 		t.Logf("result: %s", Fmt(res))
 	})
@@ -537,7 +537,7 @@ func TestParseBin(t *testing.T) {
 		_, _, bin, err := lib.CompileExpression("fun2par(0x01, 0x02)")
 		require.NoError(t, err)
 		t.Logf("code: %s", Fmt(bin))
-		res, err := lib.EvalFromBinary(NewGlobalDataTracePrint(nil), bin)
+		res, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin)
 		require.NoError(t, err)
 		t.Logf("result: %s", Fmt(res))
 	})
@@ -545,7 +545,7 @@ func TestParseBin(t *testing.T) {
 		_, _, bin, err := lib.CompileExpression("fun2par($0, $1)")
 		require.NoError(t, err)
 		t.Logf("code: %s", Fmt(bin))
-		res, err := lib.EvalFromBinary(NewGlobalDataTracePrint(nil), bin, []byte{1}, []byte{2})
+		res, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin, []byte{1}, []byte{2})
 		require.NoError(t, err)
 		t.Logf("result: %s", Fmt(res))
 	})
@@ -554,7 +554,7 @@ func TestParseBin(t *testing.T) {
 		_, _, bin, err := lib.CompileExpression(addrStr)
 		require.NoError(t, err)
 		t.Logf("code: %s", Fmt(bin))
-		res, err := lib.EvalFromBinary(NewGlobalDataTracePrint(nil), bin)
+		res, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin)
 		require.NoError(t, err)
 		t.Logf("result: %s", Fmt(res))
 	})
@@ -562,7 +562,7 @@ func TestParseBin(t *testing.T) {
 		_, _, bin, err := lib.CompileExpression("slice(0,0,0)")
 		require.NoError(t, err)
 		t.Logf("code: %s", Fmt(bin))
-		res, err := lib.EvalFromBinary(NewGlobalDataTracePrint(nil), bin)
+		res, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin)
 		require.NoError(t, err)
 		t.Logf("result: %s", Fmt(res))
 	})
@@ -570,29 +570,29 @@ func TestParseBin(t *testing.T) {
 		_, _, bin, err := lib.CompileExpression("0")
 		require.NoError(t, err)
 		t.Logf("code: %s", Fmt(bin))
-		res, err := lib.EvalFromBinary(NewGlobalDataTracePrint(nil), bin)
+		res, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin)
 		require.NoError(t, err)
 		t.Logf("result: %s", Fmt(res))
 	})
 	t.Run("bin code cannot be nil", func(t *testing.T) {
-		_, err := lib.EvalFromBinary(NewGlobalDataTracePrint(nil), nil)
+		_, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), nil)
 		require.Error(t, err)
 	})
 	t.Run("0-parameter bin code never starts from 0", func(t *testing.T) {
 		bin := []byte{0}
 		t.Logf("code: %s", Fmt(bin))
-		_, err := lib.EvalFromBinary(NewGlobalDataTracePrint(nil), bin)
+		_, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin)
 		require.Error(t, err)
 
 		bin = []byte{0, 0}
 		t.Logf("code: %s", Fmt(bin))
-		_, err = lib.EvalFromBinary(NewGlobalDataTracePrint(nil), bin)
+		_, err = lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin)
 		require.Error(t, err)
 	})
 	t.Run("0-started code require 1 parameter", func(t *testing.T) {
 		bin := []byte{0}
 		t.Logf("code: %s", Fmt(bin))
-		res, err := lib.EvalFromBinary(NewGlobalDataTracePrint(nil), bin, []byte{10})
+		res, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin, []byte{10})
 		require.NoError(t, err)
 		t.Logf("result: %s", Fmt(res))
 		require.EqualValues(t, []byte{10}, res)
@@ -600,18 +600,18 @@ func TestParseBin(t *testing.T) {
 	t.Run("0-parameter bin code never starts from 1", func(t *testing.T) {
 		bin := []byte{1}
 		t.Logf("code: %s", Fmt(bin))
-		_, err := lib.EvalFromBinary(NewGlobalDataTracePrint(nil), bin)
+		_, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin)
 		require.Error(t, err)
 
 		bin = []byte{0, 0}
 		t.Logf("code: %s", Fmt(bin))
-		_, err = lib.EvalFromBinary(NewGlobalDataTracePrint(nil), bin)
+		_, err = lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin)
 		require.Error(t, err)
 	})
 	t.Run("1-started code require 2 parameters", func(t *testing.T) {
 		bin := []byte{1}
 		t.Logf("code: %s", Fmt(bin))
-		res, err := lib.EvalFromBinary(NewGlobalDataTracePrint(nil), bin, []byte{10}, []byte{11})
+		res, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin, []byte{10}, []byte{11})
 		require.NoError(t, err)
 		t.Logf("result: %s", Fmt(res))
 		require.EqualValues(t, []byte{11}, res)
@@ -619,7 +619,7 @@ func TestParseBin(t *testing.T) {
 	t.Run("nil code is 0x80", func(t *testing.T) {
 		bin := []byte{0x80}
 		t.Logf("code: %s", Fmt(bin))
-		res, err := lib.EvalFromBinary(NewGlobalDataTracePrint(nil), bin)
+		res, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin)
 		require.NoError(t, err)
 		require.True(t, len(res) == 0)
 		t.Logf("result: %s", Fmt(res))
@@ -659,7 +659,7 @@ func TestInlineCode(t *testing.T) {
 		require.EqualValues(t, bin2, bin3)
 
 		t.Logf("code with inline: %s", Fmt(bin3))
-		res, err := lib.EvalFromBinary(NewGlobalDataTracePrint(nil), bin3)
+		res, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin3)
 		require.NoError(t, err)
 		t.Logf("result: %s", Fmt(res))
 		require.EqualValues(t, []byte{0, 1, 2}, res)
@@ -674,7 +674,7 @@ func TestInlineCode(t *testing.T) {
 		require.EqualValues(t, bin2, bin3)
 
 		t.Logf("code with inline: %s", Fmt(bin3))
-		res, err := lib.EvalFromBinary(NewGlobalDataTracePrint(nil), bin3, []byte{0, 1})
+		res, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin3, []byte{0, 1})
 		require.NoError(t, err)
 		t.Logf("result: %s", Fmt(res))
 		require.EqualValues(t, []byte{0, 1, 2}, res)
@@ -689,7 +689,7 @@ func TestInlineCode(t *testing.T) {
 		require.EqualValues(t, bin2, bin3)
 
 		t.Logf("code with inline: %s", Fmt(bin3))
-		res, err := lib.EvalFromBinary(NewGlobalDataTracePrint(nil), bin3, []byte{2})
+		res, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin3, []byte{2})
 		require.NoError(t, err)
 		t.Logf("result: %s", Fmt(res))
 		require.EqualValues(t, []byte{0, 2}, res)
@@ -840,7 +840,7 @@ func TestDecompile(t *testing.T) {
 		for i := range args {
 			pieces[i+1] = args[i]
 		}
-		// concatenation of decomposed binary is equal to the original
+		// concatenation of decomposed bytecode is equal to the original
 		require.EqualValues(t, bin, concat(pieces...))
 	})
 	t.Run("bin-expr 6", func(t *testing.T) {
@@ -873,7 +873,7 @@ func TestDecompile(t *testing.T) {
 		for i := range args {
 			pieces[i+1] = args[i]
 		}
-		// concatenation of decomposed binary is equal to the original
+		// concatenation of decomposed bytecode is equal to the original
 		require.EqualValues(t, bin, concat(pieces...))
 
 	})

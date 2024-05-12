@@ -96,18 +96,12 @@ func (lib *Library) init() {
 	lib.embedArithmetics()
 	lib.embedBitwiseAndCmp()
 	lib.embedBaseCrypto()
-	lib.embedCodeManipulation()
+	lib.embedBytecodeManipulation()
 
 	lib.extendWithUtilityFunctions()
 }
 
 func (lib *Library) extendWithUtilityFunctions() {
-	//lib.Extend("equiv", "or(and($0,$1), and(not($0),not($1)))")
-	//{
-	//	lib.MustTrue("equiv(0x, 0x)")
-	//	lib.MustTrue("equiv(2, 100)")
-	//	lib.MustTrue("not(equiv(0x, 0))")
-	//}
 	lib.Extend("false", "0x")
 	lib.Extend("true", "0xff")
 
@@ -303,12 +297,12 @@ func (lib *Library) embedBaseCrypto() {
 	}
 }
 
-func (lib *Library) embedCodeManipulation() {
+func (lib *Library) embedBytecodeManipulation() {
 	// code parsing
-	// $0 - binary EasyFL code
+	// $0 - EasyFL bytecode
 	// $1 - expected call prefix (#-literal)
 	// $2 - number of the parameter to return
-	// Panics if the binary code is not the valid call of the specified function or number of the parameter is out of bounds
+	// Panics if the bytecode is not the valid call of the specified function or number of the parameter is out of bounds
 	// Returns code of the argument if it is a call function, or data is it is a constant
 	lib.EmbedLong("unwrapBytecodeArg", 3, lib.evalUnwrapBytecodeArg)
 	lib.EmbedLong("parseBytecodePrefix", 1, lib.evalParseBytecodePrefix)
@@ -363,15 +357,18 @@ func newLibrary() *Library {
 func (lib *Library) PrintLibraryStats() {
 	h := lib.LibraryHash()
 	fmt.Printf(`EasyFL function library (hash: %s):
-    number of short embedded: %d out of max %d
-    number of long embedded: %d out of max %d
-    number of extended: %d out of max %d
+    number of short embedded: %d out of max %d, remain free %d 
+    number of long embedded: %d out of max %d, remain free %d
+    number of extended: %d out of max %d, remain free %d
 `,
-		hex.EncodeToString(h[:]), lib.numEmbeddedShort, MaxNumEmbeddedShort, lib.numEmbeddedLong, MaxNumEmbeddedLong, lib.numExtended, MaxNumExtended)
+		hex.EncodeToString(h[:]),
+		lib.numEmbeddedShort, MaxNumEmbeddedShort, MaxNumEmbeddedShort-lib.numEmbeddedShort,
+		lib.numEmbeddedLong, MaxNumEmbeddedLong, MaxNumEmbeddedLong-lib.numEmbeddedLong,
+		lib.numExtended, MaxNumExtended, MaxNumExtended-lib.numExtended,
+	)
 }
 
-// EmbedShort embeds short-callable function inti the library
-// locallyDependent is not used currently, it is intended for caching of values TODO
+// EmbedShort embeds short-callable function into the library
 func (lib *Library) EmbedShort(sym string, requiredNumPar int, evalFun EvalFunction, contextDependent ...bool) byte {
 	Assert(lib.numEmbeddedShort < MaxNumEmbeddedShort, "too many embedded short functions")
 	Assert(!lib.existsFunction(sym), "EasyFL: !existsFunction(sym)")
@@ -436,6 +433,7 @@ func (lib *Library) EmbedLong(sym string, requiredNumPar int, evalFun EvalFuncti
 	return dscr.funCode
 }
 
+// Extend extends library with the compiled bytecode
 func (lib *Library) Extend(sym string, source string) uint16 {
 	ret, err := lib.ExtendErr(sym, source)
 	if err != nil {

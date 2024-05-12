@@ -421,7 +421,7 @@ func (lib *Library) evalEvalBytecodeArg(par *CallParams) []byte {
 		par.TracePanic("evalUnwrapBytecodeArg: wrong parameter index")
 	}
 
-	ret, err := lib.EvalFromBinary(par.ctx.glb, args[idx[0]])
+	ret, err := lib.EvalFromBytecode(par.ctx.glb, args[idx[0]])
 	if err != nil {
 		par.TracePanic("evaldBytecodeArg:: %s, %s, %s", Fmt(a0), Fmt(expectedPrefix), Fmt(idx))
 	}
