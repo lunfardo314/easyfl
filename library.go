@@ -1,13 +1,10 @@
 package easyfl
 
 import (
-	"bytes"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
-	"sort"
 
 	"golang.org/x/crypto/blake2b"
 )
@@ -38,12 +35,17 @@ type (
 	EvalFunction func(glb *CallParams) []byte
 
 	funDescriptor struct {
-		sym               string
-		funCode           uint16
-		bytecode          []byte
+		// source name of the functions
+		sym string
+		// code of the function
+		funCode uint16
+		// nil for embedded functions
+		bytecode []byte
+		// number of parameters (up to 15) or -1 for vararg
 		requiredNumParams int
-		evalFun           EvalFunction
-		locallyDependent  bool
+		// for embedded functions it is hardcoded function, for extended functions is is
+		// interpreter closure of the bytecode
+		evalFun EvalFunction
 	}
 
 	funInfo struct {
@@ -58,9 +60,9 @@ type (
 	Library struct {
 		funByName        map[string]*funDescriptor
 		funByFunCode     map[uint16]*funDescriptor
-		numEmbeddedShort int
-		numEmbeddedLong  int
-		numExtended      int
+		numEmbeddedShort uint16
+		numEmbeddedLong  uint16
+		numExtended      uint16
 	}
 )
 
@@ -99,21 +101,6 @@ func (lib *Library) init() {
 	lib.embedBytecodeManipulation()
 
 	lib.extendWithUtilityFunctions()
-}
-
-func (lib *Library) extendWithUtilityFunctions() {
-	lib.Extend("false", "0x")
-	lib.Extend("true", "0xff")
-
-	lib.Extend("require", "or($0,$1)")
-	{
-		lib.MustError("require(nil, !!!requirement_failed)", "requirement failed")
-		lib.MustEqual("require(true, !!!something_wrong)", "true")
-	}
-
-	lib.Extend("lessOrEqualThan", "or(lessThan($0,$1),equal($0,$1))")
-	lib.Extend("greaterThan", "not(lessOrEqualThan($0,$1))")
-	lib.Extend("greaterOrEqualThan", "not(lessThan($0,$1))")
 }
 
 func (lib *Library) embedBase() {
@@ -346,6 +333,21 @@ func (lib *Library) embedBytecodeManipulation() {
 	}
 }
 
+func (lib *Library) extendWithUtilityFunctions() {
+	lib.Extend("false", "0x")
+	lib.Extend("true", "0xff")
+
+	lib.Extend("require", "or($0,$1)")
+	{
+		lib.MustError("require(nil, !!!requirement_failed)", "requirement failed")
+		lib.MustEqual("require(true, !!!something_wrong)", "true")
+	}
+
+	lib.Extend("lessOrEqualThan", "or(lessThan($0,$1),equal($0,$1))")
+	lib.Extend("greaterThan", "not(lessOrEqualThan($0,$1))")
+	lib.Extend("greaterOrEqualThan", "not(lessThan($0,$1))")
+}
+
 func newLibrary() *Library {
 	return &Library{
 		funByName:        make(map[string]*funDescriptor),
@@ -369,7 +371,7 @@ func (lib *Library) PrintLibraryStats() {
 }
 
 // EmbedShort embeds short-callable function into the library
-func (lib *Library) EmbedShort(sym string, requiredNumPar int, evalFun EvalFunction, contextDependent ...bool) byte {
+func (lib *Library) EmbedShort(sym string, requiredNumPar int, evalFun EvalFunction) byte {
 	Assert(lib.numEmbeddedShort < MaxNumEmbeddedShort, "too many embedded short functions")
 	Assert(!lib.existsFunction(sym), "EasyFL: !existsFunction(sym)")
 	Assert(requiredNumPar <= 15, "EasyFL: can't be more than 15 parameters")
@@ -377,16 +379,11 @@ func (lib *Library) EmbedShort(sym string, requiredNumPar int, evalFun EvalFunct
 	if traceYN {
 		evalFun = wrapWithTracing(evalFun, sym)
 	}
-	var ctxDept bool
-	if len(contextDependent) > 0 {
-		ctxDept = contextDependent[0]
-	}
 	dscr := &funDescriptor{
 		sym:               sym,
 		funCode:           uint16(lib.numEmbeddedShort),
 		requiredNumParams: requiredNumPar,
 		evalFun:           evalFun,
-		locallyDependent:  ctxDept,
 	}
 	lib.funByName[sym] = dscr
 	lib.funByFunCode[dscr.funCode] = dscr
@@ -539,34 +536,6 @@ func (lib *Library) MustExtendMany(source string) {
 // LibraryHash returns hash of the library code and locks library against modifications.
 // It is used for consistency checking and compatibility check
 // Should not be invoked from func init()
-func (lib *Library) LibraryHash() [32]byte {
-	ret := blake2b.Sum256(lib.libraryBytes())
-	return ret
-}
-
-func (lib *Library) libraryBytes() []byte {
-	var buf bytes.Buffer
-
-	funCodes := make([]uint16, 0, len(lib.funByFunCode))
-	for funCode := range lib.funByFunCode {
-		funCodes = append(funCodes, funCode)
-	}
-	sort.Slice(funCodes, func(i, j int) bool {
-		return funCodes[i] < funCodes[j]
-	})
-	for _, fc := range funCodes {
-		lib.funByFunCode[fc].write(&buf)
-	}
-	return buf.Bytes()
-}
-
-func (fd *funDescriptor) write(w io.Writer) {
-	_, _ = w.Write([]byte(fd.sym))
-	var funCodeBin [2]byte
-	binary.BigEndian.PutUint16(funCodeBin[:], fd.funCode)
-	_, _ = w.Write(funCodeBin[:])
-	_, _ = w.Write(fd.bytecode)
-}
 
 func (lib *Library) existsFunction(sym string, localLib ...*LocalLibrary) bool {
 	if _, found := lib.funByName[sym]; found {

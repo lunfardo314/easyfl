@@ -54,10 +54,6 @@ func RequireErrorWith(t *testing.T, err error, s string) {
 	require.Contains(t, err.Error(), s)
 }
 
-func RequirePanicOrErrorWith(t *testing.T, f func() error, s string) {
-	RequireErrorWith(t, CatchPanicOrError(f), s)
-}
-
 func Assert(cond bool, format string, args ...interface{}) {
 	if !cond {
 		panic(fmt.Sprintf("assertion failed:: "+format, args...))
