@@ -255,6 +255,11 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 			return false, 0, err
 		}
 		return true, n + 1, nil
+	case sym == "nil":
+		if _, err = w.Write([]byte{FirstByteDataMask}); err != nil {
+			return false, 0, err
+		}
+		return true, 0, nil
 	case strings.HasPrefix(sym, "0x"):
 		// it is hexadecimal constant
 		b, err := hex.DecodeString(sym[2:])
@@ -500,6 +505,9 @@ func (lib *Library) expressionFromBytecode(bytecode []byte, localLib ...*LocalLi
 	if len(callPrefix) == 1 && callPrefix[0] < EmbeddedReservedUntil {
 		// it is a parameter function call
 		maxParameterNumber = callPrefix[0]
+	}
+	if len(callPrefix) == 1 && arity < 0 {
+		return nil, nil, 0xff, fmt.Errorf("EasyFL: short embedded with vararg is not allowed")
 	}
 	ret := &Expression{
 		Args:         make([]*Expression, 0),

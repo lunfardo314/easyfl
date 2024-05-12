@@ -205,7 +205,7 @@ func mustArithmeticArgs(par *CallParams, name string) (uint64, uint64) {
 }
 
 func evalAddUint(par *CallParams) []byte {
-	a0, a1 := mustArithmeticArgs(par, "sumUint")
+	a0, a1 := mustArithmeticArgs(par, "addUint")
 	var ret [8]byte
 	binary.BigEndian.PutUint64(ret[:], a0+a1)
 	return ret[:]

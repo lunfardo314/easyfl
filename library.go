@@ -67,6 +67,7 @@ type (
 const traceYN = false
 
 /*
+
 EasyFL runtime defines a standard library. It is always compiled at startup, in the `init` function.
 The library is constructed by function calls:
 - 'EmbedShort' adds an embedded function to the library with the short opcode 1-byte long.
@@ -91,12 +92,44 @@ func NewBase() *Library {
 
 func (lib *Library) init() {
 	// basic
-	lib.EmbedShort("id", 1, evalId)
+	lib.embedBase()
+	lib.embedArithmetics()
+	lib.embedBitwiseAndCmp()
+	lib.embedBaseCrypto()
+	lib.embedCodeManipulation()
+
+	lib.extendWithUtilityFunctions()
+}
+
+func (lib *Library) extendWithUtilityFunctions() {
+	lib.Extend("equiv", "or(and($0,$1), and(not($0),not($1)))")
 	{
-		lib.MustEqual("id(0x010203)", "0x010203")
-		lib.MustError("id")
+		lib.MustTrue("equiv(0x, 0x)")
+		lib.MustTrue("equiv(2, 100)")
+		lib.MustTrue("not(equiv(0x, 0))")
+	}
+	lib.Extend("false", "or")
+	lib.Extend("true", "and")
+
+	lib.Extend("require", "or($0,$1)")
+	{
+		lib.MustError("require(nil, !!!requirement_failed)", "requirement failed")
+		lib.MustEqual("require(true, !!!something_wrong)", "true")
 	}
 
+	lib.Extend("lessOrEqualThan", "or(lessThan($0,$1),equal($0,$1))")
+	lib.Extend("greaterThan", "not(lessOrEqualThan($0,$1))")
+	lib.Extend("greaterOrEqualThan", "not(lessThan($0,$1))")
+}
+
+func (lib *Library) embedBase() {
+	// 'Concat' concatenates variable number of arguments. Concat() is empty byte array
+	lib.EmbedLong("concat", -1, evalConcat)
+	{
+		lib.MustEqual("concat", "0x")
+		lib.MustEqual("concat(1,2)", "0x0102")
+		lib.MustEqual("concat(1,2,3,4)", "concat(concat(1,2),concat(3,4))")
+	}
 	// 'fail' function panics engine. Literal starting with !!! is a call to 'fail' with the message
 	lib.EmbedShort("fail", 1, evalFail)
 	{
@@ -104,7 +137,7 @@ func (lib *Library) init() {
 		lib.MustError("!!!hello,_world!", "hello, world!")
 		lib.MustError("!!!fail_error_message_31415", "31415")
 	}
-	// 'slice' inclusive the end. Expects 1-byte slices at $1 and $2
+	// 'slice' inclusive the end. Expects data at $0 and  1-byte slices at $1 and $2
 	lib.EmbedShort("slice", 3, evalSlice)
 	{
 		lib.MustEqual("slice(0x010203,1,2)", "0x0203")
@@ -124,7 +157,7 @@ func (lib *Library) init() {
 	{
 		lib.MustTrue("hasPrefix(0xf10203,0xf1)")
 	}
-	lib.EmbedShort("repeat", 2, evalRepeat)
+	lib.EmbedLong("repeat", 2, evalRepeat)
 	{
 		lib.MustEqual("repeat(1,5)", "0x0101010101")
 	}
@@ -132,21 +165,8 @@ func (lib *Library) init() {
 	lib.EmbedShort("len8", 1, evalLen8)
 	lib.EmbedShort("len16", 1, evalLen16)
 	lib.EmbedShort("not", 1, evalNot)
-	lib.EmbedShort("if", 3, evalIf)
-
-	// returns false if at least one byte is not 0
-	lib.EmbedShort("isZero", 1, evalIsZero)
 	{
-		lib.MustTrue("isZero(0)")
-		lib.MustTrue("isZero(repeat(0,100))")
-		lib.MustTrue("not(isZero(0x0000000003))")
-	}
-	// stateless varargs
-	// 'Concat' concatenates variable number of arguments. Concat() is empty byte array
-	lib.EmbedLong("concat", -1, evalConcat)
-	{
-		lib.MustEqual("concat(1,2)", "0x0102")
-		lib.MustEqual("concat(1,2,3,4)", "concat(concat(1,2),concat(3,4))")
+		lib.MustEqual("not(1)", "0x")
 	}
 	lib.EmbedLong("and", -1, evalAnd)
 	{
@@ -159,17 +179,18 @@ func (lib *Library) init() {
 		lib.MustTrue("not(or(concat))")
 		lib.MustTrue("or(1)")
 	}
-	lib.Extend("nil", "or")
+	lib.EmbedShort("if", 3, evalIf)
+
+	// returns false if at least one byte is not 0
+	lib.EmbedShort("isZero", 1, evalIsZero)
 	{
-		lib.MustEqual("concat", "nil")
-		lib.MustTrue("not(nil)")
+		lib.MustTrue("isZero(0)")
+		lib.MustTrue("isZero(repeat(0,100))")
+		lib.MustTrue("not(isZero(0x0000000003))")
 	}
-	lib.Extend("equiv", "or(and($0,$1), and(not($0),not($1)))")
-	{
-		lib.MustTrue("equiv(nil, nil)")
-		lib.MustTrue("equiv(2, 100)")
-		lib.MustTrue("not(equiv(nil, 0))")
-	}
+}
+
+func (lib *Library) embedArithmetics() {
 	// safe arithmetics
 	lib.EmbedShort("add", 2, evalAddUint)
 	{
@@ -222,7 +243,16 @@ func (lib *Library) init() {
 		lib.MustTrue("not(equalUint(100,u32/1337))")
 		lib.MustError("equalUint(nil, 5)", "wrong size of parameters")
 	}
+}
 
+func (lib *Library) embedBitwiseAndCmp() {
+	// comparison lexicographical (equivalent to bigendian for binary integers)
+	lib.EmbedShort("lessThan", 2, evalLessThan)
+	{
+		lib.MustTrue("lessThan(1,2)")
+		lib.MustTrue("not(lessThan(2,1))")
+		lib.MustTrue("not(lessThan(2,2))")
+	}
 	// bitwise
 	lib.EmbedShort("bitwiseOR", 2, evalBitwiseOR)
 	{
@@ -242,17 +272,6 @@ func (lib *Library) init() {
 		lib.MustEqual("bitwiseXOR(0x1234, 0x1234)", "0x0000")
 		lib.MustEqual("bitwiseXOR(0x1234, 0xffff)", "bitwiseNOT(0x1234)")
 	}
-	// comparison
-	lib.EmbedShort("lessThan", 2, evalLessThan)
-	{
-		lib.MustTrue("lessThan(1,2)")
-		lib.MustTrue("not(lessThan(2,1))")
-		lib.MustTrue("not(lessThan(2,2))")
-	}
-
-	lib.Extend("lessOrEqualThan", "or(lessThan($0,$1),equal($0,$1))")
-	lib.Extend("greaterThan", "not(lessOrEqualThan($0,$1))")
-	lib.Extend("greaterOrEqualThan", "not(lessThan($0,$1))")
 	// other
 
 	lib.EmbedLong("lshift64", 2, evalLShift64)
@@ -270,15 +289,19 @@ func (lib *Library) init() {
 		lib.MustTrue("equal(rshift64(u64/2001, u64/3), div(u64/2001, 8))")
 		lib.MustError("rshift64(u64/2001, nil)", "wrong size of parameters")
 	}
+}
 
+func (lib *Library) embedBaseCrypto() {
 	lib.EmbedLong("validSignatureED25519", 3, evalValidSigED25519)
-
 	lib.EmbedLong("blake2b", -1, evalBlake2b)
 	h := blake2b.Sum256([]byte{1})
 	{
 		lib.MustEqual("len8(blake2b(1))", "32")
 		lib.MustEqual("blake2b(1)", fmt.Sprintf("0x%s", hex.EncodeToString(h[:])))
 	}
+}
+
+func (lib *Library) embedCodeManipulation() {
 	// code parsing
 	// $0 - binary EasyFL code
 	// $1 - expected call prefix (#-literal)
@@ -325,14 +348,6 @@ func (lib *Library) init() {
 		src = fmt.Sprintf("evalBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 2)
 		lib.MustEqual(src, "u64/2")
 	}
-	lib.Extend("false", "or")
-	lib.Extend("true", "and")
-
-	lib.Extend("require", "or($0,$1)")
-	{
-		lib.MustError("require(nil, !!!requirement_failed)", "requirement failed")
-		lib.MustEqual("require(true, !!!something_wrong)", "true")
-	}
 }
 
 func newLibrary() *Library {
@@ -357,8 +372,9 @@ func (lib *Library) PrintLibraryStats() {
 // locallyDependent is not used currently, it is intended for caching of values TODO
 func (lib *Library) EmbedShort(sym string, requiredNumPar int, evalFun EvalFunction, contextDependent ...bool) byte {
 	Assert(lib.numEmbeddedShort < MaxNumEmbeddedShort, "too many embedded short functions")
-	Assert(!lib.existsFunction(sym), "!existsFunction(sym)")
-	Assert(requiredNumPar <= 15, "can't be more than 15 parameters")
+	Assert(!lib.existsFunction(sym), "EasyFL: !existsFunction(sym)")
+	Assert(requiredNumPar <= 15, "EasyFL: can't be more than 15 parameters")
+	Assert(requiredNumPar >= 0, "EasyFL: short embedded vararg functions are not allowed")
 	if traceYN {
 		evalFun = wrapWithTracing(evalFun, sym)
 	}
