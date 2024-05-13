@@ -942,3 +942,43 @@ func TestLocalLibrary(t *testing.T) {
 	})
 
 }
+
+func TestSerde(t *testing.T) {
+	t.Run("descriptor", func(t *testing.T) {
+		fd := funDescriptor{
+			sym:               "dummy",
+			funCode:           5,
+			bytecode:          nil,
+			requiredNumParams: 0,
+			evalFun:           nil,
+		}
+		var buf bytes.Buffer
+		fd.write(&buf)
+		bin := buf.Bytes()
+
+		lib := New()
+		fd1 := funDescriptor{}
+		err := fd1.read(bytes.NewReader(bin), lib)
+		require.NoError(t, err)
+	})
+	t.Run("library", func(t *testing.T) {
+		lib := NewBase()
+		bin := lib.libraryBytes()
+		t.Logf("serialized base library: %d bytes", len(bin))
+		t.Logf("------ library original")
+		lib.PrintLibraryStats()
+
+		lib1 := New()
+		lib1.embedBase()
+		rdr := bytes.NewReader(bin)
+		err := lib1.read(rdr)
+		require.NoError(t, err)
+		t.Logf("------ library back")
+		lib1.PrintLibraryStats()
+
+		bin1 := lib1.libraryBytes()
+		t.Logf("serialized base library 1: %d bytes", len(bin1))
+		require.EqualValues(t, bin, bin1)
+
+	})
+}

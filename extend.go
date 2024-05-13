@@ -9,7 +9,7 @@ var extendWithUtilityFunctions = []*ExtendFunction{
 	{"greaterOrEqualThan", "not(lessThan($0,$1))"},
 }
 
-func (lib *Library) extendWithUtilityFunctions() {
+func (lib *Library) extendBase() {
 	lib.Extend(extendWithUtilityFunctions...)
 
 	lib.MustError("require(nil, !!!requirement_failed)", "requirement failed")

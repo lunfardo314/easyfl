@@ -79,7 +79,7 @@ const traceYN = false
 
 /*
 
-EasyFL runtime defines a standard library. It is always compiled at startup, in the `init` function.
+EasyFL runtime defines a standard library. It is always compiled at startup, in the `initBase` function.
 The library is constructed by function calls:
 - 'embedShort' adds an embedded function to the library with the short opcode 1-byte long.
 Maximum number of short embedded functions is 64
@@ -87,29 +87,36 @@ Maximum number of short embedded functions is 64
 Maximum number of embedded function is 256
 - 'extend' adds function defined as a EasyFL expression. Maximum number of extended functions is 702
 
-The 'init' function also includes inline tests with function call 'MustTrue', 'MustEqual', 'MustError'.
+The 'initBase' function also includes inline tests with function call 'MustTrue', 'MustEqual', 'MustError'.
 
-'init' panics if library extensions fail or any of inline test fail
+'initBase' panics if library extensions fail or any of inline test fail
 
-The target environment, such as 'EasyUTXO' extends the standard library by using the same function in its 'init'
+The target environment, such as 'EasyUTXO' extends the standard library by using the same function in its 'initBase'
 
 */
 
+func New() *Library {
+	return newLibrary()
+}
+
 func NewBase() *Library {
 	ret := newLibrary()
-	ret.init()
+	ret.initBase()
 	return ret
 }
 
-func (lib *Library) init() {
+func (lib *Library) initBase() {
 	// basic
 	lib.embedBase()
+	lib.extendBase()
+}
+
+func (lib *Library) embedBase() {
+	lib.embedMain()
 	lib.embedArithmetics()
 	lib.embedBitwiseAndCmp()
 	lib.embedBaseCrypto()
 	lib.embedBytecodeManipulation()
-
-	lib.extendWithUtilityFunctions()
 }
 
 func newLibrary() *Library {
@@ -132,6 +139,20 @@ func (lib *Library) PrintLibraryStats() {
 		lib.numEmbeddedLong, MaxNumEmbeddedLong, MaxNumEmbeddedLong-lib.numEmbeddedLong,
 		lib.numExtended, MaxNumExtended, MaxNumExtended-lib.numExtended,
 	)
+}
+
+func (lib *Library) addDescriptor(fd *funDescriptor) {
+	lib.funByName[fd.sym] = fd
+	lib.funByFunCode[fd.funCode] = fd
+	isEmbedded, isShort := fd.isEmbeddedOrShort()
+	switch {
+	case isEmbedded && isShort:
+		lib.numEmbeddedShort++
+	case isEmbedded && !isShort:
+		lib.numEmbeddedLong++
+	default:
+		lib.numExtended++
+	}
 }
 
 // embedShort embeds short-callable function into the library
@@ -163,10 +184,7 @@ func (lib *Library) embedShortErr(sym string, requiredNumPar int, evalFun EvalFu
 		requiredNumParams: requiredNumPar,
 		evalFun:           evalFun,
 	}
-	lib.funByName[sym] = dscr
-	lib.funByFunCode[dscr.funCode] = dscr
-	lib.numEmbeddedShort++
-
+	lib.addDescriptor(dscr)
 	{
 		// sanity check
 		if requiredNumPar < 0 {
@@ -201,13 +219,11 @@ func (lib *Library) embedLongErr(sym string, requiredNumPar int, evalFun EvalFun
 	}
 	dscr := &funDescriptor{
 		sym:               sym,
-		funCode:           uint16(lib.numEmbeddedLong + FirstEmbeddedLongFun),
+		funCode:           lib.numEmbeddedLong + FirstEmbeddedLongFun,
 		requiredNumParams: requiredNumPar,
 		evalFun:           evalFun,
 	}
-	lib.funByName[sym] = dscr
-	lib.funByFunCode[dscr.funCode] = dscr
-	lib.numEmbeddedLong++
+	lib.addDescriptor(dscr)
 
 	{
 		// sanity check
@@ -264,14 +280,6 @@ func (lib *Library) extend(sym string, source string) uint16 {
 	return ret
 }
 
-func (lib *Library) Extendf(sym string, template string, args ...any) uint16 {
-	ret, err := lib.ExtendErr(sym, fmt.Sprintf(template, args...))
-	if err != nil {
-		panic(err)
-	}
-	return ret
-}
-
 func evalParamFun(paramNr byte) EvalFunction {
 	return func(par *CallParams) []byte {
 		return par.ctx.varScope[paramNr].Eval()
@@ -303,9 +311,7 @@ func (lib *Library) ExtendErr(sym string, source string) (uint16, error) {
 		requiredNumParams: numParam,
 		evalFun:           evalFun,
 	}
-	lib.funByName[sym] = dscr
-	lib.funByFunCode[dscr.funCode] = dscr
-	lib.numExtended++
+	lib.addDescriptor(dscr)
 
 	{
 		// sanity check
@@ -348,7 +354,7 @@ func (lib *Library) MustExtendMany(source string) {
 
 // LibraryHash returns hash of the library code and locks library against modifications.
 // It is used for consistency checking and compatibility check
-// Should not be invoked from func init()
+// Should not be invoked from func initBase()
 
 func (lib *Library) existsFunction(sym string, localLib ...*LocalLibrary) bool {
 	if _, found := lib.funByName[sym]; found {
@@ -369,14 +375,7 @@ func (lib *Library) functionByName(sym string, localLib ...*LocalLibrary) (*funI
 	if found {
 		ret.FunCode = fd.funCode
 		ret.NumParams = fd.requiredNumParams
-		switch {
-		case fd.funCode < FirstEmbeddedLongFun:
-			ret.IsEmbedded = true
-			ret.IsShort = true
-		case fd.funCode < FirstExtendedFun:
-			ret.IsEmbedded = true
-			ret.IsShort = false
-		}
+		ret.IsEmbedded, ret.IsShort = fd.isEmbeddedOrShort()
 	} else {
 		if len(localLib) > 0 {
 			if fdLoc, foundLocal := localLib[0].funByName[sym]; foundLocal {
@@ -394,6 +393,18 @@ func (lib *Library) functionByName(sym string, localLib ...*LocalLibrary) (*funI
 		return nil, fmt.Errorf("no such function in the library: '%s'", sym)
 	}
 	return ret, nil
+}
+
+func (fd *funDescriptor) isEmbeddedOrShort() (isEmbedded bool, isShort bool) {
+	switch {
+	case fd.funCode < FirstEmbeddedLongFun:
+		isEmbedded = true
+		isShort = true
+	case fd.funCode < FirstExtendedFun:
+		isEmbedded = true
+		isShort = false
+	}
+	return
 }
 
 func (lib *Library) functionByCode(funCode uint16, localLib ...*LocalLibrary) (EvalFunction, int, string, error) {
@@ -456,4 +467,8 @@ func (lib *Library) FunctionCallPrefixByName(sym string, numArgs byte) ([]byte, 
 		return nil, err
 	}
 	return fi.callPrefix(numArgs)
+}
+
+func (lib *Library) NumFunctions() uint16 {
+	return lib.numEmbeddedShort + lib.numEmbeddedLong + lib.numExtended
 }

@@ -70,7 +70,7 @@ var (
 
 // embedding functions with inline tests
 
-func (lib *Library) embedBase() {
+func (lib *Library) embedMain() {
 	lib.EmbedShort(embedShortBase...)
 	lib.EmbedLong(embedLongBase...)
 
