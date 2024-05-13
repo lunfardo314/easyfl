@@ -68,5 +68,5 @@ func (fd *funDescriptor) read(r io.Reader) error {
 	fd.bytecode = buf
 
 	// TODO
-
+	return nil
 }

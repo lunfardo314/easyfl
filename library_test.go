@@ -216,7 +216,7 @@ func TestEval(t *testing.T) {
 		require.EqualValues(t, b[:], ret)
 	})
 	var blake2bInvokedNum int
-	lib.EmbedLong("blake2b-test", 1, func(par *CallParams) []byte {
+	lib.embedLong("blake2b-test", 1, func(par *CallParams) []byte {
 		a0 := par.Arg(0)
 		h := blake2b.Sum256(a0)
 		blake2bInvokedNum++
@@ -505,9 +505,9 @@ func TestTracing(t *testing.T) {
 		require.NoError(t, err)
 	})
 	t.Run("trace caching", func(t *testing.T) {
-		lib.Extend("c6", "concat($0, $0, $0, $0, $0, $0)")
+		lib.extend("c6", "concat($0, $0, $0, $0, $0, $0)")
 		var counter int
-		lib.EmbedShort("prn", 0, func(_ *CallParams) []byte {
+		lib.embedShort("prn", 0, func(_ *CallParams) []byte {
 			counter++
 			fmt.Printf("counter incremented\n")
 			return []byte{1}
@@ -522,8 +522,8 @@ func TestTracing(t *testing.T) {
 
 func TestParseBin(t *testing.T) {
 	lib := NewBase()
-	lib.Extend("fun1par", "$0")
-	lib.Extend("fun2par", "concat($0,$1)")
+	lib.extend("fun1par", "$0")
+	lib.extend("fun2par", "concat($0,$1)")
 
 	t.Run("1", func(t *testing.T) {
 		_, _, bin, err := lib.CompileExpression("fun1par(0x00)")
@@ -647,8 +647,8 @@ func TestParseBin(t *testing.T) {
 
 func TestInlineCode(t *testing.T) {
 	lib := NewBase()
-	lib.Extend("fun1par", "$0")
-	lib.Extend("fun2par", "concat($0,$1)")
+	lib.extend("fun1par", "$0")
+	lib.extend("fun2par", "concat($0,$1)")
 	t.Run("1", func(t *testing.T) {
 		_, _, bin1, err := lib.CompileExpression("concat(0,1)")
 		require.NoError(t, err)
@@ -698,8 +698,8 @@ func TestInlineCode(t *testing.T) {
 
 func TestDecompile(t *testing.T) {
 	lib := NewBase()
-	lib.Extend("fun1par", "$0")
-	lib.Extend("fun2par", "concat($0,$1)")
+	lib.extend("fun1par", "$0")
+	lib.extend("fun2par", "concat($0,$1)")
 	t.Run("bin-expr 1", func(t *testing.T) {
 		const formula = "concat(0,1)"
 		_, _, bin, err := lib.CompileExpression(formula)
