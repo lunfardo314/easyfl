@@ -3,6 +3,7 @@ package easyfl
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"sort"
 
@@ -32,41 +33,61 @@ func (lib *Library) libraryBytes() []byte {
 
 func (fd *funDescriptor) write(w io.Writer) {
 	var uint16Bin [2]byte
+	// fun code
 	binary.BigEndian.PutUint16(uint16Bin[:], fd.funCode)
 	_, _ = w.Write(uint16Bin[:]) // 2 bytes
+	// function name
 	Assert(len(fd.sym) < 256, "EasyFL: len(fd.sym)<256")
 	_, _ = w.Write([]byte{byte(len(fd.sym))})
 	_, _ = w.Write([]byte(fd.sym))
 	Assert(len(fd.bytecode) < 256*256, "EasyFL: len(fd.bytecode)<256*256")
+	// bytecode (nil for embedded)
 	binary.BigEndian.PutUint16(uint16Bin[:], uint16(len(fd.bytecode)))
 	_, _ = w.Write(uint16Bin[:]) // 2 bytes
 	_, _ = w.Write(fd.bytecode)
 }
 
-func (fd *funDescriptor) read(r io.Reader) error {
+func (fd *funDescriptor) read(r io.Reader, lib *Library) error {
 	var uint16Bin [2]byte
-	if _, err := r.Read(uint16Bin[:]); err != nil {
+	var err error
+	// fun code
+	if _, err = r.Read(uint16Bin[:]); err != nil {
 		return err
 	}
 	fd.funCode = binary.BigEndian.Uint16(uint16Bin[:])
+	// function name
 	var size1 [1]byte
-	if _, err := r.Read(size1[:]); err != nil {
+	if _, err = r.Read(size1[:]); err != nil {
 		return err
 	}
 	buf := make([]byte, size1[0])
-	if _, err := r.Read(buf); err != nil {
+	if _, err = r.Read(buf); err != nil {
 		return err
 	}
 	fd.sym = string(buf)
-	if _, err := r.Read(uint16Bin[:]); err != nil {
+	// bytecode
+	if _, err = r.Read(uint16Bin[:]); err != nil {
 		return err
 	}
-	buf = make([]byte, binary.BigEndian.Uint16(uint16Bin[:]))
-	if _, err := r.Read(buf); err != nil {
-		return err
+	lenBytecode := binary.BigEndian.Uint16(uint16Bin[:])
+	if lenBytecode > 0 {
+		// extension
+		fd.bytecode = make([]byte, lenBytecode)
+		if _, err = r.Read(fd.bytecode); err != nil {
+			return err
+		}
+		if fd.evalFun, err = lib.evalFunctionForBytecode(fd.sym, fd.bytecode); err != nil {
+			return err
+		}
+	} else {
+		// embedded
+		var fi *funInfo
+		if fi, err = lib.functionByName(fd.sym); err != nil {
+			return err
+		}
+		if fd.evalFun, fd.requiredNumParams, _, err = lib.functionByCode(fi.FunCode); err != nil {
+			return fmt.Errorf("can't find embedded function '%s' with code %d: %w", fi.Sym, fi.FunCode, err)
+		}
 	}
-	fd.bytecode = buf
-
-	// TODO
 	return nil
 }

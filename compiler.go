@@ -742,3 +742,23 @@ func ComposeBytecodeOneLevel(sym string, args [][]byte) string {
 	}
 	return ret
 }
+
+func makeEvalFunForExpression(sym string, expr *Expression) EvalFunction {
+	return func(par *CallParams) []byte {
+		varScope := make([]*call, len(par.args))
+		for i := range varScope {
+			varScope[i] = newCall(par.args[i].EvalFunc, par.args[i].Args, par.ctx)
+		}
+		ret := evalExpression(par.ctx.glb, expr, varScope)
+		par.Trace("'%s':: %d params -> %s", sym, par.Arity(), Fmt(ret))
+		return ret
+	}
+}
+
+func (lib *Library) evalFunctionForBytecode(sym string, bytecode []byte) (EvalFunction, error) {
+	expr, err := lib.ExpressionFromBytecode(bytecode)
+	if err != nil {
+		return nil, err
+	}
+	return makeEvalFunForExpression(sym, expr), nil
+}
