@@ -136,10 +136,24 @@ func (lib *Library) PrintLibraryStats() {
 
 // embedShort embeds short-callable function into the library
 func (lib *Library) embedShort(sym string, requiredNumPar int, evalFun EvalFunction) byte {
-	Assert(lib.numEmbeddedShort < MaxNumEmbeddedShort, "too many embedded short functions")
-	Assert(!lib.existsFunction(sym), "EasyFL: !existsFunction(sym)")
-	Assert(requiredNumPar <= 15, "EasyFL: can't be more than 15 parameters")
-	Assert(requiredNumPar >= 0, "EasyFL: short embedded vararg functions are not allowed")
+	ret, err := lib.embedShortErr(sym, requiredNumPar, evalFun)
+	AssertNoError(err)
+	return ret
+}
+
+func (lib *Library) embedShortErr(sym string, requiredNumPar int, evalFun EvalFunction) (byte, error) {
+	if lib.numEmbeddedShort >= MaxNumEmbeddedShort {
+		return 0, fmt.Errorf("EasyFL: too many embedded short functions")
+	}
+	if lib.existsFunction(sym) {
+		return 0, fmt.Errorf("EasyFL: repeating function '%s'", sym)
+	}
+	if requiredNumPar > 15 {
+		return 0, fmt.Errorf("EasyFL: can't be more than 15 parameters")
+	}
+	if requiredNumPar < 0 {
+		return 0, fmt.Errorf("EasyFL: short embedded vararg functions are not allowed")
+	}
 	if traceYN {
 		evalFun = wrapWithTracing(evalFun, sym)
 	}
@@ -162,13 +176,26 @@ func (lib *Library) embedShort(sym string, requiredNumPar int, evalFun EvalFunct
 		AssertNoError(err)
 		Assert(len(codeBytes) == 1, "expected short code")
 	}
-	return byte(dscr.funCode)
+	return byte(dscr.funCode), nil
 }
 
 func (lib *Library) embedLong(sym string, requiredNumPar int, evalFun EvalFunction) uint16 {
-	Assert(lib.numEmbeddedLong < MaxNumEmbeddedLong, "too many embedded long functions")
-	Assert(!lib.existsFunction(sym), "!existsFunction(sym)")
-	Assert(requiredNumPar <= 15, "can't be more than 15 parameters")
+	ret, err := lib.embedLongErr(sym, requiredNumPar, evalFun)
+	AssertNoError(err)
+	return ret
+}
+
+func (lib *Library) embedLongErr(sym string, requiredNumPar int, evalFun EvalFunction) (uint16, error) {
+	if lib.numEmbeddedLong > MaxNumEmbeddedLong {
+		return 0, fmt.Errorf("EasyFL: too many embedded long functions")
+	}
+	if lib.existsFunction(sym) {
+		return 0, fmt.Errorf("EasyFL: repeating function '%s'", sym)
+	}
+	if requiredNumPar > 15 {
+		return 0, fmt.Errorf("EasyFL: can't be more than 15 parameters")
+	}
+
 	if traceYN {
 		evalFun = wrapWithTracing(evalFun, sym)
 	}
@@ -191,19 +218,35 @@ func (lib *Library) embedLong(sym string, requiredNumPar int, evalFun EvalFuncti
 		AssertNoError(err)
 		Assert(len(codeBytes) == 2, "expected long code")
 	}
-	return dscr.funCode
+	return dscr.funCode, nil
 }
 
 func (lib *Library) EmbedShort(funList ...*EmbedFunction) {
+	err := lib.EmbedShortErr(funList...)
+	AssertNoError(err)
+}
+
+func (lib *Library) EmbedShortErr(funList ...*EmbedFunction) (err error) {
 	for _, fun := range funList {
-		lib.embedShort(fun.Sym, fun.RequiredNumPar, fun.EvalFun)
+		if _, err = lib.embedShortErr(fun.Sym, fun.RequiredNumPar, fun.EvalFun); err != nil {
+			return
+		}
 	}
+	return
 }
 
 func (lib *Library) EmbedLong(funList ...*EmbedFunction) {
+	err := lib.EmbedLongErr(funList...)
+	AssertNoError(err)
+}
+
+func (lib *Library) EmbedLongErr(funList ...*EmbedFunction) (err error) {
 	for _, fun := range funList {
-		lib.embedLong(fun.Sym, fun.RequiredNumPar, fun.EvalFun)
+		if _, err = lib.embedLongErr(fun.Sym, fun.RequiredNumPar, fun.EvalFun); err != nil {
+			return
+		}
 	}
+	return
 }
 
 func (lib *Library) Extend(funList ...*ExtendFunction) {

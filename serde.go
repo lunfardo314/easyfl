@@ -18,6 +18,14 @@ func (lib *Library) LibraryHash() [32]byte {
 func (lib *Library) libraryBytes() []byte {
 	var buf bytes.Buffer
 
+	var uint16Bin [2]byte
+	binary.BigEndian.PutUint16(uint16Bin[:], lib.numEmbeddedShort)
+	buf.Write(uint16Bin[:])
+	binary.BigEndian.PutUint16(uint16Bin[:], lib.numEmbeddedLong)
+	buf.Write(uint16Bin[:])
+	binary.BigEndian.PutUint16(uint16Bin[:], lib.numExtended)
+	buf.Write(uint16Bin[:])
+
 	funCodes := make([]uint16, 0, len(lib.funByFunCode))
 	for funCode := range lib.funByFunCode {
 		funCodes = append(funCodes, funCode)
@@ -29,6 +37,11 @@ func (lib *Library) libraryBytes() []byte {
 		lib.funByFunCode[fc].write(&buf)
 	}
 	return buf.Bytes()
+}
+
+func (lib *Library) fromBytes(data []byte) (err error) {
+	// TODO
+	return nil
 }
 
 func (fd *funDescriptor) write(w io.Writer) {
@@ -81,12 +94,12 @@ func (fd *funDescriptor) read(r io.Reader, lib *Library) error {
 		}
 	} else {
 		// embedded
-		var fi *funInfo
-		if fi, err = lib.functionByName(fd.sym); err != nil {
-			return err
+		var sym string
+		if fd.evalFun, fd.requiredNumParams, sym, err = lib.functionByCode(fd.funCode); err != nil {
+			return fmt.Errorf("can't find embedded function '%s' with code %d: %w", fd.sym, fd.funCode, err)
 		}
-		if fd.evalFun, fd.requiredNumParams, _, err = lib.functionByCode(fi.FunCode); err != nil {
-			return fmt.Errorf("can't find embedded function '%s' with code %d: %w", fi.Sym, fi.FunCode, err)
+		if sym != fd.sym {
+			return fmt.Errorf("embedded function with code %d: expected name '%s', got '%s'", fd.funCode, fd.sym, sym)
 		}
 	}
 	return nil
