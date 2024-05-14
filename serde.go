@@ -3,7 +3,6 @@ package easyfl
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"sort"
 
@@ -22,6 +21,9 @@ func (lib *Library) libraryBytes() []byte {
 	return buf.Bytes()
 }
 
+// currently only serialization is implemented. Deserialization is not.
+// Serialization is only used for calculating library hash, to support library upgrades
+
 func (lib *Library) write(w io.Writer) {
 	_ = binary.Write(w, binary.BigEndian, lib.numEmbeddedShort)
 	_ = binary.Write(w, binary.BigEndian, lib.numEmbeddedLong)
@@ -37,29 +39,6 @@ func (lib *Library) write(w io.Writer) {
 	for _, fc := range funCodes {
 		lib.funByFunCode[fc].write(w)
 	}
-}
-
-func (lib *Library) read(r io.Reader) (err error) {
-	var numEmbeddedShort, numEmbeddedLong, numExtended uint16
-	if err = binary.Read(r, binary.BigEndian, &numEmbeddedShort); err != nil {
-		return err
-	}
-	if err = binary.Read(r, binary.BigEndian, &numEmbeddedLong); err != nil {
-		return err
-	}
-	if err = binary.Read(r, binary.BigEndian, &numExtended); err != nil {
-		return err
-	}
-	expected := numEmbeddedShort + numEmbeddedLong + numExtended
-
-	for lib.NumFunctions() < expected {
-		fd := funDescriptor{}
-		if err = fd.read(r, lib); err != nil {
-			return
-		}
-		lib.addDescriptor(&fd)
-	}
-	return nil
 }
 
 func (fd *funDescriptor) write(w io.Writer) {
@@ -81,54 +60,4 @@ func (fd *funDescriptor) write(w io.Writer) {
 	// bytecode (nil for embedded)
 	_ = binary.Write(w, binary.BigEndian, uint16(len(fd.bytecode)))
 	_, _ = w.Write(fd.bytecode)
-}
-
-func (fd *funDescriptor) read(r io.Reader, lib *Library) (err error) {
-	// fun code
-	if err = binary.Read(r, binary.BigEndian, &fd.funCode); err != nil {
-		return err
-	}
-	// required number of parameters
-	var np byte
-	if err = binary.Read(r, binary.BigEndian, &np); err != nil {
-		return err
-	}
-	fd.requiredNumParams = int(np)
-	if np == 0xff {
-		fd.requiredNumParams = -1
-	}
-	// function name
-	var size byte
-	if err = binary.Read(r, binary.BigEndian, &size); err != nil {
-		return err
-	}
-	buf := make([]byte, size)
-	if _, err = r.Read(buf); err != nil {
-		return err
-	}
-	fd.sym = string(buf)
-	// bytecode
-	if err = binary.Read(r, binary.BigEndian, &size); err != nil {
-		return err
-	}
-	if size > 0 {
-		// extension
-		fd.bytecode = make([]byte, size)
-		if _, err = r.Read(fd.bytecode); err != nil {
-			return err
-		}
-		if fd.evalFun, err = lib.evalFunctionForBytecode(fd.sym, fd.bytecode); err != nil {
-			return err
-		}
-	} else {
-		// embedded
-		var sym string
-		if fd.evalFun, fd.requiredNumParams, sym, err = lib.functionByCode(fd.funCode); err != nil {
-			return fmt.Errorf("can't find embedded function '%s' with code %d: %w", fd.sym, fd.funCode, err)
-		}
-		if sym != fd.sym {
-			return fmt.Errorf("embedded function with code %d: expected name '%s', got '%s'", fd.funCode, fd.sym, sym)
-		}
-	}
-	return nil
 }

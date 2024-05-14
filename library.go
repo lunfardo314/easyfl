@@ -237,12 +237,12 @@ func (lib *Library) embedLongErr(sym string, requiredNumPar int, evalFun EvalFun
 	return dscr.funCode, nil
 }
 
-func (lib *Library) EmbedShort(funList ...*EmbedFunction) {
-	err := lib.EmbedShortErr(funList...)
+func (lib *Library) UpgradeWithEmbeddedShort(funList ...*EmbedFunction) {
+	err := lib.UpgradeWithEmbeddedShortErr(funList...)
 	AssertNoError(err)
 }
 
-func (lib *Library) EmbedShortErr(funList ...*EmbedFunction) (err error) {
+func (lib *Library) UpgradeWithEmbeddedShortErr(funList ...*EmbedFunction) (err error) {
 	for _, fun := range funList {
 		if _, err = lib.embedShortErr(fun.Sym, fun.RequiredNumPar, fun.EvalFun); err != nil {
 			return
@@ -251,12 +251,12 @@ func (lib *Library) EmbedShortErr(funList ...*EmbedFunction) (err error) {
 	return
 }
 
-func (lib *Library) EmbedLong(funList ...*EmbedFunction) {
-	err := lib.EmbedLongErr(funList...)
+func (lib *Library) UpgradeWthEmbeddedLong(funList ...*EmbedFunction) {
+	err := lib.UpgradeWithEmbedLongErr(funList...)
 	AssertNoError(err)
 }
 
-func (lib *Library) EmbedLongErr(funList ...*EmbedFunction) (err error) {
+func (lib *Library) UpgradeWithEmbedLongErr(funList ...*EmbedFunction) (err error) {
 	for _, fun := range funList {
 		if _, err = lib.embedLongErr(fun.Sym, fun.RequiredNumPar, fun.EvalFun); err != nil {
 			return
@@ -265,7 +265,7 @@ func (lib *Library) EmbedLongErr(funList ...*EmbedFunction) (err error) {
 	return
 }
 
-func (lib *Library) Extend(funList ...*ExtendFunction) {
+func (lib *Library) UpgradeWithExtensions(funList ...*ExtendFunction) {
 	for _, fun := range funList {
 		lib.extend(fun.Sym, fun.Source)
 	}

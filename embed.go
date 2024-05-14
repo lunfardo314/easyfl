@@ -71,8 +71,8 @@ var (
 // embedding functions with inline tests
 
 func (lib *Library) embedMain() {
-	lib.EmbedShort(embedShortBase...)
-	lib.EmbedLong(embedLongBase...)
+	lib.UpgradeWithEmbeddedShort(embedShortBase...)
+	lib.UpgradeWthEmbeddedLong(embedLongBase...)
 
 	// inline tests
 	lib.MustEqual("concat", "0x")
@@ -110,7 +110,7 @@ func (lib *Library) embedMain() {
 }
 
 func (lib *Library) embedArithmetics() {
-	lib.EmbedShort(embedArithmeticsShort...)
+	lib.UpgradeWithEmbeddedShort(embedArithmeticsShort...)
 
 	lib.MustEqual("add(5,6)", "add(10,1)")
 	lib.MustEqual("add(5,6)", "u64/11")
@@ -153,8 +153,8 @@ func (lib *Library) embedArithmetics() {
 }
 
 func (lib *Library) embedBitwiseAndCmp() {
-	lib.EmbedShort(embedBitwiseAndCmpShort...)
-	lib.EmbedLong(embedBitwiseAndCmpLong...)
+	lib.UpgradeWithEmbeddedShort(embedBitwiseAndCmpShort...)
+	lib.UpgradeWthEmbeddedLong(embedBitwiseAndCmpLong...)
 
 	// comparison lexicographical (equivalent to bigendian for binary integers)
 	lib.MustTrue("lessThan(1,2)")
@@ -187,7 +187,7 @@ func (lib *Library) embedBitwiseAndCmp() {
 }
 
 func (lib *Library) embedBaseCrypto() {
-	lib.EmbedLong(embedBaseCrypto...)
+	lib.UpgradeWthEmbeddedLong(embedBaseCrypto...)
 
 	h := blake2b.Sum256([]byte{1})
 	lib.MustEqual("len(blake2b(1))", "u64/32")
@@ -204,7 +204,7 @@ func (lib *Library) embedBytecodeManipulation() {
 	//lib.embedLong("unwrapBytecodeArg", 3, lib.evalUnwrapBytecodeArg)
 	//lib.embedLong("parseBytecodePrefix", 1, lib.evalParseBytecodePrefix)
 	//lib.embedLong("evalBytecodeArg", 3, lib.evalEvalBytecodeArg)
-	lib.EmbedLong(embedBytecodeManipulation(lib)...)
+	lib.UpgradeWthEmbeddedLong(embedBytecodeManipulation(lib)...)
 
 	_, _, binCode, err := lib.CompileExpression("slice(0x01020304,1,2)")
 	AssertNoError(err)

@@ -10,7 +10,7 @@ var extendWithUtilityFunctions = []*ExtendFunction{
 }
 
 func (lib *Library) extendBase() {
-	lib.Extend(extendWithUtilityFunctions...)
+	lib.UpgradeWithExtensions(extendWithUtilityFunctions...)
 
 	lib.MustError("require(nil, !!!requirement_failed)", "requirement failed")
 	lib.MustEqual("require(true, !!!something_wrong)", "true")
