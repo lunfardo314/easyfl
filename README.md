@@ -4,7 +4,7 @@ This package is a **work in progress**
 **EasyFL** stands for **Easy** **F**ormula **L**anguage or **Easy** **F**unctional **L**anguage. 
 It is a very simple functional programming language. It is extendable, platform-independent, minimalistic and human-readable. 
 The expressions of the language take one of the following forms:
-* _source form_, a the human-readable ASCII form
+* _source form_, a human-readable ASCII form
 * _canonical bytecode form_. The canonical bytecode is normally compiled from the source. It is a main form in which EasyFL expressions are
 stored. Source code and execution form are created from it. Canonical bytecode form is highly compressed and ideal for inline 
 embedding into the data structures. 

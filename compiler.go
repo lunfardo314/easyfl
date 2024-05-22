@@ -13,8 +13,6 @@ import (
 	"unicode"
 )
 
-// TODO inline bytecode literal + 'eval' embedded function + $$ bytecode parameter
-
 // funParsed is an interim representation of the source code
 type funParsed struct {
 	Sym        string
@@ -502,7 +500,7 @@ func (lib *Library) expressionFromBytecode(bytecode []byte, localLib ...*LocalLi
 	if err != nil {
 		return nil, nil, 0xff, err
 	}
-	if len(callPrefix) == 1 && callPrefix[0] < EmbeddedReservedUntil {
+	if len(callPrefix) == 1 && callPrefix[0] < LastEmbeddedReserved {
 		// it is a parameter function call
 		maxParameterNumber = callPrefix[0]
 	}
@@ -582,7 +580,7 @@ func (lib *Library) parseCallPrefix(code []byte, localLib ...*LocalLibrary) ([]b
 
 	if code[0]&FirstByteLongCallMask == 0 {
 		// short call
-		if code[0] < EmbeddedReservedUntil {
+		if code[0] < LastEmbeddedReserved {
 			// param reference
 			evalFun = evalParamFun(code[0])
 			sym = fmt.Sprintf("$%d", code[0])

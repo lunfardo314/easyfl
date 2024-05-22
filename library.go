@@ -8,16 +8,32 @@ import (
 )
 
 const (
-	EmbeddedReservedUntil = 15
-	MaxNumEmbeddedShort   = 64
-	FirstEmbeddedLongFun  = MaxNumEmbeddedShort
-	MaxNumEmbeddedLong    = 256
-	FirstExtendedFun      = FirstEmbeddedLongFun + MaxNumEmbeddedLong
-	MaxGlobalFunCode      = 1022
-	FirstLocalFunCode     = 1023 // functions in local libraries uses extra byte for local function codes
-	MaxNumExtended        = MaxGlobalFunCode - FirstExtendedFun
 
-	MaxParameters = 15
+	// ---- embedded parameter access codes
+
+	FirstEmbeddedReserved = 0x00
+	LastEmbeddedReserved  = 0x0f // 15 reserved for parameter access 2 x 8
+	// MaxParameters maximum number of parameters in the function definition and the call
+	MaxParameters = (LastEmbeddedReserved - FirstEmbeddedReserved + 1) / 2
+
+	// ----- embedded short
+
+	FirstEmbeddedShort             = LastEmbeddedReserved + 1
+	LastEmbeddedShort              = 0x3f // 63
+	MaxNumEmbeddedAndReservedShort = LastEmbeddedShort + 1
+
+	// ---- embedded long codes
+
+	FirstEmbeddedLongFun = LastEmbeddedShort + 1 // 64
+	MaxNumEmbeddedLong   = 0xff
+	LastEmbeddedLongFun  = FirstEmbeddedLongFun + MaxNumEmbeddedLong - 1
+
+	// ---- extended codes
+
+	FirstExtendedFun  = LastEmbeddedLongFun + 1
+	LastGlobalFunCode = 1022                  // biggest global function code. All the rest are local
+	FirstLocalFunCode = LastGlobalFunCode + 1 // functions in local libraries uses extra byte for local function codes
+	MaxNumExtended    = LastGlobalFunCode - FirstExtendedFun
 )
 
 type (
@@ -41,7 +57,7 @@ type (
 		bytecode []byte
 		// number of parameters (up to 15) or -1 for vararg
 		requiredNumParams int
-		// for embedded functions it is hardcoded function, for extended functions is is
+		// for embedded functions it is hardcoded function, for extended functions is
 		// interpreter closure of the bytecode
 		evalFun EvalFunction
 	}
@@ -123,7 +139,7 @@ func newLibrary() *Library {
 	return &Library{
 		funByName:        make(map[string]*funDescriptor),
 		funByFunCode:     make(map[uint16]*funDescriptor),
-		numEmbeddedShort: EmbeddedReservedUntil + 1,
+		numEmbeddedShort: FirstEmbeddedShort,
 	}
 }
 
@@ -135,7 +151,7 @@ func (lib *Library) PrintLibraryStats() {
     number of extended: %d out of max %d, remain free %d
 `,
 		hex.EncodeToString(h[:]),
-		lib.numEmbeddedShort, MaxNumEmbeddedShort, MaxNumEmbeddedShort-lib.numEmbeddedShort,
+		lib.numEmbeddedShort, MaxNumEmbeddedAndReservedShort, MaxNumEmbeddedAndReservedShort-lib.numEmbeddedShort,
 		lib.numEmbeddedLong, MaxNumEmbeddedLong, MaxNumEmbeddedLong-lib.numEmbeddedLong,
 		lib.numExtended, MaxNumExtended, MaxNumExtended-lib.numExtended,
 	)
@@ -163,7 +179,7 @@ func (lib *Library) embedShort(sym string, requiredNumPar int, evalFun EvalFunct
 }
 
 func (lib *Library) embedShortErr(sym string, requiredNumPar int, evalFun EvalFunction) (byte, error) {
-	if lib.numEmbeddedShort >= MaxNumEmbeddedShort {
+	if lib.numEmbeddedShort >= MaxNumEmbeddedAndReservedShort {
 		return 0, fmt.Errorf("EasyFL: too many embedded short functions")
 	}
 	if lib.existsFunction(sym) {
