@@ -228,7 +228,7 @@ func (f *parsedExpression) bytecodeFromParsedExpression(lib *Library, w io.Write
 }
 
 func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
-	// write inline data
+	// write bytecode data
 	n, err := strconv.Atoi(sym)
 	itIsANumber := err == nil
 
@@ -246,14 +246,27 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 			return false, 0, err
 		}
 		return true, 0, nil
+	case strings.HasPrefix(sym, "$$"):
+		// bytecode parameter reference function
+		n, err = strconv.Atoi(sym[2:])
+		if err != nil {
+			return false, 0, err
+		}
+		if n < 0 || n > MaxParameters {
+			return false, 0, fmt.Errorf("wrong bytecode parameter reference '%s'", sym)
+		}
+		if _, err = w.Write([]byte{BytecodeParameterFlag | byte(n)}); err != nil {
+			return false, 0, err
+		}
+		return true, n + 1, nil
 	case strings.HasPrefix(sym, "$"):
-		// parameter reference function
+		// eval parameter reference function
 		n, err = strconv.Atoi(sym[1:])
 		if err != nil {
 			return false, 0, err
 		}
 		if n < 0 || n > MaxParameters {
-			return false, 0, fmt.Errorf("wrong argument reference '%s'", sym)
+			return false, 0, fmt.Errorf("wrong eval parameter reference '%s'", sym)
 		}
 		if _, err = w.Write([]byte{byte(n)}); err != nil {
 			return false, 0, err
@@ -580,10 +593,17 @@ func (lib *Library) parseCallPrefix(code []byte, localLib ...*LocalLibrary) ([]b
 
 	if code[0]&FirstByteLongCallMask == 0 {
 		// short call
-		if code[0] < LastEmbeddedReserved {
-			// param reference
-			evalFun = evalParamFun(code[0])
-			sym = fmt.Sprintf("$%d", code[0])
+		if code[0] <= LastEmbeddedReserved {
+			// this param reference
+			if code[0]&BytecodeParameterFlag == 0 {
+				// eval param reference
+				evalFun = evalEvalParamFun(code[0])
+				sym = fmt.Sprintf("$%d", code[0])
+			} else {
+				// bytecode param reference
+				evalFun = evalBytecodeParamFun(code[0])
+				sym = fmt.Sprintf("$$%d", code[0])
+			}
 		} else {
 			evalFun, arity, sym, err = lib.functionByCode(uint16(code[0]))
 			if err != nil {

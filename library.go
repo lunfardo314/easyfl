@@ -12,9 +12,10 @@ const (
 	// ---- embedded parameter access codes
 
 	FirstEmbeddedReserved = 0x00
-	LastEmbeddedReserved  = 0x0f // 15 reserved for parameter access 2 x 8
-	// MaxParameters maximum number of parameters in the function definition and the call
-	MaxParameters = (LastEmbeddedReserved - FirstEmbeddedReserved + 1) / 2
+	// MaxParameters maximum number of parameters in the function definition and the call.
+	MaxParameters         = 0x08
+	LastEmbeddedReserved  = FirstEmbeddedReserved + 2*MaxParameters - 1 // 15 reserved for parameter access 2 x 8
+	BytecodeParameterFlag = 0x08
 
 	// ----- embedded short
 
@@ -296,9 +297,15 @@ func (lib *Library) extend(sym string, source string) uint16 {
 	return ret
 }
 
-func evalParamFun(paramNr byte) EvalFunction {
+func evalEvalParamFun(paramNr byte) EvalFunction {
 	return func(par *CallParams) []byte {
 		return par.ctx.varScope[paramNr].Eval()
+	}
+}
+
+func evalBytecodeParamFun(paramNr byte) EvalFunction {
+	return func(par *CallParams) []byte {
+		panic("evalBytecodeParamFun not implemented")
 	}
 }
 
