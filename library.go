@@ -30,10 +30,10 @@ const (
 
 	// ---- extended codes
 
-	FirstExtendedFun  = LastEmbeddedLongFun + 1
-	LastGlobalFunCode = 1022                  // biggest global function code. All the rest are local
-	FirstLocalFunCode = LastGlobalFunCode + 1 // functions in local libraries uses extra byte for local function codes
-	MaxNumExtended    = LastGlobalFunCode - FirstExtendedFun
+	FirstExtendedFun     = LastEmbeddedLongFun + 1
+	LastGlobalFunCode    = 1022 // biggest global function code. All the rest are local
+	MaxNumExtendedGlobal = LastGlobalFunCode - FirstExtendedFun
+	FirstLocalFunCode    = LastGlobalFunCode + 1 // functions in local libraries uses extra byte for local function codes
 )
 
 type (
@@ -153,7 +153,7 @@ func (lib *Library) PrintLibraryStats() {
 		hex.EncodeToString(h[:]),
 		lib.numEmbeddedShort, MaxNumEmbeddedAndReservedShort, MaxNumEmbeddedAndReservedShort-lib.numEmbeddedShort,
 		lib.numEmbeddedLong, MaxNumEmbeddedLong, MaxNumEmbeddedLong-lib.numEmbeddedLong,
-		lib.numExtended, MaxNumExtended, MaxNumExtended-lib.numExtended,
+		lib.numExtended, MaxNumExtendedGlobal, MaxNumExtendedGlobal-lib.numExtended,
 	)
 }
 
@@ -308,7 +308,7 @@ func (lib *Library) ExtendErr(sym string, source string) (uint16, error) {
 		return 0, fmt.Errorf("error while compiling '%s': %v", sym, err)
 	}
 
-	Assert(lib.numExtended < MaxNumExtended, "too many extended functions")
+	Assert(lib.numExtended < MaxNumExtendedGlobal, "too many extended functions")
 
 	if lib.existsFunction(sym) {
 		return 0, errors.New("repeating symbol '" + sym + "'")
