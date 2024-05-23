@@ -515,7 +515,7 @@ func (lib *Library) expressionFromBytecode(bytecode []byte, localLib ...*LocalLi
 	}
 	if len(callPrefix) == 1 && callPrefix[0] < LastEmbeddedReserved {
 		// it is a parameter function call
-		maxParameterNumber = callPrefix[0]
+		maxParameterNumber = callPrefix[0] & (^BytecodeParameterFlag)
 	}
 	if len(callPrefix) == 1 && arity < 0 {
 		return nil, nil, 0xff, fmt.Errorf("EasyFL: short embedded with vararg is not allowed")
@@ -594,15 +594,16 @@ func (lib *Library) parseCallPrefix(code []byte, localLib ...*LocalLibrary) ([]b
 	if code[0]&FirstByteLongCallMask == 0 {
 		// short call
 		if code[0] <= LastEmbeddedReserved {
-			// this param reference
+			// this is param reference
 			if code[0]&BytecodeParameterFlag == 0 {
 				// eval param reference
 				evalFun = evalEvalParamFun(code[0])
 				sym = fmt.Sprintf("$%d", code[0])
 			} else {
 				// bytecode param reference
-				evalFun = evalBytecodeParamFun(code[0])
-				sym = fmt.Sprintf("$$%d", code[0])
+				paramNr := code[0] & (^BytecodeParameterFlag)
+				evalFun = evalBytecodeParamFun(paramNr)
+				sym = fmt.Sprintf("$$%d", paramNr)
 			}
 		} else {
 			evalFun, arity, sym, err = lib.functionByCode(uint16(code[0]))

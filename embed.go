@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"math"
 	"reflect"
 
 	"golang.org/x/crypto/blake2b"
@@ -330,17 +329,6 @@ func evalRepeat(par *CallParams) []byte {
 	}
 	ret := bytes.Repeat(fragment, int(n[0]))
 	par.Trace("hasPrefix:: %s, %s -> %s", Fmt(fragment), Fmt(n), Fmt(ret))
-	return ret
-}
-
-func evalLen8(par *CallParams) []byte {
-	arg := par.Arg(0)
-	sz := len(arg)
-	if sz > math.MaxUint8 {
-		par.TracePanic("len8:: size of the data > 255: %s", Fmt(arg))
-	}
-	ret := []byte{byte(sz)}
-	par.Trace("len8:: %s -> %s", Fmt(arg), Fmt(ret))
 	return ret
 }
 

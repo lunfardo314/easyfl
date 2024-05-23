@@ -7,6 +7,7 @@ var extendWithUtilityFunctions = []*ExtendFunction{
 	{"lessOrEqualThan", "or(lessThan($0,$1),equal($0,$1))"},
 	{"greaterThan", "not(lessOrEqualThan($0,$1))"},
 	{"greaterOrEqualThan", "not(lessThan($0,$1))"},
+	{"bytecode", "$$0"},
 }
 
 func (lib *Library) extendBase() {

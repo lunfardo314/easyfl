@@ -942,3 +942,17 @@ func TestLocalLibrary(t *testing.T) {
 	})
 
 }
+
+func TestBytecodeParams(t *testing.T) {
+	lib := NewBase()
+	t.Run("1", func(t *testing.T) {
+		const src = "bytecode(concat(1,2))"
+		expr, nPar, code, err := lib.CompileExpression(src)
+		require.NoError(t, err)
+		require.EqualValues(t, 0, nPar)
+		t.Logf("src: '%s' -> %s", src, Fmt(code))
+
+		res := EvalExpression(nil, expr)
+		t.Logf("Result: '%s'", Fmt(res))
+	})
+}

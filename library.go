@@ -15,7 +15,7 @@ const (
 	// MaxParameters maximum number of parameters in the function definition and the call.
 	MaxParameters         = 0x08
 	LastEmbeddedReserved  = FirstEmbeddedReserved + 2*MaxParameters - 1 // 15 reserved for parameter access 2 x 8
-	BytecodeParameterFlag = 0x08
+	BytecodeParameterFlag = byte(0x08)
 
 	// ----- embedded short
 
@@ -305,7 +305,7 @@ func evalEvalParamFun(paramNr byte) EvalFunction {
 
 func evalBytecodeParamFun(paramNr byte) EvalFunction {
 	return func(par *CallParams) []byte {
-		panic("evalBytecodeParamFun not implemented")
+		return ExpressionToBytecode(par.args[paramNr])
 	}
 }
 
@@ -453,13 +453,13 @@ func (lib *Library) functionByCode(funCode uint16, localLib ...*LocalLibrary) (E
 func (fi *funInfo) callPrefix(numArgs byte) ([]byte, error) {
 	var ret []byte
 	if fi.IsShort {
-		Assert(fi.FunCode > 15, "internal inconsistency: fi.FunCode must be > 15")
+		Assert(fi.FunCode > LastEmbeddedReserved, "internal inconsistency: fi.FunCode must be > %d", LastEmbeddedReserved)
 		ret = []byte{byte(fi.FunCode)}
 	} else {
 		if fi.NumParams < 0 {
 			// vararg function
-			if numArgs > 15 {
-				return nil, fmt.Errorf("internal inconsistency: number of arguments must be <= 15")
+			if numArgs > MaxParameters {
+				return nil, fmt.Errorf("internal inconsistency: number of arguments must be <= %d", MaxParameters)
 			}
 		} else {
 			if int(numArgs) != fi.NumParams {
