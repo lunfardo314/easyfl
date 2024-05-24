@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -227,6 +228,25 @@ func (f *parsedExpression) bytecodeFromParsedExpression(lib *Library, w io.Write
 	return numArgs, nil
 }
 
+func writeDataWithPrefix(w io.Writer, data []byte) error {
+	if len(data) > 127 {
+		return errors.New("too long inline data")
+	}
+	_, err := w.Write([]byte{FirstByteDataMask | byte(len(data))})
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(data)
+	return err
+}
+
+func mustDataWithPrefix(data []byte) []byte {
+	var buf bytes.Buffer
+	err := writeDataWithPrefix(&buf, data)
+	AssertNoError(err)
+	return buf.Bytes()
+}
+
 func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 	// write bytecode data
 	n, err := strconv.Atoi(sym)
@@ -242,7 +262,7 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 			return false, 0, fmt.Errorf("integer constant value not uint8: %s", sym)
 		}
 		// it is a 1 byte value
-		if _, err = w.Write([]byte{FirstByteDataMask | byte(1), byte(n)}); err != nil {
+		if err = writeDataWithPrefix(w, []byte{byte(n)}); err != nil {
 			return false, 0, err
 		}
 		return true, 0, nil
@@ -285,10 +305,7 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 		if len(b) > 127 {
 			return false, 0, fmt.Errorf("hexadecimal constant can't be longer than 127 bytes: '%s'", sym)
 		}
-		if _, err = w.Write([]byte{FirstByteDataMask | byte(len(b))}); err != nil {
-			return false, 0, err
-		}
-		if _, err = w.Write(b); err != nil {
+		if err = writeDataWithPrefix(w, b); err != nil {
 			return false, 0, err
 		}
 		return true, 0, nil
@@ -311,12 +328,9 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 		if n < 0 || n > math.MaxUint16 {
 			return false, 0, fmt.Errorf("wrong u16 constant: '%s'", sym)
 		}
-		b = make([]byte, 2)
-		binary.BigEndian.PutUint16(b, uint16(n))
-		if _, err = w.Write([]byte{FirstByteDataMask | byte(2)}); err != nil {
-			return false, 0, err
-		}
-		if _, err = w.Write(b); err != nil {
+		var b [2]byte
+		binary.BigEndian.PutUint16(b[:], uint16(n))
+		if err = writeDataWithPrefix(w, b[:]); err != nil {
 			return false, 0, err
 		}
 		return true, 0, nil
@@ -329,12 +343,9 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 		if n < 0 || n > math.MaxUint32 {
 			return false, 0, fmt.Errorf("wrong u32 constant: '%s'", sym)
 		}
-		b = make([]byte, 4)
-		binary.BigEndian.PutUint32(b, uint32(n))
-		if _, err = w.Write([]byte{FirstByteDataMask | byte(4)}); err != nil {
-			return false, 0, err
-		}
-		if _, err = w.Write(b); err != nil {
+		var b [4]byte
+		binary.BigEndian.PutUint32(b[:], uint32(n))
+		if err = writeDataWithPrefix(w, b[:]); err != nil {
 			return false, 0, err
 		}
 		return true, 0, nil
@@ -343,12 +354,9 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 		if un, err = strconv.ParseUint(strings.TrimPrefix(sym, "u64/"), 10, 64); err != nil {
 			return false, 0, fmt.Errorf("%v: '%s'", err, sym)
 		}
-		b = make([]byte, 8)
-		binary.BigEndian.PutUint64(b, un)
-		if _, err = w.Write([]byte{FirstByteDataMask | byte(8)}); err != nil {
-			return false, 0, err
-		}
-		if _, err = w.Write(b); err != nil {
+		var b [8]byte
+		binary.BigEndian.PutUint64(b[:], un)
+		if err = writeDataWithPrefix(w, b[:]); err != nil {
 			return false, 0, err
 		}
 		return true, 0, nil
@@ -578,6 +586,7 @@ func dataFunction(data []byte) EvalFunction {
 			par.Trace("-> %s", Fmt(d))
 			return data
 		},
+		bytecode: mustDataWithPrefix(data),
 	}
 }
 

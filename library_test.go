@@ -993,4 +993,15 @@ func TestBytecodeParams(t *testing.T) {
 		require.NoError(t, err)
 		t.Logf("decompiled: '%s'", decompiled)
 	})
+	t.Run("3", func(t *testing.T) {
+		const src = "concat($0,$$0)"
+
+		expr, n, code, err := lib.CompileExpression(src)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, n)
+		t.Logf("code: %s", Fmt(code))
+
+		res := EvalExpression(nil, expr, []byte{0xff})
+		t.Logf("eval: %s", Fmt(res))
+	})
 }
