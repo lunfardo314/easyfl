@@ -427,7 +427,8 @@ func (lib *Library) ExpressionFromBytecode(code []byte, localLib ...*LocalLibrar
 		return nil, err
 	}
 	if len(remaining) != 0 {
-		return nil, fmt.Errorf("not all bytes have been consumed")
+		return nil, fmt.Errorf("ExpressionFromBytecode: not all bytes have been consumed in %s. Remaining: %s",
+			Fmt(code), Fmt(remaining))
 	}
 	return ret, nil
 }

@@ -1015,9 +1015,46 @@ func TestBytecodeParams(t *testing.T) {
 		require.EqualValues(t, res, res1)
 	})
 	t.Run("5", func(t *testing.T) {
-		lib.MustEqual("123", "eval(bytecode(123))")
-		lib.MustEqual("0x", "eval(bytecode(0x))")
-		lib.MustEqual("u64/1234567890", "eval(bytecode(u64/1234567890))")
-		lib.MustEqual("concat(1,2,3)", "eval(bytecode(concat(1,2,3)))")
+		sources := []string{"123", "0x", "u64/1234567890", "concat(1,2,3)", "lessOrEqualThan(1,2)", "lessOrEqualThan(2, 1)",
+			"lessOrEqualThan(0xabcdef123456, 0xabcdef123000)", "concat(1,concat(2,3), concat)", "nil"}
+		for _, src := range sources {
+			lib.MustEqual(src, fmt.Sprintf("eval(bytecode(%s))", src))
+		}
+	})
+	t.Run("6", func(t *testing.T) {
+		const src = "lessOrEqualThan(0xabcdef123456,0xabcdef123000)"
+		t.Logf("orig: %s", src)
+		srcBytecode := fmt.Sprintf("bytecode(%s)", src)
+		code, err := lib.EvalFromSource(nil, srcBytecode)
+		require.NoError(t, err)
+		t.Logf("code: %s", Fmt(code))
+		decomp, err := lib.DecompileBytecode(code)
+		require.NoError(t, err)
+		t.Logf("decompile: %s", decomp)
+		require.EqualValues(t, src, decomp)
+
+		srcParse := fmt.Sprintf("eval(parseArgumentBytecode(0x%s,#lessOrEqualThan, 1))", hex.EncodeToString(code))
+		lib.MustEqual(srcParse, "0xabcdef123000")
+	})
+	t.Run("7", func(t *testing.T) {
+		const src = "lessOrEqualThan(0xabcdef123456,0xabcdef123000)"
+		t.Logf("orig: %s", src)
+		srcBytecode := fmt.Sprintf("bytecode(%s)", src)
+		code, err := lib.EvalFromSource(nil, srcBytecode)
+		require.NoError(t, err)
+		t.Logf("code: %s", Fmt(code))
+		decomp, err := lib.DecompileBytecode(code)
+		require.NoError(t, err)
+		t.Logf("decompile: %s", decomp)
+		require.EqualValues(t, src, decomp)
+
+		prefix, err := lib.EvalFromSource(nil, fmt.Sprintf("parsePrefixBytecode(0x%x)", code))
+		require.NoError(t, err)
+		arg0, err := lib.EvalFromSource(nil, fmt.Sprintf("parseArgumentBytecode(0x%x, #lessOrEqualThan, 0)", code))
+		require.NoError(t, err)
+		arg1, err := lib.EvalFromSource(nil, fmt.Sprintf("parseArgumentBytecode(0x%x, #lessOrEqualThan, 1)", code))
+		require.NoError(t, err)
+		require.EqualValues(t, code, concat(prefix, arg0, arg1))
+
 	})
 }

@@ -60,8 +60,8 @@ var (
 	}
 	embedBytecodeManipulation = func(lib *Library) []*EmbeddedFunctionData {
 		return []*EmbeddedFunctionData{
-			{"parseBytecodeArg", 3, lib.evalParseBytecodeArg},
-			{"parseBytecodePrefix", 1, lib.evalParseBytecodePrefix},
+			{"parseArgumentBytecode", 3, lib.evalParseArgumentBytecode},
+			{"parsePrefixBytecode", 1, lib.evalParsePrefixBytecode},
 			//{"evalBytecodeArg", 3, lib.evalBytecodeArg},
 			{"eval", 1, lib.evalBytecode}, // evaluates closed formula
 		}
@@ -201,20 +201,20 @@ func (lib *Library) embedBytecodeManipulation() {
 	// $2 - number of the parameter to return
 	// Panics if the bytecode is not the valid call of the specified function or number of the parameter is out of bounds
 	// Returns code of the argument if it is a call function, or data is it is a constant
-	//lib.embedLong("unwrapBytecodeArg", 3, lib.evalParseBytecodeArg)
-	//lib.embedLong("parseBytecodePrefix", 1, lib.evalParseBytecodePrefix)
+	//lib.embedLong("unwrapBytecodeArg", 3, lib.evalParseArgumentBytecode)
+	//lib.embedLong("parseBytecodePrefix", 1, lib.evalParsePrefixBytecode)
 	//lib.embedLong("evalBytecodeArg", 3, lib.evalBytecodeArg)
 	lib.UpgradeWthEmbeddedLong(embedBytecodeManipulation(lib)...)
 
 	_, _, binCode, err := lib.CompileExpression("slice(0x01020304,1,2)")
 	AssertNoError(err)
-	src := fmt.Sprintf("parseBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 0)
+	src := fmt.Sprintf("eval(parseArgumentBytecode(0x%s, #slice, %d))", hex.EncodeToString(binCode), 0)
 	lib.MustEqual(src, "0x01020304")
-	src = fmt.Sprintf("parseBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 1)
+	src = fmt.Sprintf("eval(parseArgumentBytecode(0x%s, #slice, %d))", hex.EncodeToString(binCode), 1)
 	lib.MustEqual(src, "1")
-	src = fmt.Sprintf("parseBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 2)
+	src = fmt.Sprintf("eval(parseArgumentBytecode(0x%s, #slice, %d))", hex.EncodeToString(binCode), 2)
 	lib.MustEqual(src, "2")
-	src = fmt.Sprintf("parseBytecodePrefix(0x%s)", hex.EncodeToString(binCode))
+	src = fmt.Sprintf("parsePrefixBytecode(0x%s)", hex.EncodeToString(binCode))
 	lib.MustEqual(src, "#slice")
 
 	//src = fmt.Sprintf("evalBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 0)
@@ -579,39 +579,42 @@ func evalRShift64(par *CallParams) []byte {
 	return ret[:]
 }
 
-func (lib *Library) evalParseBytecodeArg(par *CallParams) []byte {
+// evalParseArgumentBytecode takes bytecode of the argument as is.
+// Note: data prefix is not stripped. To get data it muts be evaluated
+func (lib *Library) evalParseArgumentBytecode(par *CallParams) []byte {
 	a0 := par.Arg(0)
 	_, prefix, args, err := lib.ParseBytecodeOneLevel(a0)
 	if err != nil {
-		par.TracePanic("evalParseBytecodeArg:: %v", err)
+		par.TracePanic("evalParseArgumentBytecode:: %v", err)
 	}
 	expectedPrefix := par.Arg(1)
 	idx := par.Arg(2)
 	if !bytes.Equal(prefix, expectedPrefix) {
 		_, _, _, symPrefix, err := lib.parseCallPrefix(prefix)
 		if err != nil {
-			par.TracePanic("evalParseBytecodeArg: can't parse prefix '%s': %v", Fmt(prefix), err)
+			par.TracePanic("evalParseArgumentBytecode: can't parse prefix '%s': %v", Fmt(prefix), err)
 		}
 		_, _, _, symExpectedPrefix, err := lib.parseCallPrefix(expectedPrefix)
 		if err != nil {
-			par.TracePanic("evalParseBytecodeArg: can't parse expected prefix '%s': %v", Fmt(expectedPrefix), err)
+			par.TracePanic("evalParseArgumentBytecode: can't parse expected prefix '%s': %v", Fmt(expectedPrefix), err)
 		}
-		par.TracePanic("evalParseBytecodeArg: unexpected function prefix. Expected '%s'('%s'), got '%s'('%s')",
+		par.TracePanic("evalParseArgumentBytecode: unexpected function prefix. Expected '%s'('%s'), got '%s'('%s')",
 			Fmt(expectedPrefix), symExpectedPrefix, Fmt(prefix), symPrefix)
 	}
 	if len(idx) != 1 || len(args) <= int(idx[0]) {
-		par.TracePanic("evalParseBytecodeArg: wrong parameter index")
+		par.TracePanic("evalParseArgumentBytecode: wrong parameter index")
 	}
-	ret := StripDataPrefix(args[idx[0]])
+	//ret := StripDataPrefix(args[idx[0]])
+	ret := args[idx[0]]
 	par.Trace("unwrapBytecodeArg:: %s, %s, %s -> %s", Fmt(a0), Fmt(expectedPrefix), Fmt(idx), Fmt(ret))
 	return ret
 }
 
-func (lib *Library) evalParseBytecodePrefix(par *CallParams) []byte {
+func (lib *Library) evalParsePrefixBytecode(par *CallParams) []byte {
 	code := par.Arg(0)
 	prefix, err := lib.ParseBytecodePrefix(code)
 	if err != nil {
-		par.TracePanic("evalParseBytecodePrefix: %v", err)
+		par.TracePanic("evalParsePrefixBytecode: %v", err)
 	}
 	par.Trace("parseBytecodePrefix::%s -> %s", Fmt(code), Fmt(prefix))
 	return prefix
@@ -621,7 +624,7 @@ func (lib *Library) evalBytecodeArg(par *CallParams) []byte {
 	a0 := par.Arg(0)
 	_, prefix, args, err := lib.ParseBytecodeOneLevel(a0)
 	if err != nil {
-		par.TracePanic("evalParseBytecodeArg:: %v", err)
+		par.TracePanic("evalParseArgumentBytecode:: %v", err)
 	}
 	expectedPrefix := par.Arg(1)
 	idx := par.Arg(2)
@@ -638,7 +641,7 @@ func (lib *Library) evalBytecodeArg(par *CallParams) []byte {
 			Fmt(expectedPrefix), symExpectedPrefix, Fmt(prefix), symPrefix)
 	}
 	if len(idx) != 1 || len(args) <= int(idx[0]) {
-		par.TracePanic("evalParseBytecodeArg: wrong parameter index")
+		par.TracePanic("evalParseArgumentBytecode: wrong parameter index")
 	}
 
 	ret, err := lib.EvalFromBytecode(par.ctx.glb, args[idx[0]])
