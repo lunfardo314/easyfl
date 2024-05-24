@@ -1004,4 +1004,20 @@ func TestBytecodeParams(t *testing.T) {
 		res := EvalExpression(nil, expr, []byte{0xff})
 		t.Logf("eval: %s", Fmt(res))
 	})
+	t.Run("4", func(t *testing.T) {
+		res, err := lib.EvalFromSource(nil, "concat(42,41)")
+		require.NoError(t, err)
+
+		require.EqualValues(t, res, []byte{42, 41})
+
+		res1, err := lib.EvalFromSource(nil, "eval(bytecode(concat(42,41)))")
+		require.NoError(t, err)
+		require.EqualValues(t, res, res1)
+	})
+	t.Run("5", func(t *testing.T) {
+		lib.MustEqual("123", "eval(bytecode(123))")
+		lib.MustEqual("0x", "eval(bytecode(0x))")
+		lib.MustEqual("u64/1234567890", "eval(bytecode(u64/1234567890))")
+		lib.MustEqual("concat(1,2,3)", "eval(bytecode(concat(1,2,3)))")
+	})
 }
