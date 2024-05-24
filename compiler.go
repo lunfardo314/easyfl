@@ -713,13 +713,13 @@ func StripDataPrefix(data []byte) []byte {
 	return data
 }
 
-// ParseBytecodePrefix tries to parse first 1, 2 or 3 bytes as a prefix, which contains
+// ParsePrefixBytecode tries to parse first 1, 2 or 3 bytes as a prefix, which contains
 // all information about the function call (if it is not inline data)
 // Returns:
 // 1 byte for short call
 // 2 bytes for long calls
 // 3 bytes for local library call
-func (lib *Library) ParseBytecodePrefix(code []byte) ([]byte, error) {
+func (lib *Library) ParsePrefixBytecode(code []byte) ([]byte, error) {
 	callPrefix, _, _, _, err := lib.parseCallPrefix(code)
 	if err != nil {
 		return nil, err

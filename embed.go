@@ -578,7 +578,7 @@ func (lib *Library) evalParseArgumentBytecode(par *CallParams) []byte {
 
 func (lib *Library) evalParsePrefixBytecode(par *CallParams) []byte {
 	code := par.Arg(0)
-	prefix, err := lib.ParseBytecodePrefix(code)
+	prefix, err := lib.ParsePrefixBytecode(code)
 	if err != nil {
 		par.TracePanic("evalParsePrefixBytecode: %v", err)
 	}
