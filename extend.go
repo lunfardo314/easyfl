@@ -8,6 +8,7 @@ var extendWithUtilityFunctions = []*ExtendedFunctionData{
 	{"greaterThan", "not(lessOrEqualThan($0,$1))"},
 	{"greaterOrEqualThan", "not(lessThan($0,$1))"},
 	{"bytecode", "$$0"},
+	{"evalArgumentBytecode", "eval(parseArgumentBytecode($0,$1,$2))"},
 }
 
 func (lib *Library) extendBase() {

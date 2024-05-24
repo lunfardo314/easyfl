@@ -1046,7 +1046,7 @@ func TestBytecodeParams(t *testing.T) {
 		t.Logf("decompile: %s", decomp)
 		require.EqualValues(t, src, decomp)
 
-		srcParse := fmt.Sprintf("eval(parseArgumentBytecode(0x%s,#lessOrEqualThan, 1))", hex.EncodeToString(code))
+		srcParse := fmt.Sprintf("evalArgumentBytecode(0x%s,#lessOrEqualThan, 1)", hex.EncodeToString(code))
 		lib.MustEqual(srcParse, "0xabcdef123000")
 	})
 	t.Run("7", func(t *testing.T) {
