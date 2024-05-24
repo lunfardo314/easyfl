@@ -62,7 +62,6 @@ var (
 		return []*EmbeddedFunctionData{
 			{"parseArgumentBytecode", 3, lib.evalParseArgumentBytecode},
 			{"parsePrefixBytecode", 1, lib.evalParsePrefixBytecode},
-			//{"evalBytecodeArg", 3, lib.evalBytecodeArg},
 			{"eval", 1, lib.evalBytecode}, // evaluates closed formula
 		}
 	}
@@ -196,14 +195,6 @@ func (lib *Library) embedBaseCrypto() {
 
 func (lib *Library) embedBytecodeManipulation() {
 	// code parsing
-	// $0 - EasyFL bytecode
-	// $1 - expected call prefix (#-literal)
-	// $2 - number of the parameter to return
-	// Panics if the bytecode is not the valid call of the specified function or number of the parameter is out of bounds
-	// Returns code of the argument if it is a call function, or data is it is a constant
-	//lib.embedLong("unwrapBytecodeArg", 3, lib.evalParseArgumentBytecode)
-	//lib.embedLong("parseBytecodePrefix", 1, lib.evalParsePrefixBytecode)
-	//lib.embedLong("evalBytecodeArg", 3, lib.evalBytecodeArg)
 	lib.UpgradeWthEmbeddedLong(embedBytecodeManipulation(lib)...)
 
 	_, _, binCode, err := lib.CompileExpression("slice(0x01020304,1,2)")
@@ -216,31 +207,6 @@ func (lib *Library) embedBytecodeManipulation() {
 	lib.MustEqual(src, "2")
 	src = fmt.Sprintf("parsePrefixBytecode(0x%s)", hex.EncodeToString(binCode))
 	lib.MustEqual(src, "#slice")
-
-	//src = fmt.Sprintf("evalBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 0)
-	//lib.MustEqual(src, "0x01020304")
-	//src = fmt.Sprintf("evalBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 1)
-	//lib.MustEqual(src, "1")
-	//src = fmt.Sprintf("evalBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 2)
-	//lib.MustEqual(src, "2")
-	//
-	//_, _, binCode, err = lib.CompileExpression("slice(concat(1,2,concat(3,4)),1,2)")
-	//AssertNoError(err)
-	//src = fmt.Sprintf("evalBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 0)
-	//lib.MustEqual(src, "0x01020304")
-	//src = fmt.Sprintf("evalBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 1)
-	//lib.MustEqual(src, "1")
-	//src = fmt.Sprintf("evalBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 2)
-	//lib.MustEqual(src, "2")
-	//
-	//_, _, binCode, err = lib.CompileExpression("slice(concat(1,concat(2,3),4),byte(0x020301, 2),add(1,1))")
-	//AssertNoError(err)
-	//src = fmt.Sprintf("evalBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 0)
-	//lib.MustEqual(src, "0x01020304")
-	//src = fmt.Sprintf("evalBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 1)
-	//lib.MustEqual(src, "1")
-	//src = fmt.Sprintf("evalBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 2)
-	//lib.MustEqual(src, "u64/2")
 }
 
 // -----------------------------------------------------------------

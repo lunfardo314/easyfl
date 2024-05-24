@@ -1003,6 +1003,19 @@ func TestBytecodeParams(t *testing.T) {
 
 		res := EvalExpression(nil, expr, []byte{0xff})
 		t.Logf("eval: %s", Fmt(res))
+		require.EqualValues(t, []byte{0xff, 0x81, 0xff}, res)
+	})
+	t.Run("3-1", func(t *testing.T) {
+		const src = "concat(1,$$0, $$1, $$2)"
+
+		expr, n, code, err := lib.CompileExpression(src)
+		require.NoError(t, err)
+		require.EqualValues(t, 3, n)
+		t.Logf("code: %s", Fmt(code))
+
+		res := EvalExpression(nil, expr, []byte{0xff}, []byte{0xff}, []byte{0xff})
+		t.Logf("eval: %s", Fmt(res))
+		require.EqualValues(t, hex.EncodeToString(res), "0181ff81ff81ff")
 	})
 	t.Run("4", func(t *testing.T) {
 		res, err := lib.EvalFromSource(nil, "concat(42,41)")
