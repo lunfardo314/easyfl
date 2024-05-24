@@ -17,7 +17,7 @@ import (
 //  - do we need short end long embedding?
 
 var (
-	embedShortBase = []*EmbedFunction{
+	embedShortBase = []*EmbeddedFunctionData{
 		{"fail", 1, evalFail},
 		{"slice", 3, evalSlice},
 		{"byte", 2, evalByte},
@@ -29,13 +29,13 @@ var (
 		{"if", 3, evalIf},
 		{"isZero", 1, evalIsZero},
 	}
-	embedLongBase = []*EmbedFunction{
+	embedLongBase = []*EmbeddedFunctionData{
 		{"concat", -1, evalConcat},
 		{"and", -1, evalAnd},
 		{"or", -1, evalOr},
 		{"repeat", 2, evalRepeat},
 	}
-	embedArithmeticsShort = []*EmbedFunction{
+	embedArithmeticsShort = []*EmbeddedFunctionData{
 		{"add", 2, evalAddUint},
 		{"sub", 2, evalSubUint},
 		{"mul", 2, evalMulUint},
@@ -43,23 +43,23 @@ var (
 		{"mod", 2, evalModuloUint},
 		{"equalUint", 2, evalEqualUint},
 	}
-	embedBitwiseAndCmpShort = []*EmbedFunction{
+	embedBitwiseAndCmpShort = []*EmbeddedFunctionData{
 		{"lessThan", 2, evalLessThan},
 		{"bitwiseOR", 2, evalBitwiseOR},
 		{"bitwiseAND", 2, evalBitwiseAND},
 		{"bitwiseNOT", 1, evalBitwiseNOT},
 		{"bitwiseXOR", 2, evalBitwiseXOR},
 	}
-	embedBitwiseAndCmpLong = []*EmbedFunction{
+	embedBitwiseAndCmpLong = []*EmbeddedFunctionData{
 		{"lshift64", 2, evalLShift64},
 		{"rshift64", 2, evalRShift64},
 	}
-	embedBaseCrypto = []*EmbedFunction{
+	embedBaseCrypto = []*EmbeddedFunctionData{
 		{"validSignatureED25519", 3, evalValidSigED25519},
 		{"blake2b", -1, evalBlake2b},
 	}
-	embedBytecodeManipulation = func(lib *Library) []*EmbedFunction {
-		return []*EmbedFunction{
+	embedBytecodeManipulation = func(lib *Library) []*EmbeddedFunctionData {
+		return []*EmbeddedFunctionData{
 			{"unwrapBytecodeArg", 3, lib.evalUnwrapBytecodeArg},
 			{"parseBytecodePrefix", 1, lib.evalParseBytecodePrefix},
 			{"evalBytecodeArg", 3, lib.evalEvalBytecodeArg},

@@ -524,7 +524,6 @@ func (lib *Library) expressionFromBytecode(bytecode []byte, localLib ...*LocalLi
 
 	ret := &Expression{
 		Args:         make([]*Expression, 0),
-		EvalFunc:     nil,
 		FunctionName: sym,
 		CallPrefix:   callPrefix,
 	}
@@ -574,18 +573,27 @@ func (lib *Library) DecompileBytecode(code []byte) (string, error) {
 
 func dataFunction(data []byte) EvalFunction {
 	d := data
-	return func(par *CallParams) []byte {
-		par.Trace("-> %s", Fmt(d))
-		return data
+	return EvalFunction{
+		EmbeddedFunction: func(par *CallParams) []byte {
+			par.Trace("-> %s", Fmt(d))
+			return data
+		},
 	}
 }
 
+// parseCallPrefix returns:
+// - call prefix
+// - eval function
+// - call arity
+// - symbol
+// - error or nil
 func (lib *Library) parseCallPrefix(code []byte, localLib ...*LocalLibrary) ([]byte, EvalFunction, int, string, error) {
 	if len(code) == 0 || IsDataPrefix(code) {
-		return nil, nil, 0, "", fmt.Errorf("parseCallPrefix: not a function call")
+		return nil, EvalFunction{}, 0, "", fmt.Errorf("parseCallPrefix: not a function call")
 	}
 
 	var evalFun EvalFunction
+	var embeddedFun EmbeddedFunction
 	var numParams, arity int
 	var err error
 	var callPrefix []byte
@@ -597,50 +605,62 @@ func (lib *Library) parseCallPrefix(code []byte, localLib ...*LocalLibrary) ([]b
 			// this is param reference
 			if code[0]&BytecodeParameterFlag == 0 {
 				// eval param reference
-				evalFun = evalEvalParamFun(code[0])
+				evalFun = EvalFunction{
+					EmbeddedFunction: evalEvalParamFun(code[0]),
+				}
 				sym = fmt.Sprintf("$%d", code[0])
 			} else {
 				// bytecode param reference
 				paramNr := code[0] & (^BytecodeParameterFlag)
-				evalFun = evalBytecodeParamFun(paramNr)
+				evalFun = EvalFunction{
+					EmbeddedFunction: evalBytecodeParamFun(paramNr),
+				}
 				sym = fmt.Sprintf("$$%d", paramNr)
 			}
 		} else {
-			evalFun, arity, sym, err = lib.functionByCode(uint16(code[0]))
+			embeddedFun, arity, sym, err = lib.functionByCode(uint16(code[0]))
 			if err != nil {
-				return nil, nil, 0, sym, err
+				return nil, EvalFunction{}, 0, sym, err
+			}
+			evalFun = EvalFunction{
+				EmbeddedFunction: embeddedFun,
+				bytecode:         code,
 			}
 		}
 		callPrefix = code[:1]
 	} else {
 		// long call
 		if len(code) < 2 {
-			return nil, nil, 0, "", io.EOF
+			return nil, EvalFunction{}, 0, "", io.EOF
 		}
 		arity = int((code[0] & FirstByteLongCallArityMask) >> 2)
 		t := binary.BigEndian.Uint16(code[:2])
 		idx := t & Uint16LongCallCodeMask
 		if idx > FirstLocalFunCode {
-			return nil, nil, 0, "", fmt.Errorf("wrong call prefix")
+			return nil, EvalFunction{}, 0, "", fmt.Errorf("wrong call prefix")
 		}
 		callPrefix = code[:2]
 		if idx == FirstLocalFunCode {
 			// it is a local library call
 			if len(localLib) == 0 {
-				return nil, nil, 0, "", fmt.Errorf("local library not provided")
+				return nil, EvalFunction{}, 0, "", fmt.Errorf("local library not provided")
 			}
 			if len(code) < 3 {
-				return nil, nil, 0, "", io.EOF
+				return nil, EvalFunction{}, 0, "", io.EOF
 			}
 			idx = uint16(FirstLocalFunCode) + uint16(code[2])
 			callPrefix = code[:3]
 		}
-		evalFun, numParams, sym, err = lib.functionByCode(idx, localLib...)
+		embeddedFun, numParams, sym, err = lib.functionByCode(idx, localLib...)
 		if err != nil {
-			return nil, nil, 0, "", err
+			return nil, EvalFunction{}, 0, "", err
 		}
 		if numParams > 0 && numParams != arity {
-			return nil, nil, 0, "", fmt.Errorf("wrong number of call args")
+			return nil, EvalFunction{}, 0, "", fmt.Errorf("wrong number of call args")
+		}
+		evalFun = EvalFunction{
+			EmbeddedFunction: embeddedFun,
+			bytecode:         code,
 		}
 	}
 	return callPrefix, evalFun, arity, sym, nil
@@ -762,7 +782,7 @@ func ComposeBytecodeOneLevel(sym string, args [][]byte) string {
 	return ret
 }
 
-func makeEvalFunForExpression(sym string, expr *Expression) EvalFunction {
+func makeEmbeddedFunForExpression(sym string, expr *Expression) EmbeddedFunction {
 	return func(par *CallParams) []byte {
 		varScope := make([]*call, len(par.args))
 		for i := range varScope {
@@ -772,12 +792,4 @@ func makeEvalFunForExpression(sym string, expr *Expression) EvalFunction {
 		par.Trace("'%s':: %d params -> %s", sym, par.Arity(), Fmt(ret))
 		return ret
 	}
-}
-
-func (lib *Library) evalFunctionForBytecode(sym string, bytecode []byte) (EvalFunction, error) {
-	expr, err := lib.ExpressionFromBytecode(bytecode)
-	if err != nil {
-		return nil, err
-	}
-	return makeEvalFunForExpression(sym, expr), nil
 }

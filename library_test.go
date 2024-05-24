@@ -946,13 +946,51 @@ func TestLocalLibrary(t *testing.T) {
 func TestBytecodeParams(t *testing.T) {
 	lib := NewBase()
 	t.Run("1", func(t *testing.T) {
-		const src = "bytecode(concat(1,2))"
-		expr, nPar, code, err := lib.CompileExpression(src)
+		const src = "concat(1,2)"
+		_, _, code, err := lib.CompileExpression(src)
+		require.NoError(t, err)
+
+		src1 := fmt.Sprintf("bytecode(%s)", src)
+		expr1, nPar, code1, err := lib.CompileExpression(src1)
 		require.NoError(t, err)
 		require.EqualValues(t, 0, nPar)
-		t.Logf("src: '%s' -> %s", src, Fmt(code))
+		t.Logf("compile '%s' -> %s", src1, Fmt(code1))
 
-		res := EvalExpression(nil, expr)
+		res := EvalExpression(nil, expr1)
 		t.Logf("Result: '%s'", Fmt(res))
+
+		require.EqualValues(t, code, res)
+
+		decompiled1, err := lib.DecompileBytecode(code1)
+		require.NoError(t, err)
+		t.Logf("decompiled1: '%s'", decompiled1)
+
+		decompiled, err := lib.DecompileBytecode(code)
+		require.NoError(t, err)
+		t.Logf("decompiled: '%s'", decompiled)
+	})
+	t.Run("2", func(t *testing.T) {
+		const src = "and(concat(1,2), if(1,2,3))"
+		_, _, code, err := lib.CompileExpression(src)
+		require.NoError(t, err)
+
+		src1 := fmt.Sprintf("bytecode(%s)", src)
+		expr1, nPar, code1, err := lib.CompileExpression(src1)
+		require.NoError(t, err)
+		require.EqualValues(t, 0, nPar)
+		t.Logf("compile '%s' -> %s", src1, Fmt(code1))
+
+		res := EvalExpression(nil, expr1)
+		t.Logf("Result: '%s'", Fmt(res))
+
+		require.EqualValues(t, code, res)
+
+		decompiled1, err := lib.DecompileBytecode(code1)
+		require.NoError(t, err)
+		t.Logf("decompiled: '%s'", decompiled1)
+
+		decompiled, err := lib.DecompileBytecode(code)
+		require.NoError(t, err)
+		t.Logf("decompiled: '%s'", decompiled)
 	})
 }

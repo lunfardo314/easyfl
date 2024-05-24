@@ -47,7 +47,11 @@ type (
 		CallPrefix   []byte
 	}
 
-	EvalFunction func(glb *CallParams) []byte
+	EmbeddedFunction func(glb *CallParams) []byte
+	EvalFunction     struct {
+		EmbeddedFunction
+		bytecode []byte
+	}
 
 	funDescriptor struct {
 		// source name of the functions
@@ -60,7 +64,7 @@ type (
 		requiredNumParams int
 		// for embedded functions it is hardcoded function, for extended functions is
 		// interpreter closure of the bytecode
-		evalFun EvalFunction
+		embeddedFun EmbeddedFunction
 	}
 
 	funInfo struct {
@@ -80,13 +84,13 @@ type (
 		numExtended      uint16
 	}
 
-	EmbedFunction struct {
+	EmbeddedFunctionData struct {
 		Sym            string
 		RequiredNumPar int
-		EvalFun        EvalFunction
+		EmbeddedFun    EmbeddedFunction
 	}
 
-	ExtendFunction struct {
+	ExtendedFunctionData struct {
 		Sym    string
 		Source string
 	}
@@ -173,13 +177,13 @@ func (lib *Library) addDescriptor(fd *funDescriptor) {
 }
 
 // embedShort embeds short-callable function into the library
-func (lib *Library) embedShort(sym string, requiredNumPar int, evalFun EvalFunction) byte {
-	ret, err := lib.embedShortErr(sym, requiredNumPar, evalFun)
+func (lib *Library) embedShort(sym string, requiredNumPar int, embeddedFun EmbeddedFunction) byte {
+	ret, err := lib.embedShortErr(sym, requiredNumPar, embeddedFun)
 	AssertNoError(err)
 	return ret
 }
 
-func (lib *Library) embedShortErr(sym string, requiredNumPar int, evalFun EvalFunction) (byte, error) {
+func (lib *Library) embedShortErr(sym string, requiredNumPar int, embeddedFun EmbeddedFunction) (byte, error) {
 	if lib.numEmbeddedShort >= MaxNumEmbeddedAndReservedShort {
 		return 0, fmt.Errorf("EasyFL: too many embedded short functions")
 	}
@@ -193,13 +197,13 @@ func (lib *Library) embedShortErr(sym string, requiredNumPar int, evalFun EvalFu
 		return 0, fmt.Errorf("EasyFL: short embedded vararg functions are not allowed")
 	}
 	if traceYN {
-		evalFun = wrapWithTracing(evalFun, sym)
+		embeddedFun = wrapWithTracing(embeddedFun, sym)
 	}
 	dscr := &funDescriptor{
 		sym:               sym,
 		funCode:           lib.numEmbeddedShort,
 		requiredNumParams: requiredNumPar,
-		evalFun:           evalFun,
+		embeddedFun:       embeddedFun,
 	}
 	lib.addDescriptor(dscr)
 	{
@@ -214,13 +218,13 @@ func (lib *Library) embedShortErr(sym string, requiredNumPar int, evalFun EvalFu
 	return byte(dscr.funCode), nil
 }
 
-func (lib *Library) embedLong(sym string, requiredNumPar int, evalFun EvalFunction) uint16 {
-	ret, err := lib.embedLongErr(sym, requiredNumPar, evalFun)
+func (lib *Library) embedLong(sym string, requiredNumPar int, embeddedFun EmbeddedFunction) uint16 {
+	ret, err := lib.embedLongErr(sym, requiredNumPar, embeddedFun)
 	AssertNoError(err)
 	return ret
 }
 
-func (lib *Library) embedLongErr(sym string, requiredNumPar int, evalFun EvalFunction) (uint16, error) {
+func (lib *Library) embedLongErr(sym string, requiredNumPar int, embeddedFun EmbeddedFunction) (uint16, error) {
 	if lib.numEmbeddedLong > MaxNumEmbeddedLong {
 		return 0, fmt.Errorf("EasyFL: too many embedded long functions")
 	}
@@ -232,13 +236,13 @@ func (lib *Library) embedLongErr(sym string, requiredNumPar int, evalFun EvalFun
 	}
 
 	if traceYN {
-		evalFun = wrapWithTracing(evalFun, sym)
+		embeddedFun = wrapWithTracing(embeddedFun, sym)
 	}
 	dscr := &funDescriptor{
 		sym:               sym,
 		funCode:           lib.numEmbeddedLong + FirstEmbeddedLongFun,
 		requiredNumParams: requiredNumPar,
-		evalFun:           evalFun,
+		embeddedFun:       embeddedFun,
 	}
 	lib.addDescriptor(dscr)
 
@@ -254,35 +258,35 @@ func (lib *Library) embedLongErr(sym string, requiredNumPar int, evalFun EvalFun
 	return dscr.funCode, nil
 }
 
-func (lib *Library) UpgradeWithEmbeddedShort(funList ...*EmbedFunction) {
+func (lib *Library) UpgradeWithEmbeddedShort(funList ...*EmbeddedFunctionData) {
 	err := lib.UpgradeWithEmbeddedShortErr(funList...)
 	AssertNoError(err)
 }
 
-func (lib *Library) UpgradeWithEmbeddedShortErr(funList ...*EmbedFunction) (err error) {
+func (lib *Library) UpgradeWithEmbeddedShortErr(funList ...*EmbeddedFunctionData) (err error) {
 	for _, fun := range funList {
-		if _, err = lib.embedShortErr(fun.Sym, fun.RequiredNumPar, fun.EvalFun); err != nil {
+		if _, err = lib.embedShortErr(fun.Sym, fun.RequiredNumPar, fun.EmbeddedFun); err != nil {
 			return
 		}
 	}
 	return
 }
 
-func (lib *Library) UpgradeWthEmbeddedLong(funList ...*EmbedFunction) {
+func (lib *Library) UpgradeWthEmbeddedLong(funList ...*EmbeddedFunctionData) {
 	err := lib.UpgradeWithEmbedLongErr(funList...)
 	AssertNoError(err)
 }
 
-func (lib *Library) UpgradeWithEmbedLongErr(funList ...*EmbedFunction) (err error) {
+func (lib *Library) UpgradeWithEmbedLongErr(funList ...*EmbeddedFunctionData) (err error) {
 	for _, fun := range funList {
-		if _, err = lib.embedLongErr(fun.Sym, fun.RequiredNumPar, fun.EvalFun); err != nil {
+		if _, err = lib.embedLongErr(fun.Sym, fun.RequiredNumPar, fun.EmbeddedFun); err != nil {
 			return
 		}
 	}
 	return
 }
 
-func (lib *Library) UpgradeWithExtensions(funList ...*ExtendFunction) {
+func (lib *Library) UpgradeWithExtensions(funList ...*ExtendedFunctionData) {
 	for _, fun := range funList {
 		lib.extend(fun.Sym, fun.Source)
 	}
@@ -297,15 +301,15 @@ func (lib *Library) extend(sym string, source string) uint16 {
 	return ret
 }
 
-func evalEvalParamFun(paramNr byte) EvalFunction {
+func evalEvalParamFun(paramNr byte) EmbeddedFunction {
 	return func(par *CallParams) []byte {
 		return par.ctx.varScope[paramNr].Eval()
 	}
 }
 
-func evalBytecodeParamFun(paramNr byte) EvalFunction {
+func evalBytecodeParamFun(paramNr byte) EmbeddedFunction {
 	return func(par *CallParams) []byte {
-		return ExpressionToBytecode(par.args[paramNr])
+		return par.ctx.varScope[paramNr].f.bytecode
 	}
 }
 
@@ -323,16 +327,16 @@ func (lib *Library) ExtendErr(sym string, source string) (uint16, error) {
 	if numParam > 15 {
 		return 0, errors.New("can't be more than 15 parameters")
 	}
-	evalFun := makeEvalFunForExpression(sym, f)
+	embeddedFun := makeEmbeddedFunForExpression(sym, f)
 	if traceYN {
-		evalFun = wrapWithTracing(evalFun, sym)
+		embeddedFun = wrapWithTracing(embeddedFun, sym)
 	}
 	dscr := &funDescriptor{
 		sym:               sym,
 		funCode:           lib.numExtended + FirstExtendedFun,
 		bytecode:          bytecode,
 		requiredNumParams: numParam,
-		evalFun:           evalFun,
+		embeddedFun:       embeddedFun,
 	}
 	lib.addDescriptor(dscr)
 
@@ -347,7 +351,7 @@ func (lib *Library) ExtendErr(sym string, source string) (uint16, error) {
 
 }
 
-func wrapWithTracing(f EvalFunction, msg string) EvalFunction {
+func wrapWithTracing(f EmbeddedFunction, msg string) EmbeddedFunction {
 	return func(par *CallParams) []byte {
 		fmt.Printf("EvalFunction '%s' - IN\n", msg)
 		ret := f(par)
@@ -430,11 +434,11 @@ func (fd *funDescriptor) isEmbeddedOrShort() (isEmbedded bool, isShort bool) {
 	return
 }
 
-func (lib *Library) functionByCode(funCode uint16, localLib ...*LocalLibrary) (EvalFunction, int, string, error) {
+func (lib *Library) functionByCode(funCode uint16, localLib ...*LocalLibrary) (EmbeddedFunction, int, string, error) {
 	if funCode < FirstLocalFunCode {
 		libData := lib.funByFunCode[funCode]
 		if libData != nil {
-			return libData.evalFun, libData.requiredNumParams, libData.sym, nil
+			return libData.embeddedFun, libData.requiredNumParams, libData.sym, nil
 		}
 	}
 	funCodeLocal := funCode - FirstLocalFunCode
@@ -447,7 +451,7 @@ func (lib *Library) functionByCode(funCode uint16, localLib ...*LocalLibrary) (E
 		return nil, 0, "", fmt.Errorf("wrong local function code %d", funCode)
 	}
 	sym := fmt.Sprintf("lib#%d)", funCodeLocal)
-	return libData.evalFun, libData.requiredNumParams, sym, nil
+	return libData.embeddedFun, libData.requiredNumParams, sym, nil
 }
 
 func (fi *funInfo) callPrefix(numArgs byte) ([]byte, error) {

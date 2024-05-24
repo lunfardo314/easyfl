@@ -60,7 +60,7 @@ func (c *call) Eval() []byte {
 	if c.cached {
 		return c.cache
 	}
-	c.cache = c.f(c.params)
+	c.cache = c.f.EmbeddedFunction(c.params)
 	c.cached = true
 	return c.cache
 }

@@ -1,6 +1,6 @@
 package easyfl
 
-var extendWithUtilityFunctions = []*ExtendFunction{
+var extendWithUtilityFunctions = []*ExtendedFunctionData{
 	{"false", "0x"},
 	{"true", "0xff"},
 	{"require", "or($0,$1)"},
