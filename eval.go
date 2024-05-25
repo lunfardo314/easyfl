@@ -112,18 +112,12 @@ func (p *CallParams) TracePanic(format string, args ...interface{}) {
 	panic(fmt.Sprintf("panic: "+format, args...))
 }
 
-// evalParam used by $0-$15 functions
-func (p *CallParams) evalParam(n byte) []byte {
-	if traceYN {
-		fmt.Printf("evalParam $%d -- IN\n", n)
-	}
+func (p *CallParams) EvalParam(paramNr byte) []byte {
+	return p.ctx.varScope[paramNr].Eval()
+}
 
-	ret := p.ctx.varScope[n].Eval()
-
-	if traceYN {
-		fmt.Printf("evalParam $%d -- OUT, ret: %v\n", n, ret)
-	}
-	return ret
+func (p *CallParams) GetBytecode(paramNr byte) []byte {
+	return p.ctx.varScope[paramNr].f.bytecode
 }
 
 func evalExpression(glb GlobalData, f *Expression, varScope []*call) []byte {

@@ -303,13 +303,13 @@ func (lib *Library) extend(sym string, source string) uint16 {
 
 func evalEvalParamFun(paramNr byte) EmbeddedFunction {
 	return func(par *CallParams) []byte {
-		return par.ctx.varScope[paramNr].Eval()
+		return par.EvalParam(paramNr)
 	}
 }
 
 func evalBytecodeParamFun(paramNr byte) EmbeddedFunction {
 	return func(par *CallParams) []byte {
-		return par.ctx.varScope[paramNr].f.bytecode
+		return par.GetBytecode(paramNr)
 	}
 }
 
