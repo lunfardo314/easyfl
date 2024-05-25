@@ -34,6 +34,9 @@ var (
 		{"and", -1, evalAnd},
 		{"or", -1, evalOr},
 		{"repeat", 2, evalRepeat},
+		{"firstCaseIndex", -1, evalFirstCaseIndex},
+		{"firstEqualIndex", -1, evalFirstEqualIndex},
+		{"selectCaseByIndex", -1, evalSelectCaseByIndex},
 	}
 	embedArithmeticsShort = []*EmbeddedFunctionData{
 		{"add", 2, evalAddUint},
@@ -292,7 +295,7 @@ func evalRepeat(par *CallParams) []byte {
 	fragment := par.Arg(0)
 	n := par.Arg(1)
 	if len(n) != 1 {
-		par.TracePanic("evalRepeat: count must 1-byte long")
+		par.TracePanic("evalRepeat: count must be 1-byte long")
 	}
 	ret := bytes.Repeat(fragment, int(n[0]))
 	par.Trace("hasPrefix:: %s, %s -> %s", Fmt(fragment), Fmt(n), Fmt(ret))
@@ -317,6 +320,44 @@ func evalIf(par *CallParams) []byte {
 	no := par.Arg(2)
 	par.Trace("if:: %s -> %s", Fmt(cond), Fmt(no))
 	return no
+}
+
+func evalFirstCaseIndex(par *CallParams) []byte {
+	for i := byte(0); i < par.Arity(); i++ {
+		if ret := par.Arg(i); len(ret) > 0 {
+			par.Trace("firstCaseIndex:: -> %d", i)
+			return []byte{i}
+		}
+	}
+	par.Trace("firstCaseIndex:: -> nil")
+	return nil
+}
+
+func evalFirstEqualIndex(par *CallParams) []byte {
+	if par.Arity() == 0 {
+		return nil
+	}
+
+	v := par.Arg(0)
+	for i := byte(1); i < par.Arity(); i++ {
+		if bytes.Equal(v, par.Arg(i)) {
+			par.Trace("firstEqualIndex:: -> %d", i)
+			return []byte{i - 1}
+		}
+	}
+	par.Trace("firstEqualIndex:: -> nil")
+	return nil
+}
+
+func evalSelectCaseByIndex(par *CallParams) []byte {
+	if par.Arity() == 0 {
+		par.TracePanic("evalSelectCaseByIndex: must be at least 1 argument")
+	}
+	idx := par.Arg(0)
+	if len(idx) != 1 || idx[0]+1 >= par.Arity() {
+		return nil
+	}
+	return par.Arg(idx[0] + 1)
 }
 
 func evalIsZero(par *CallParams) []byte {

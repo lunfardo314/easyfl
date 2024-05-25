@@ -1071,3 +1071,82 @@ func TestBytecodeParams(t *testing.T) {
 
 	})
 }
+
+func TestCases(t *testing.T) {
+	lib := NewBase()
+	t.Run("1", func(t *testing.T) {
+		const src = `firstCaseIndex(
+			equal($0, 1),
+			equal($0, 2),
+			equal($0, 3),
+			equal($0, 4),
+			equal($0, 0xffff),
+		)
+`
+		expr, n, _, err := lib.CompileExpression(src)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, n)
+
+		res := EvalExpression(nil, expr, []byte{3})
+		require.EqualValues(t, []byte{2}, res)
+
+		res = EvalExpression(nil, expr, []byte{4})
+		require.EqualValues(t, []byte{3}, res)
+
+		res = EvalExpression(nil, expr, []byte{0})
+		require.True(t, len(res) == 0)
+
+		res = EvalExpression(nil, expr, []byte{7})
+		require.True(t, len(res) == 0)
+
+		res = EvalExpression(nil, expr, []byte{0xff, 0xff})
+		require.EqualValues(t, []byte{4}, res)
+	})
+	t.Run("2", func(t *testing.T) {
+		const src = "firstEqualIndex($0, 1, 2, 3, 4, 0xffff)"
+
+		expr, n, _, err := lib.CompileExpression(src)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, n)
+
+		res := EvalExpression(nil, expr, []byte{3})
+		require.EqualValues(t, []byte{2}, res)
+
+		res = EvalExpression(nil, expr, []byte{4})
+		require.EqualValues(t, []byte{3}, res)
+
+		res = EvalExpression(nil, expr, []byte{0})
+		require.True(t, len(res) == 0)
+
+		res = EvalExpression(nil, expr, []byte{7})
+		require.True(t, len(res) == 0)
+
+		res = EvalExpression(nil, expr, []byte{0xff, 0xff})
+		require.EqualValues(t, []byte{4}, res)
+	})
+	t.Run("3", func(t *testing.T) {
+		const src = "selectCaseByIndex($0, 1, 0x1234, add(5,3), true)"
+
+		expr, n, _, err := lib.CompileExpression(src)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, n)
+
+		res := EvalExpression(nil, expr, []byte{0})
+		require.EqualValues(t, []byte{1}, res)
+
+		res = EvalExpression(nil, expr, []byte{1})
+		require.EqualValues(t, []byte{0x12, 0x34}, res)
+
+		res = EvalExpression(nil, expr, []byte{2})
+		require.EqualValues(t, []byte{0, 0, 0, 0, 0, 0, 0, 8}, res)
+
+		res = EvalExpression(nil, expr, []byte{3})
+		require.EqualValues(t, []byte{0xff}, res)
+
+		res = EvalExpression(nil, expr, []byte{4})
+		require.True(t, len(res) == 0)
+
+		res = EvalExpression(nil, expr, []byte{0, 0})
+		require.True(t, len(res) == 0)
+	})
+}
