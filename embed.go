@@ -44,7 +44,7 @@ var (
 		{"mul", 2, evalMulUint},
 		{"div", 2, evalDivUint},
 		{"mod", 2, evalModuloUint},
-		{"equalUint", 2, evalEqualUint},
+		{"uint64Bytes", 1, evalUint64Bytes},
 	}
 	embedBitwiseAndCmpShort = []*EmbeddedFunctionData{
 		{"lessThan", 2, evalLessThan},
@@ -118,40 +118,35 @@ func (lib *Library) embedArithmetics() {
 	lib.MustEqual("add(5,6)", "u64/11")
 	lib.MustEqual("add(0, 0)", "u64/0")
 	lib.MustEqual("add(u16/1337, 0)", "u64/1337")
-	lib.MustError("add(nil, 0)", "wrong size of parameters")
+	lib.MustError("add(nil, 0)", "wrong size of parameter")
 
 	lib.MustEqual("sub(6,6)", "u64/0")
 	lib.MustEqual("sub(6,5)", "u64/1")
 	lib.MustEqual("sub(0, 0)", "u64/0")
 	lib.MustEqual("sub(u16/1337, 0)", "u64/1337")
-	lib.MustError("sub(nil, 0)", "wrong size of parameters")
+	lib.MustError("sub(nil, 0)", "wrong size of parameter")
 	lib.MustError("sub(10, 100)", "underflow in subtraction")
 
 	lib.MustEqual("mul(5,6)", "mul(15,2)")
 	lib.MustEqual("mul(5,6)", "u64/30")
 	lib.MustEqual("mul(u16/1337, 0)", "u64/0")
 	lib.MustEqual("mul(0, u32/1337133700)", "u64/0")
-	lib.MustError("mul(nil, 5)", "wrong size of parameters")
+	lib.MustError("mul(nil, 5)", "wrong size of parameter")
 
 	lib.MustEqual("div(100,100)", "u64/1")
 	lib.MustEqual("div(100,110)", "u64/0")
 	lib.MustEqual("div(u32/10000,u16/10000)", "u64/1")
 	lib.MustEqual("div(0, u32/1337133700)", "u64/0")
 	lib.MustError("div(u32/1337133700, 0)", "integer divide by zero")
-	lib.MustError("div(nil, 5)", "wrong size of parameters")
+	lib.MustError("div(nil, 5)", "wrong size of parameter")
 
 	lib.MustEqual("mod(100,100)", "u64/0")
 	lib.MustEqual("mod(107,100)", "u64/7")
 	lib.MustEqual("mod(u32/10100,u16/10000)", "u64/100")
 	lib.MustEqual("mod(0, u32/1337133700)", "u64/0")
 	lib.MustError("mod(u32/1337133700, 0)", "integer divide by zero")
-	lib.MustError("mod(nil, 5)", "wrong size of parameters")
+	lib.MustError("mod(nil, 5)", "wrong size of parameter")
 	lib.MustEqual("add(mul(div(u32/27, u16/4), 4), mod(u32/27, 4))", "u64/27")
-
-	lib.MustTrue("equalUint(100,100)")
-	lib.MustTrue("equalUint(100,u32/100)")
-	lib.MustTrue("not(equalUint(100,u32/1337))")
-	lib.MustError("equalUint(nil, 5)", "wrong size of parameters")
 }
 
 func (lib *Library) embedBitwiseAndCmp() {
@@ -179,13 +174,13 @@ func (lib *Library) embedBitwiseAndCmp() {
 	lib.MustEqual("lshift64(u64/3, u64/2)", "u64/12")
 	lib.MustTrue("isZero(lshift64(u64/2001, u64/64))")
 	lib.MustTrue("equal(lshift64(u64/2001, u64/4), mul(u64/2001, u16/16))")
-	lib.MustError("lshift64(u64/2001, nil)", "wrong size of parameters")
+	lib.MustError("lshift64(u64/2001, nil)", "wrong size of parameter")
 
 	//lib.embedLong("rshift64", 2, evalRShift64)
 	lib.MustEqual("rshift64(u64/15, u64/2)", "u64/3")
 	lib.MustTrue("isZero(rshift64(0xffffffffffffffff, u64/64))")
 	lib.MustTrue("equal(rshift64(u64/2001, u64/3), div(u64/2001, 8))")
-	lib.MustError("rshift64(u64/2001, nil)", "wrong size of parameters")
+	lib.MustError("rshift64(u64/2001, nil)", "wrong size of parameter")
 }
 
 func (lib *Library) embedBaseCrypto() {
@@ -414,18 +409,30 @@ func evalOr(par *CallParams) []byte {
 	return nil
 }
 
+func ensureUint64Bytes(data []byte) ([]byte, bool) {
+	if len(data) == 8 {
+		return data, true
+	}
+	if len(data) == 0 || len(data) > 8 {
+		return nil, false
+	}
+	ret := make([]byte, 8)
+	copy(ret[8-len(data):], data)
+	return ret, true
+}
+
 // mustArithmeticArgs makes uint64 from both params (bigendian)
 // Parameters must be not nil with size <= 8. They are padded with 0 in upper bytes, if necessary
 func mustArithmeticArgs(par *CallParams, name string) (uint64, uint64) {
-	a0 := par.Arg(0)
-	a1 := par.Arg(1)
-	if len(a0) == 0 || len(a1) == 0 || len(a0) > 8 || len(a1) > 8 {
-		par.TracePanic("%s:: wrong size of parameters", name)
+	a0, ok := ensureUint64Bytes(par.Arg(0))
+	if !ok {
+		par.TracePanic("%s:: wrong size of parameter 0", name)
 	}
-	var a0b, a1b [8]byte
-	copy(a0b[8-len(a0):], a0)
-	copy(a1b[8-len(a1):], a1)
-	return binary.BigEndian.Uint64(a0b[:]), binary.BigEndian.Uint64(a1b[:])
+	a1, ok := ensureUint64Bytes(par.Arg(1))
+	if !ok {
+		par.TracePanic("%s:: wrong size of parameter 1", name)
+	}
+	return binary.BigEndian.Uint64(a0), binary.BigEndian.Uint64(a1)
 }
 
 func evalAddUint(par *CallParams) []byte {
@@ -464,6 +471,14 @@ func evalModuloUint(par *CallParams) []byte {
 	var ret [8]byte
 	binary.BigEndian.PutUint64(ret[:], a0%a1)
 	return ret[:]
+}
+
+func evalUint64Bytes(par *CallParams) []byte {
+	ret, ok := ensureUint64Bytes(par.Arg(0))
+	if !ok {
+		par.TracePanic("%s:: wrong size of parameter", "uint64Bytes")
+	}
+	return ret
 }
 
 func evalEqualUint(par *CallParams) []byte {
