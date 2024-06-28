@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"math"
 	"reflect"
 
 	"golang.org/x/crypto/blake2b"
@@ -18,7 +17,7 @@ import (
 //  - do we need short end long embedding?
 
 var (
-	embedShortBase = []*EmbedFunction{
+	embedShortBase = []*EmbeddedFunctionData{
 		{"fail", 1, evalFail},
 		{"slice", 3, evalSlice},
 		{"byte", 2, evalByte},
@@ -30,40 +29,43 @@ var (
 		{"if", 3, evalIf},
 		{"isZero", 1, evalIsZero},
 	}
-	embedLongBase = []*EmbedFunction{
+	embedLongBase = []*EmbeddedFunctionData{
 		{"concat", -1, evalConcat},
 		{"and", -1, evalAnd},
 		{"or", -1, evalOr},
 		{"repeat", 2, evalRepeat},
+		{"firstCaseIndex", -1, evalFirstCaseIndex},
+		{"firstEqualIndex", -1, evalFirstEqualIndex},
+		{"selectCaseByIndex", -1, evalSelectCaseByIndex},
 	}
-	embedArithmeticsShort = []*EmbedFunction{
+	embedArithmeticsShort = []*EmbeddedFunctionData{
 		{"add", 2, evalAddUint},
 		{"sub", 2, evalSubUint},
 		{"mul", 2, evalMulUint},
 		{"div", 2, evalDivUint},
 		{"mod", 2, evalModuloUint},
-		{"equalUint", 2, evalEqualUint},
+		{"uint64Bytes", 1, evalUint64Bytes},
 	}
-	embedBitwiseAndCmpShort = []*EmbedFunction{
+	embedBitwiseAndCmpShort = []*EmbeddedFunctionData{
 		{"lessThan", 2, evalLessThan},
 		{"bitwiseOR", 2, evalBitwiseOR},
 		{"bitwiseAND", 2, evalBitwiseAND},
 		{"bitwiseNOT", 1, evalBitwiseNOT},
 		{"bitwiseXOR", 2, evalBitwiseXOR},
 	}
-	embedBitwiseAndCmpLong = []*EmbedFunction{
+	embedBitwiseAndCmpLong = []*EmbeddedFunctionData{
 		{"lshift64", 2, evalLShift64},
 		{"rshift64", 2, evalRShift64},
 	}
-	embedBaseCrypto = []*EmbedFunction{
+	embedBaseCrypto = []*EmbeddedFunctionData{
 		{"validSignatureED25519", 3, evalValidSigED25519},
 		{"blake2b", -1, evalBlake2b},
 	}
-	embedBytecodeManipulation = func(lib *Library) []*EmbedFunction {
-		return []*EmbedFunction{
-			{"unwrapBytecodeArg", 3, lib.evalUnwrapBytecodeArg},
-			{"parseBytecodePrefix", 1, lib.evalParseBytecodePrefix},
-			{"evalBytecodeArg", 3, lib.evalEvalBytecodeArg},
+	embedBytecodeManipulation = func(lib *Library) []*EmbeddedFunctionData {
+		return []*EmbeddedFunctionData{
+			{"parseArgumentBytecode", 3, lib.evalParseArgumentBytecode},
+			{"parsePrefixBytecode", 1, lib.evalParsePrefixBytecode},
+			{"eval", 1, lib.evalBytecode}, // evaluates closed formula
 		}
 	}
 )
@@ -116,40 +118,35 @@ func (lib *Library) embedArithmetics() {
 	lib.MustEqual("add(5,6)", "u64/11")
 	lib.MustEqual("add(0, 0)", "u64/0")
 	lib.MustEqual("add(u16/1337, 0)", "u64/1337")
-	lib.MustError("add(nil, 0)", "wrong size of parameters")
+	lib.MustError("add(nil, 0)", "wrong size of parameter")
 
 	lib.MustEqual("sub(6,6)", "u64/0")
 	lib.MustEqual("sub(6,5)", "u64/1")
 	lib.MustEqual("sub(0, 0)", "u64/0")
 	lib.MustEqual("sub(u16/1337, 0)", "u64/1337")
-	lib.MustError("sub(nil, 0)", "wrong size of parameters")
+	lib.MustError("sub(nil, 0)", "wrong size of parameter")
 	lib.MustError("sub(10, 100)", "underflow in subtraction")
 
 	lib.MustEqual("mul(5,6)", "mul(15,2)")
 	lib.MustEqual("mul(5,6)", "u64/30")
 	lib.MustEqual("mul(u16/1337, 0)", "u64/0")
 	lib.MustEqual("mul(0, u32/1337133700)", "u64/0")
-	lib.MustError("mul(nil, 5)", "wrong size of parameters")
+	lib.MustError("mul(nil, 5)", "wrong size of parameter")
 
 	lib.MustEqual("div(100,100)", "u64/1")
 	lib.MustEqual("div(100,110)", "u64/0")
 	lib.MustEqual("div(u32/10000,u16/10000)", "u64/1")
 	lib.MustEqual("div(0, u32/1337133700)", "u64/0")
 	lib.MustError("div(u32/1337133700, 0)", "integer divide by zero")
-	lib.MustError("div(nil, 5)", "wrong size of parameters")
+	lib.MustError("div(nil, 5)", "wrong size of parameter")
 
 	lib.MustEqual("mod(100,100)", "u64/0")
 	lib.MustEqual("mod(107,100)", "u64/7")
 	lib.MustEqual("mod(u32/10100,u16/10000)", "u64/100")
 	lib.MustEqual("mod(0, u32/1337133700)", "u64/0")
 	lib.MustError("mod(u32/1337133700, 0)", "integer divide by zero")
-	lib.MustError("mod(nil, 5)", "wrong size of parameters")
+	lib.MustError("mod(nil, 5)", "wrong size of parameter")
 	lib.MustEqual("add(mul(div(u32/27, u16/4), 4), mod(u32/27, 4))", "u64/27")
-
-	lib.MustTrue("equalUint(100,100)")
-	lib.MustTrue("equalUint(100,u32/100)")
-	lib.MustTrue("not(equalUint(100,u32/1337))")
-	lib.MustError("equalUint(nil, 5)", "wrong size of parameters")
 }
 
 func (lib *Library) embedBitwiseAndCmp() {
@@ -177,13 +174,13 @@ func (lib *Library) embedBitwiseAndCmp() {
 	lib.MustEqual("lshift64(u64/3, u64/2)", "u64/12")
 	lib.MustTrue("isZero(lshift64(u64/2001, u64/64))")
 	lib.MustTrue("equal(lshift64(u64/2001, u64/4), mul(u64/2001, u16/16))")
-	lib.MustError("lshift64(u64/2001, nil)", "wrong size of parameters")
+	lib.MustError("lshift64(u64/2001, nil)", "wrong size of parameter")
 
 	//lib.embedLong("rshift64", 2, evalRShift64)
 	lib.MustEqual("rshift64(u64/15, u64/2)", "u64/3")
 	lib.MustTrue("isZero(rshift64(0xffffffffffffffff, u64/64))")
 	lib.MustTrue("equal(rshift64(u64/2001, u64/3), div(u64/2001, 8))")
-	lib.MustError("rshift64(u64/2001, nil)", "wrong size of parameters")
+	lib.MustError("rshift64(u64/2001, nil)", "wrong size of parameter")
 }
 
 func (lib *Library) embedBaseCrypto() {
@@ -196,51 +193,18 @@ func (lib *Library) embedBaseCrypto() {
 
 func (lib *Library) embedBytecodeManipulation() {
 	// code parsing
-	// $0 - EasyFL bytecode
-	// $1 - expected call prefix (#-literal)
-	// $2 - number of the parameter to return
-	// Panics if the bytecode is not the valid call of the specified function or number of the parameter is out of bounds
-	// Returns code of the argument if it is a call function, or data is it is a constant
-	//lib.embedLong("unwrapBytecodeArg", 3, lib.evalUnwrapBytecodeArg)
-	//lib.embedLong("parseBytecodePrefix", 1, lib.evalParseBytecodePrefix)
-	//lib.embedLong("evalBytecodeArg", 3, lib.evalEvalBytecodeArg)
 	lib.UpgradeWthEmbeddedLong(embedBytecodeManipulation(lib)...)
 
 	_, _, binCode, err := lib.CompileExpression("slice(0x01020304,1,2)")
 	AssertNoError(err)
-	src := fmt.Sprintf("unwrapBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 0)
+	src := fmt.Sprintf("eval(parseArgumentBytecode(0x%s, #slice, %d))", hex.EncodeToString(binCode), 0)
 	lib.MustEqual(src, "0x01020304")
-	src = fmt.Sprintf("unwrapBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 1)
+	src = fmt.Sprintf("eval(parseArgumentBytecode(0x%s, #slice, %d))", hex.EncodeToString(binCode), 1)
 	lib.MustEqual(src, "1")
-	src = fmt.Sprintf("unwrapBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 2)
+	src = fmt.Sprintf("eval(parseArgumentBytecode(0x%s, #slice, %d))", hex.EncodeToString(binCode), 2)
 	lib.MustEqual(src, "2")
-	src = fmt.Sprintf("parseBytecodePrefix(0x%s)", hex.EncodeToString(binCode))
+	src = fmt.Sprintf("parsePrefixBytecode(0x%s)", hex.EncodeToString(binCode))
 	lib.MustEqual(src, "#slice")
-
-	src = fmt.Sprintf("evalBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 0)
-	lib.MustEqual(src, "0x01020304")
-	src = fmt.Sprintf("evalBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 1)
-	lib.MustEqual(src, "1")
-	src = fmt.Sprintf("evalBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 2)
-	lib.MustEqual(src, "2")
-
-	_, _, binCode, err = lib.CompileExpression("slice(concat(1,2,concat(3,4)),1,2)")
-	AssertNoError(err)
-	src = fmt.Sprintf("evalBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 0)
-	lib.MustEqual(src, "0x01020304")
-	src = fmt.Sprintf("evalBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 1)
-	lib.MustEqual(src, "1")
-	src = fmt.Sprintf("evalBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 2)
-	lib.MustEqual(src, "2")
-
-	_, _, binCode, err = lib.CompileExpression("slice(concat(1,concat(2,3),4),byte(0x020301, 2),add(1,1))")
-	AssertNoError(err)
-	src = fmt.Sprintf("evalBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 0)
-	lib.MustEqual(src, "0x01020304")
-	src = fmt.Sprintf("evalBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 1)
-	lib.MustEqual(src, "1")
-	src = fmt.Sprintf("evalBytecodeArg(0x%s, #slice, %d)", hex.EncodeToString(binCode), 2)
-	lib.MustEqual(src, "u64/2")
 }
 
 // -----------------------------------------------------------------
@@ -326,21 +290,10 @@ func evalRepeat(par *CallParams) []byte {
 	fragment := par.Arg(0)
 	n := par.Arg(1)
 	if len(n) != 1 {
-		par.TracePanic("evalRepeat: count must 1-byte long")
+		par.TracePanic("evalRepeat: count must be 1-byte long")
 	}
 	ret := bytes.Repeat(fragment, int(n[0]))
 	par.Trace("hasPrefix:: %s, %s -> %s", Fmt(fragment), Fmt(n), Fmt(ret))
-	return ret
-}
-
-func evalLen8(par *CallParams) []byte {
-	arg := par.Arg(0)
-	sz := len(arg)
-	if sz > math.MaxUint8 {
-		par.TracePanic("len8:: size of the data > 255: %s", Fmt(arg))
-	}
-	ret := []byte{byte(sz)}
-	par.Trace("len8:: %s -> %s", Fmt(arg), Fmt(ret))
 	return ret
 }
 
@@ -362,6 +315,44 @@ func evalIf(par *CallParams) []byte {
 	no := par.Arg(2)
 	par.Trace("if:: %s -> %s", Fmt(cond), Fmt(no))
 	return no
+}
+
+func evalFirstCaseIndex(par *CallParams) []byte {
+	for i := byte(0); i < par.Arity(); i++ {
+		if ret := par.Arg(i); len(ret) > 0 {
+			par.Trace("firstCaseIndex:: -> %d", i)
+			return []byte{i}
+		}
+	}
+	par.Trace("firstCaseIndex:: -> nil")
+	return nil
+}
+
+func evalFirstEqualIndex(par *CallParams) []byte {
+	if par.Arity() == 0 {
+		return nil
+	}
+
+	v := par.Arg(0)
+	for i := byte(1); i < par.Arity(); i++ {
+		if bytes.Equal(v, par.Arg(i)) {
+			par.Trace("firstEqualIndex:: -> %d", i)
+			return []byte{i - 1}
+		}
+	}
+	par.Trace("firstEqualIndex:: -> nil")
+	return nil
+}
+
+func evalSelectCaseByIndex(par *CallParams) []byte {
+	if par.Arity() == 0 {
+		par.TracePanic("evalSelectCaseByIndex: must be at least 1 argument")
+	}
+	idx := par.Arg(0)
+	if len(idx) != 1 || idx[0]+1 >= par.Arity() {
+		return nil
+	}
+	return par.Arg(idx[0] + 1)
 }
 
 func evalIsZero(par *CallParams) []byte {
@@ -418,18 +409,30 @@ func evalOr(par *CallParams) []byte {
 	return nil
 }
 
+func ensureUint64Bytes(data []byte) ([]byte, bool) {
+	if len(data) == 8 {
+		return data, true
+	}
+	if len(data) == 0 || len(data) > 8 {
+		return nil, false
+	}
+	ret := make([]byte, 8)
+	copy(ret[8-len(data):], data)
+	return ret, true
+}
+
 // mustArithmeticArgs makes uint64 from both params (bigendian)
 // Parameters must be not nil with size <= 8. They are padded with 0 in upper bytes, if necessary
 func mustArithmeticArgs(par *CallParams, name string) (uint64, uint64) {
-	a0 := par.Arg(0)
-	a1 := par.Arg(1)
-	if len(a0) == 0 || len(a1) == 0 || len(a0) > 8 || len(a1) > 8 {
-		par.TracePanic("%s:: wrong size of parameters", name)
+	a0, ok := ensureUint64Bytes(par.Arg(0))
+	if !ok {
+		par.TracePanic("%s:: wrong size of parameter 0", name)
 	}
-	var a0b, a1b [8]byte
-	copy(a0b[8-len(a0):], a0)
-	copy(a1b[8-len(a1):], a1)
-	return binary.BigEndian.Uint64(a0b[:]), binary.BigEndian.Uint64(a1b[:])
+	a1, ok := ensureUint64Bytes(par.Arg(1))
+	if !ok {
+		par.TracePanic("%s:: wrong size of parameter 1", name)
+	}
+	return binary.BigEndian.Uint64(a0), binary.BigEndian.Uint64(a1)
 }
 
 func evalAddUint(par *CallParams) []byte {
@@ -468,6 +471,14 @@ func evalModuloUint(par *CallParams) []byte {
 	var ret [8]byte
 	binary.BigEndian.PutUint64(ret[:], a0%a1)
 	return ret[:]
+}
+
+func evalUint64Bytes(par *CallParams) []byte {
+	ret, ok := ensureUint64Bytes(par.Arg(0))
+	if !ok {
+		par.TracePanic("%s:: wrong size of parameter", "uint64Bytes")
+	}
+	return ret
 }
 
 func evalEqualUint(par *CallParams) []byte {
@@ -590,73 +601,85 @@ func evalRShift64(par *CallParams) []byte {
 	return ret[:]
 }
 
-func (lib *Library) evalUnwrapBytecodeArg(par *CallParams) []byte {
+// evalParseArgumentBytecode takes bytecode of the argument as is.
+// Note: data prefix is not stripped. To get data it muts be evaluated
+func (lib *Library) evalParseArgumentBytecode(par *CallParams) []byte {
 	a0 := par.Arg(0)
 	_, prefix, args, err := lib.ParseBytecodeOneLevel(a0)
 	if err != nil {
-		par.TracePanic("evalUnwrapBytecodeArg:: %v", err)
+		par.TracePanic("evalParseArgumentBytecode:: %v", err)
 	}
 	expectedPrefix := par.Arg(1)
 	idx := par.Arg(2)
 	if !bytes.Equal(prefix, expectedPrefix) {
 		_, _, _, symPrefix, err := lib.parseCallPrefix(prefix)
 		if err != nil {
-			par.TracePanic("evalUnwrapBytecodeArg: can't parse prefix '%s': %v", Fmt(prefix), err)
+			par.TracePanic("evalParseArgumentBytecode: can't parse prefix '%s': %v", Fmt(prefix), err)
 		}
 		_, _, _, symExpectedPrefix, err := lib.parseCallPrefix(expectedPrefix)
 		if err != nil {
-			par.TracePanic("evalUnwrapBytecodeArg: can't parse expected prefix '%s': %v", Fmt(expectedPrefix), err)
+			par.TracePanic("evalParseArgumentBytecode: can't parse expected prefix '%s': %v", Fmt(expectedPrefix), err)
 		}
-		par.TracePanic("evalUnwrapBytecodeArg: unexpected function prefix. Expected '%s'('%s'), got '%s'('%s')",
+		par.TracePanic("evalParseArgumentBytecode: unexpected function prefix. Expected '%s'('%s'), got '%s'('%s')",
 			Fmt(expectedPrefix), symExpectedPrefix, Fmt(prefix), symPrefix)
 	}
 	if len(idx) != 1 || len(args) <= int(idx[0]) {
-		par.TracePanic("evalUnwrapBytecodeArg: wrong parameter index")
+		par.TracePanic("evalParseArgumentBytecode: wrong parameter index")
 	}
-	ret := StripDataPrefix(args[idx[0]])
+	//ret := StripDataPrefix(args[idx[0]])
+	ret := args[idx[0]]
 	par.Trace("unwrapBytecodeArg:: %s, %s, %s -> %s", Fmt(a0), Fmt(expectedPrefix), Fmt(idx), Fmt(ret))
 	return ret
 }
 
-func (lib *Library) evalParseBytecodePrefix(par *CallParams) []byte {
+func (lib *Library) evalParsePrefixBytecode(par *CallParams) []byte {
 	code := par.Arg(0)
-	prefix, err := lib.ParseBytecodePrefix(code)
+	prefix, err := lib.ParsePrefixBytecode(code)
 	if err != nil {
-		par.TracePanic("evalParseBytecodePrefix: %v", err)
+		par.TracePanic("evalParsePrefixBytecode: %v", err)
 	}
 	par.Trace("parseBytecodePrefix::%s -> %s", Fmt(code), Fmt(prefix))
 	return prefix
 }
 
-func (lib *Library) evalEvalBytecodeArg(par *CallParams) []byte {
+func (lib *Library) evalBytecodeArg(par *CallParams) []byte {
 	a0 := par.Arg(0)
 	_, prefix, args, err := lib.ParseBytecodeOneLevel(a0)
 	if err != nil {
-		par.TracePanic("evalUnwrapBytecodeArg:: %v", err)
+		par.TracePanic("evalParseArgumentBytecode:: %v", err)
 	}
 	expectedPrefix := par.Arg(1)
 	idx := par.Arg(2)
 	if !bytes.Equal(prefix, expectedPrefix) {
 		_, _, _, symPrefix, err := lib.parseCallPrefix(prefix)
 		if err != nil {
-			par.TracePanic("evalEvalBytecodeArg: can't parse prefix '%s': %v", Fmt(prefix), err)
+			par.TracePanic("evalBytecodeArg: can't parse prefix '%s': %v", Fmt(prefix), err)
 		}
 		_, _, _, symExpectedPrefix, err := lib.parseCallPrefix(expectedPrefix)
 		if err != nil {
-			par.TracePanic("evalEvalBytecodeArg: can't parse expected prefix '%s': %v", Fmt(expectedPrefix), err)
+			par.TracePanic("evalBytecodeArg: can't parse expected prefix '%s': %v", Fmt(expectedPrefix), err)
 		}
-		par.TracePanic("evalEvalBytecodeArg: unexpected function prefix. Expected '%s'('%s'), got '%s'('%s')",
+		par.TracePanic("evalBytecodeArg: unexpected function prefix. Expected '%s'('%s'), got '%s'('%s')",
 			Fmt(expectedPrefix), symExpectedPrefix, Fmt(prefix), symPrefix)
 	}
 	if len(idx) != 1 || len(args) <= int(idx[0]) {
-		par.TracePanic("evalUnwrapBytecodeArg: wrong parameter index")
+		par.TracePanic("evalParseArgumentBytecode: wrong parameter index")
 	}
 
 	ret, err := lib.EvalFromBytecode(par.ctx.glb, args[idx[0]])
 	if err != nil {
-		par.TracePanic("evaldBytecodeArg:: %s, %s, %s", Fmt(a0), Fmt(expectedPrefix), Fmt(idx))
+		par.TracePanic("evalBytecodeArg:: %s, %s, %s", Fmt(a0), Fmt(expectedPrefix), Fmt(idx))
 	}
 
-	par.Trace("evaldBytecodeArg:: %s, %s, %s -> %s", Fmt(a0), Fmt(expectedPrefix), Fmt(idx), Fmt(ret))
+	par.Trace("evalBytecodeArg:: %s, %s, %s -> %s", Fmt(a0), Fmt(expectedPrefix), Fmt(idx), Fmt(ret))
+	return ret
+}
+
+func (lib *Library) evalBytecode(par *CallParams) []byte {
+	ret, err := lib.EvalFromBytecode(par.ctx.glb, par.Arg(0))
+	if err != nil {
+		par.TracePanic("evalBytecode:: %v", err)
+	}
+	par.Trace("evalBytecode:: %s} -> %s", Fmt(par.Arg(0)), Fmt(ret))
 	return ret
 }

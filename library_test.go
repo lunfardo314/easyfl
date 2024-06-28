@@ -64,7 +64,7 @@ func TestCompile(t *testing.T) {
 		require.NoError(t, err)
 		_, _, code, err := lib.CompileExpression("concat")
 		require.NoError(t, err)
-		prefix1, err := lib.ParseBytecodePrefix(code)
+		prefix1, err := lib.ParsePrefixBytecode(code)
 		require.NoError(t, err)
 		require.True(t, bytes.Equal(prefix, prefix1))
 	})
@@ -74,7 +74,7 @@ func TestCompile(t *testing.T) {
 		require.NoError(t, err)
 		_, _, code, err := lib.CompileExpression("tail(0x010203, 2)")
 		require.NoError(t, err)
-		prefix1, err := lib.ParseBytecodePrefix(code)
+		prefix1, err := lib.ParsePrefixBytecode(code)
 		require.NoError(t, err)
 		require.True(t, bytes.Equal(prefix, prefix1))
 	})
@@ -941,4 +941,212 @@ func TestLocalLibrary(t *testing.T) {
 		RequireErrorWith(t, err, "function index is out of library bounds")
 	})
 
+}
+
+func TestBytecodeParams(t *testing.T) {
+	lib := NewBase()
+	t.Run("1", func(t *testing.T) {
+		const src = "concat(1,2)"
+		_, _, code, err := lib.CompileExpression(src)
+		require.NoError(t, err)
+
+		src1 := fmt.Sprintf("bytecode(%s)", src)
+		expr1, nPar, code1, err := lib.CompileExpression(src1)
+		require.NoError(t, err)
+		require.EqualValues(t, 0, nPar)
+		t.Logf("compile '%s' -> %s", src1, Fmt(code1))
+
+		res := EvalExpression(nil, expr1)
+		t.Logf("Result: '%s'", Fmt(res))
+
+		require.EqualValues(t, code, res)
+
+		decompiled1, err := lib.DecompileBytecode(code1)
+		require.NoError(t, err)
+		t.Logf("decompiled1: '%s'", decompiled1)
+
+		decompiled, err := lib.DecompileBytecode(code)
+		require.NoError(t, err)
+		t.Logf("decompiled: '%s'", decompiled)
+	})
+	t.Run("2", func(t *testing.T) {
+		const src = "and(concat(1,2), if(1,2,3))"
+		_, _, code, err := lib.CompileExpression(src)
+		require.NoError(t, err)
+
+		src1 := fmt.Sprintf("bytecode(%s)", src)
+		expr1, nPar, code1, err := lib.CompileExpression(src1)
+		require.NoError(t, err)
+		require.EqualValues(t, 0, nPar)
+		t.Logf("compile '%s' -> %s", src1, Fmt(code1))
+
+		res := EvalExpression(nil, expr1)
+		t.Logf("Result: '%s'", Fmt(res))
+
+		require.EqualValues(t, code, res)
+
+		decompiled1, err := lib.DecompileBytecode(code1)
+		require.NoError(t, err)
+		t.Logf("decompiled: '%s'", decompiled1)
+
+		decompiled, err := lib.DecompileBytecode(code)
+		require.NoError(t, err)
+		t.Logf("decompiled: '%s'", decompiled)
+	})
+	t.Run("3", func(t *testing.T) {
+		const src = "concat($0,$$0)"
+
+		expr, n, code, err := lib.CompileExpression(src)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, n)
+		t.Logf("code: %s", Fmt(code))
+
+		res := EvalExpression(nil, expr, []byte{0xff})
+		t.Logf("eval: %s", Fmt(res))
+		require.EqualValues(t, []byte{0xff, 0x81, 0xff}, res)
+	})
+	t.Run("3-1", func(t *testing.T) {
+		const src = "concat(1,$$0, $$1, $$2)"
+
+		expr, n, code, err := lib.CompileExpression(src)
+		require.NoError(t, err)
+		require.EqualValues(t, 3, n)
+		t.Logf("code: %s", Fmt(code))
+
+		res := EvalExpression(nil, expr, []byte{0xff}, []byte{0xff}, []byte{0xff})
+		t.Logf("eval: %s", Fmt(res))
+		require.EqualValues(t, hex.EncodeToString(res), "0181ff81ff81ff")
+	})
+	t.Run("4", func(t *testing.T) {
+		res, err := lib.EvalFromSource(nil, "concat(42,41)")
+		require.NoError(t, err)
+
+		require.EqualValues(t, res, []byte{42, 41})
+
+		res1, err := lib.EvalFromSource(nil, "eval(bytecode(concat(42,41)))")
+		require.NoError(t, err)
+		require.EqualValues(t, res, res1)
+	})
+	t.Run("5", func(t *testing.T) {
+		sources := []string{"123", "0x", "u64/1234567890", "concat(1,2,3)", "lessOrEqualThan(1,2)", "lessOrEqualThan(2, 1)",
+			"lessOrEqualThan(0xabcdef123456, 0xabcdef123000)", "concat(1,concat(2,3), concat)", "nil"}
+		for _, src := range sources {
+			lib.MustEqual(src, fmt.Sprintf("eval(bytecode(%s))", src))
+		}
+	})
+	t.Run("6", func(t *testing.T) {
+		const src = "lessOrEqualThan(0xabcdef123456,0xabcdef123000)"
+		t.Logf("orig: %s", src)
+		srcBytecode := fmt.Sprintf("bytecode(%s)", src)
+		code, err := lib.EvalFromSource(nil, srcBytecode)
+		require.NoError(t, err)
+		t.Logf("code: %s", Fmt(code))
+		decomp, err := lib.DecompileBytecode(code)
+		require.NoError(t, err)
+		t.Logf("decompile: %s", decomp)
+		require.EqualValues(t, src, decomp)
+
+		srcParse := fmt.Sprintf("evalArgumentBytecode(0x%s,#lessOrEqualThan, 1)", hex.EncodeToString(code))
+		lib.MustEqual(srcParse, "0xabcdef123000")
+	})
+	t.Run("7", func(t *testing.T) {
+		const src = "lessOrEqualThan(0xabcdef123456,0xabcdef123000)"
+		t.Logf("orig: %s", src)
+		srcBytecode := fmt.Sprintf("bytecode(%s)", src)
+		code, err := lib.EvalFromSource(nil, srcBytecode)
+		require.NoError(t, err)
+		t.Logf("code: %s", Fmt(code))
+		decomp, err := lib.DecompileBytecode(code)
+		require.NoError(t, err)
+		t.Logf("decompile: %s", decomp)
+		require.EqualValues(t, src, decomp)
+
+		prefix, err := lib.EvalFromSource(nil, fmt.Sprintf("parsePrefixBytecode(0x%x)", code))
+		require.NoError(t, err)
+		arg0, err := lib.EvalFromSource(nil, fmt.Sprintf("parseArgumentBytecode(0x%x, #lessOrEqualThan, 0)", code))
+		require.NoError(t, err)
+		arg1, err := lib.EvalFromSource(nil, fmt.Sprintf("parseArgumentBytecode(0x%x, #lessOrEqualThan, 1)", code))
+		require.NoError(t, err)
+		require.EqualValues(t, code, concat(prefix, arg0, arg1))
+
+	})
+}
+
+func TestCases(t *testing.T) {
+	lib := NewBase()
+	t.Run("1", func(t *testing.T) {
+		const src = `firstCaseIndex(
+			equal($0, 1),
+			equal($0, 2),
+			equal($0, 3),
+			equal($0, 4),
+			equal($0, 0xffff),
+		)
+`
+		expr, n, _, err := lib.CompileExpression(src)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, n)
+
+		res := EvalExpression(nil, expr, []byte{3})
+		require.EqualValues(t, []byte{2}, res)
+
+		res = EvalExpression(nil, expr, []byte{4})
+		require.EqualValues(t, []byte{3}, res)
+
+		res = EvalExpression(nil, expr, []byte{0})
+		require.True(t, len(res) == 0)
+
+		res = EvalExpression(nil, expr, []byte{7})
+		require.True(t, len(res) == 0)
+
+		res = EvalExpression(nil, expr, []byte{0xff, 0xff})
+		require.EqualValues(t, []byte{4}, res)
+	})
+	t.Run("2", func(t *testing.T) {
+		const src = "firstEqualIndex($0, 1, 2, 3, 4, 0xffff)"
+
+		expr, n, _, err := lib.CompileExpression(src)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, n)
+
+		res := EvalExpression(nil, expr, []byte{3})
+		require.EqualValues(t, []byte{2}, res)
+
+		res = EvalExpression(nil, expr, []byte{4})
+		require.EqualValues(t, []byte{3}, res)
+
+		res = EvalExpression(nil, expr, []byte{0})
+		require.True(t, len(res) == 0)
+
+		res = EvalExpression(nil, expr, []byte{7})
+		require.True(t, len(res) == 0)
+
+		res = EvalExpression(nil, expr, []byte{0xff, 0xff})
+		require.EqualValues(t, []byte{4}, res)
+	})
+	t.Run("3", func(t *testing.T) {
+		const src = "selectCaseByIndex($0, 1, 0x1234, add(5,3), true)"
+
+		expr, n, _, err := lib.CompileExpression(src)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, n)
+
+		res := EvalExpression(nil, expr, []byte{0})
+		require.EqualValues(t, []byte{1}, res)
+
+		res = EvalExpression(nil, expr, []byte{1})
+		require.EqualValues(t, []byte{0x12, 0x34}, res)
+
+		res = EvalExpression(nil, expr, []byte{2})
+		require.EqualValues(t, []byte{0, 0, 0, 0, 0, 0, 0, 8}, res)
+
+		res = EvalExpression(nil, expr, []byte{3})
+		require.EqualValues(t, []byte{0xff}, res)
+
+		res = EvalExpression(nil, expr, []byte{4})
+		require.True(t, len(res) == 0)
+
+		res = EvalExpression(nil, expr, []byte{0, 0})
+		require.True(t, len(res) == 0)
+	})
 }

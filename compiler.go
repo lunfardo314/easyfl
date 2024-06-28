@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -12,8 +13,6 @@ import (
 	"strings"
 	"unicode"
 )
-
-// TODO inline bytecode literal + 'eval' embedded function + $$ bytecode parameter
 
 // funParsed is an interim representation of the source code
 type funParsed struct {
@@ -229,8 +228,27 @@ func (f *parsedExpression) bytecodeFromParsedExpression(lib *Library, w io.Write
 	return numArgs, nil
 }
 
+func writeDataWithPrefix(w io.Writer, data []byte) error {
+	if len(data) > 127 {
+		return errors.New("too long inline data")
+	}
+	_, err := w.Write([]byte{FirstByteDataMask | byte(len(data))})
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(data)
+	return err
+}
+
+func mustDataWithPrefix(data []byte) []byte {
+	var buf bytes.Buffer
+	err := writeDataWithPrefix(&buf, data)
+	AssertNoError(err)
+	return buf.Bytes()
+}
+
 func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
-	// write inline data
+	// write bytecode data
 	n, err := strconv.Atoi(sym)
 	itIsANumber := err == nil
 
@@ -244,18 +262,31 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 			return false, 0, fmt.Errorf("integer constant value not uint8: %s", sym)
 		}
 		// it is a 1 byte value
-		if _, err = w.Write([]byte{FirstByteDataMask | byte(1), byte(n)}); err != nil {
+		if err = writeDataWithPrefix(w, []byte{byte(n)}); err != nil {
 			return false, 0, err
 		}
 		return true, 0, nil
+	case strings.HasPrefix(sym, "$$"):
+		// bytecode parameter reference function
+		n, err = strconv.Atoi(sym[2:])
+		if err != nil {
+			return false, 0, err
+		}
+		if n < 0 || n > MaxParameters {
+			return false, 0, fmt.Errorf("wrong bytecode parameter reference '%s'", sym)
+		}
+		if _, err = w.Write([]byte{BytecodeParameterFlag | byte(n)}); err != nil {
+			return false, 0, err
+		}
+		return true, n + 1, nil
 	case strings.HasPrefix(sym, "$"):
-		// parameter reference function
+		// eval parameter reference function
 		n, err = strconv.Atoi(sym[1:])
 		if err != nil {
 			return false, 0, err
 		}
 		if n < 0 || n > MaxParameters {
-			return false, 0, fmt.Errorf("wrong argument reference '%s'", sym)
+			return false, 0, fmt.Errorf("wrong eval parameter reference '%s'", sym)
 		}
 		if _, err = w.Write([]byte{byte(n)}); err != nil {
 			return false, 0, err
@@ -274,10 +305,7 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 		if len(b) > 127 {
 			return false, 0, fmt.Errorf("hexadecimal constant can't be longer than 127 bytes: '%s'", sym)
 		}
-		if _, err = w.Write([]byte{FirstByteDataMask | byte(len(b))}); err != nil {
-			return false, 0, err
-		}
-		if _, err = w.Write(b); err != nil {
+		if err = writeDataWithPrefix(w, b); err != nil {
 			return false, 0, err
 		}
 		return true, 0, nil
@@ -300,12 +328,9 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 		if n < 0 || n > math.MaxUint16 {
 			return false, 0, fmt.Errorf("wrong u16 constant: '%s'", sym)
 		}
-		b = make([]byte, 2)
-		binary.BigEndian.PutUint16(b, uint16(n))
-		if _, err = w.Write([]byte{FirstByteDataMask | byte(2)}); err != nil {
-			return false, 0, err
-		}
-		if _, err = w.Write(b); err != nil {
+		var b [2]byte
+		binary.BigEndian.PutUint16(b[:], uint16(n))
+		if err = writeDataWithPrefix(w, b[:]); err != nil {
 			return false, 0, err
 		}
 		return true, 0, nil
@@ -318,12 +343,9 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 		if n < 0 || n > math.MaxUint32 {
 			return false, 0, fmt.Errorf("wrong u32 constant: '%s'", sym)
 		}
-		b = make([]byte, 4)
-		binary.BigEndian.PutUint32(b, uint32(n))
-		if _, err = w.Write([]byte{FirstByteDataMask | byte(4)}); err != nil {
-			return false, 0, err
-		}
-		if _, err = w.Write(b); err != nil {
+		var b [4]byte
+		binary.BigEndian.PutUint32(b[:], uint32(n))
+		if err = writeDataWithPrefix(w, b[:]); err != nil {
 			return false, 0, err
 		}
 		return true, 0, nil
@@ -332,12 +354,9 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 		if un, err = strconv.ParseUint(strings.TrimPrefix(sym, "u64/"), 10, 64); err != nil {
 			return false, 0, fmt.Errorf("%v: '%s'", err, sym)
 		}
-		b = make([]byte, 8)
-		binary.BigEndian.PutUint64(b, un)
-		if _, err = w.Write([]byte{FirstByteDataMask | byte(8)}); err != nil {
-			return false, 0, err
-		}
-		if _, err = w.Write(b); err != nil {
+		var b [8]byte
+		binary.BigEndian.PutUint64(b[:], un)
+		if err = writeDataWithPrefix(w, b[:]); err != nil {
 			return false, 0, err
 		}
 		return true, 0, nil
@@ -408,7 +427,8 @@ func (lib *Library) ExpressionFromBytecode(code []byte, localLib ...*LocalLibrar
 		return nil, err
 	}
 	if len(remaining) != 0 {
-		return nil, fmt.Errorf("not all bytes have been consumed")
+		return nil, fmt.Errorf("ExpressionFromBytecode: not all bytes have been consumed in %s. Remaining: %s",
+			Fmt(code), Fmt(remaining))
 	}
 	return ret, nil
 }
@@ -502,9 +522,9 @@ func (lib *Library) expressionFromBytecode(bytecode []byte, localLib ...*LocalLi
 	if err != nil {
 		return nil, nil, 0xff, err
 	}
-	if len(callPrefix) == 1 && callPrefix[0] < EmbeddedReservedUntil {
+	if len(callPrefix) == 1 && callPrefix[0] < LastEmbeddedReserved {
 		// it is a parameter function call
-		maxParameterNumber = callPrefix[0]
+		maxParameterNumber = callPrefix[0] & (^BytecodeParameterFlag)
 	}
 	if len(callPrefix) == 1 && arity < 0 {
 		return nil, nil, 0xff, fmt.Errorf("EasyFL: short embedded with vararg is not allowed")
@@ -513,7 +533,6 @@ func (lib *Library) expressionFromBytecode(bytecode []byte, localLib ...*LocalLi
 
 	ret := &Expression{
 		Args:         make([]*Expression, 0),
-		EvalFunc:     nil,
 		FunctionName: sym,
 		CallPrefix:   callPrefix,
 	}
@@ -563,18 +582,28 @@ func (lib *Library) DecompileBytecode(code []byte) (string, error) {
 
 func dataFunction(data []byte) EvalFunction {
 	d := data
-	return func(par *CallParams) []byte {
-		par.Trace("-> %s", Fmt(d))
-		return data
+	return EvalFunction{
+		EmbeddedFunction: func(par *CallParams) []byte {
+			par.Trace("-> %s", Fmt(d))
+			return data
+		},
+		bytecode: mustDataWithPrefix(data),
 	}
 }
 
+// parseCallPrefix returns:
+// - call prefix
+// - eval function
+// - call arity
+// - symbol
+// - error or nil
 func (lib *Library) parseCallPrefix(code []byte, localLib ...*LocalLibrary) ([]byte, EvalFunction, int, string, error) {
 	if len(code) == 0 || IsDataPrefix(code) {
-		return nil, nil, 0, "", fmt.Errorf("parseCallPrefix: not a function call")
+		return nil, EvalFunction{}, 0, "", fmt.Errorf("parseCallPrefix: not a function call")
 	}
 
 	var evalFun EvalFunction
+	var embeddedFun EmbeddedFunction
 	var numParams, arity int
 	var err error
 	var callPrefix []byte
@@ -582,46 +611,66 @@ func (lib *Library) parseCallPrefix(code []byte, localLib ...*LocalLibrary) ([]b
 
 	if code[0]&FirstByteLongCallMask == 0 {
 		// short call
-		if code[0] < EmbeddedReservedUntil {
-			// param reference
-			evalFun = evalParamFun(code[0])
-			sym = fmt.Sprintf("$%d", code[0])
+		if code[0] <= LastEmbeddedReserved {
+			// this is param reference
+			if code[0]&BytecodeParameterFlag == 0 {
+				// eval param reference
+				evalFun = EvalFunction{
+					EmbeddedFunction: evalEvalParamFun(code[0]),
+				}
+				sym = fmt.Sprintf("$%d", code[0])
+			} else {
+				// bytecode param reference
+				paramNr := code[0] & (^BytecodeParameterFlag)
+				evalFun = EvalFunction{
+					EmbeddedFunction: evalBytecodeParamFun(paramNr),
+				}
+				sym = fmt.Sprintf("$$%d", paramNr)
+			}
 		} else {
-			evalFun, arity, sym, err = lib.functionByCode(uint16(code[0]))
+			embeddedFun, arity, sym, err = lib.functionByCode(uint16(code[0]))
 			if err != nil {
-				return nil, nil, 0, sym, err
+				return nil, EvalFunction{}, 0, sym, err
+			}
+			evalFun = EvalFunction{
+				EmbeddedFunction: embeddedFun,
+				bytecode:         code,
 			}
 		}
 		callPrefix = code[:1]
 	} else {
 		// long call
 		if len(code) < 2 {
-			return nil, nil, 0, "", io.EOF
+			return nil, EvalFunction{}, 0, "", io.EOF
 		}
 		arity = int((code[0] & FirstByteLongCallArityMask) >> 2)
 		t := binary.BigEndian.Uint16(code[:2])
 		idx := t & Uint16LongCallCodeMask
 		if idx > FirstLocalFunCode {
-			return nil, nil, 0, "", fmt.Errorf("wrong call prefix")
+			return nil, EvalFunction{}, 0, "", fmt.Errorf("wrong call prefix")
 		}
 		callPrefix = code[:2]
 		if idx == FirstLocalFunCode {
 			// it is a local library call
 			if len(localLib) == 0 {
-				return nil, nil, 0, "", fmt.Errorf("local library not provided")
+				return nil, EvalFunction{}, 0, "", fmt.Errorf("local library not provided")
 			}
 			if len(code) < 3 {
-				return nil, nil, 0, "", io.EOF
+				return nil, EvalFunction{}, 0, "", io.EOF
 			}
 			idx = uint16(FirstLocalFunCode) + uint16(code[2])
 			callPrefix = code[:3]
 		}
-		evalFun, numParams, sym, err = lib.functionByCode(idx, localLib...)
+		embeddedFun, numParams, sym, err = lib.functionByCode(idx, localLib...)
 		if err != nil {
-			return nil, nil, 0, "", err
+			return nil, EvalFunction{}, 0, "", err
 		}
 		if numParams > 0 && numParams != arity {
-			return nil, nil, 0, "", fmt.Errorf("wrong number of call args")
+			return nil, EvalFunction{}, 0, "", fmt.Errorf("wrong number of call args")
+		}
+		evalFun = EvalFunction{
+			EmbeddedFunction: embeddedFun,
+			bytecode:         code,
 		}
 	}
 	return callPrefix, evalFun, arity, sym, nil
@@ -664,13 +713,13 @@ func StripDataPrefix(data []byte) []byte {
 	return data
 }
 
-// ParseBytecodePrefix tries to parse first 1, 2 or 3 bytes as a prefix, which contains
+// ParsePrefixBytecode tries to parse first 1, 2 or 3 bytes as a prefix, which contains
 // all information about the function call (if it is not inline data)
 // Returns:
 // 1 byte for short call
 // 2 bytes for long calls
 // 3 bytes for local library call
-func (lib *Library) ParseBytecodePrefix(code []byte) ([]byte, error) {
+func (lib *Library) ParsePrefixBytecode(code []byte) ([]byte, error) {
 	callPrefix, _, _, _, err := lib.parseCallPrefix(code)
 	if err != nil {
 		return nil, err
@@ -743,7 +792,7 @@ func ComposeBytecodeOneLevel(sym string, args [][]byte) string {
 	return ret
 }
 
-func makeEvalFunForExpression(sym string, expr *Expression) EvalFunction {
+func makeEmbeddedFunForExpression(sym string, expr *Expression) EmbeddedFunction {
 	return func(par *CallParams) []byte {
 		varScope := make([]*call, len(par.args))
 		for i := range varScope {
@@ -753,12 +802,4 @@ func makeEvalFunForExpression(sym string, expr *Expression) EvalFunction {
 		par.Trace("'%s':: %d params -> %s", sym, par.Arity(), Fmt(ret))
 		return ret
 	}
-}
-
-func (lib *Library) evalFunctionForBytecode(sym string, bytecode []byte) (EvalFunction, error) {
-	expr, err := lib.ExpressionFromBytecode(bytecode)
-	if err != nil {
-		return nil, err
-	}
-	return makeEvalFunForExpression(sym, expr), nil
 }

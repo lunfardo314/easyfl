@@ -40,16 +40,16 @@ func (lib *Library) CompileLocalLibrary(source string) ([][]byte, error) {
 		if numParam > 15 {
 			return nil, errors.New("can't be more than 15 parameters")
 		}
-		evalFun := makeEvalFunForExpression(pf.Sym, f)
+		embeddedFun := makeEmbeddedFunForExpression(pf.Sym, f)
 		if traceYN {
-			evalFun = wrapWithTracing(evalFun, pf.Sym)
+			embeddedFun = wrapWithTracing(embeddedFun, pf.Sym)
 		}
 		funCode := FirstLocalFunCode + uint16(len(libLoc.funByName))
 		dscr := &funDescriptor{
 			sym:               pf.Sym,
 			funCode:           funCode,
 			requiredNumParams: numParam,
-			evalFun:           evalFun,
+			embeddedFun:       embeddedFun,
 		}
 		libLoc.funByName[pf.Sym] = dscr
 		libLoc.funByFunCode = append(libLoc.funByFunCode, dscr)
@@ -82,7 +82,7 @@ func (lib *Library) LocalLibraryFromBytes(bin [][]byte) (*LocalLibrary, error) {
 			sym:               sym,
 			funCode:           uint16(FirstLocalFunCode + i),
 			requiredNumParams: numParams,
-			evalFun:           makeEvalFunForExpression(sym, expr),
+			embeddedFun:       makeEmbeddedFunForExpression(sym, expr),
 		}
 		ret.funByFunCode = append(ret.funByFunCode, dscr)
 	}
