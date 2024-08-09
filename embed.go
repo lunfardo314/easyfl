@@ -481,14 +481,6 @@ func evalUint64Bytes(par *CallParams) []byte {
 	return ret
 }
 
-func evalEqualUint(par *CallParams) []byte {
-	a0, a1 := mustArithmeticArgs(par, "equalUint")
-	if a0 == a1 {
-		return []byte{0xff}
-	}
-	return nil
-}
-
 // lexicographical comparison of two slices of equal length
 func evalLessThan(par *CallParams) []byte {
 	a0 := par.Arg(0)

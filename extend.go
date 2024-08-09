@@ -11,6 +11,8 @@ var extendWithUtilityFunctions = []*ExtendedFunctionData{
 	{"evalArgumentBytecode", "eval(parseArgumentBytecode($0,$1,$2))"},
 	{"lessThanUint", "lessThan(uint64Bytes($0), uint64Bytes($1))"},
 	{"equalUint", "equal(uint64Bytes($0), uint64Bytes($1))"},
+	{"max", "if(lessThan($0,$1),$1,$0)"},
+	{"min", "if(lessThan($0,$1),$0,$1)"},
 }
 
 func (lib *Library) extendBase() {
@@ -29,4 +31,17 @@ func (lib *Library) extendBase() {
 	lib.MustTrue("not(lessThanUint(u16/100,u64/100))")
 	lib.MustTrue("lessThanUint(0,u64/1)")
 	lib.MustError("lessThanUint(nil, 5)", "wrong size of parameter")
+
+	lib.MustEqual("max(1,100)", "100")
+	lib.MustEqual("max(100,1)", "100")
+
+	lib.MustEqual("min(1,100)", "1")
+	lib.MustEqual("min(100,1)", "1")
+
+	lib.MustEqual("max(u32/1,u32/100)", "u32/100")
+	lib.MustEqual("max(u32/100,u32/1)", "u32/100")
+
+	lib.MustEqual("min(u32/1,u32/100)", "u32/1")
+	lib.MustEqual("min(u32/100,u32/1)", "u32/1")
+
 }
