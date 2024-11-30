@@ -32,7 +32,7 @@ func (lib *Library) CompileLocalLibrary(source string) ([][]byte, error) {
 			return nil, fmt.Errorf("error while compiling '%s': %v", pf.Sym, err)
 		}
 
-		Assert(len(lib.funByName) <= 255, "a local library can contain uo to 255 functions")
+		Assertf(len(lib.funByName) <= 255, "a local library can contain uo to 255 functions")
 
 		if lib.existsFunction(pf.Sym, libLoc) {
 			return nil, errors.New("repeating symbol '" + pf.Sym + "'")
@@ -77,7 +77,7 @@ func (lib *Library) LocalLibraryFromBytes(bin [][]byte) (*LocalLibrary, error) {
 		if maxParam != 0xff {
 			numParams = int(maxParam) + 1
 		}
-		Assert(numParams <= 15, "numParams <= 15")
+		Assertf(numParams <= 15, "numParams <= 15")
 		dscr := &funDescriptor{
 			sym:               sym,
 			funCode:           uint16(FirstLocalFunCode + i),

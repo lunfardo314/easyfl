@@ -529,7 +529,7 @@ func (lib *Library) expressionFromBytecode(bytecode []byte, localLib ...*LocalLi
 	if len(callPrefix) == 1 && arity < 0 {
 		return nil, nil, 0xff, fmt.Errorf("EasyFL: short embedded with vararg is not allowed")
 	}
-	Assert(arity >= 0, "EasyFL: arity >= 0")
+	Assertf(arity >= 0, "EasyFL: arity >= 0")
 
 	ret := &Expression{
 		Args:         make([]*Expression, 0),

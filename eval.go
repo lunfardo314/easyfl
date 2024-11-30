@@ -238,22 +238,23 @@ func (lib *Library) CallLocalLibrary(ctx *CallParams, libBin [][]byte, idx int) 
 
 func (lib *Library) MustEqual(source1, source2 string) {
 	res1, err := lib.EvalFromSource(nil, source1)
-	Assert(err == nil, "expression '%s' resulted in error: '%v'", source1, err)
+	Assertf(err == nil, "expression '%s' resulted in error: '%v'", source1, err)
 	res2, err := lib.EvalFromSource(nil, source2)
-	Assert(err == nil, "expression '%s' resulted in error: '%v'", source2, err)
-	Assert(bytes.Equal(res1, res2), "must be equal %s and %s: %s != %s", source1, source2, Fmt(res1), Fmt(res2))
+	Assertf(err == nil, "expression '%s' resulted in error: '%v'", source2, err)
+	Assertf(bytes.Equal(res1, res2), "must be equal %s and %s: %s != %s", source1, source2,
+		func() string { return Fmt(res1) }, func() string { return Fmt(res2) })
 }
 
 func (lib *Library) MustTrue(source string) {
 	res, err := lib.EvalFromSource(nil, source)
-	Assert(err == nil, "expression '%s' resulted in error: '%v'", source, err)
-	Assert(len(res) > 0, "expression '%s' must be true", res)
+	Assertf(err == nil, "expression '%s' resulted in error: '%v'", source, err)
+	Assertf(len(res) > 0, "expression '%s' must be true", res)
 }
 
 func (lib *Library) MustError(source string, mustContain ...string) {
 	_, err := lib.EvalFromSource(nil, source)
-	Assert(err != nil, "expression '%s' is expected to return an error", source)
+	Assertf(err != nil, "expression '%s' is expected to return an error", source)
 	if len(mustContain) > 0 {
-		Assert(strings.Contains(err.Error(), mustContain[0]), fmt.Sprintf("error must contain '%s' (instead got %s)", mustContain[0], err.Error()))
+		Assertf(strings.Contains(err.Error(), mustContain[0]), fmt.Sprintf("error must contain '%s' (instead got %s)", mustContain[0], err.Error()))
 	}
 }
