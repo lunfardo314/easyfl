@@ -136,9 +136,11 @@ func disposeExpression(expr *Expression) {
 	expressionPool.Put(expr)
 }
 
-const smallByteArrayMax = 64
+// TODO optimize heap allocations with these small slices
 
-var smallByteArrayPool [smallByteArrayMax]sync.Pool
+//const smallByteArrayMax = 64
+//
+//var smallByteArrayPool [smallByteArrayMax]sync.Pool
 
 func makeSmallByteArray(sz int) []byte {
 	return make([]byte, sz)
