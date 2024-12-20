@@ -434,10 +434,10 @@ func ensureUint64Bytes(data []byte) ([]byte, bool) {
 	if len(data) == 0 || len(data) > 8 {
 		return nil, false
 	}
-	//ret := make([]byte, 8)
-	ret := nulls(makeSmallByteArray(8)) // must nullify
+	ret := make([]byte, 8)
+	//ret := nulls(makeSmallByteArray(8)) // must nullify
 	copy(ret[8-len(data):], data)
-	disposeSmallByteArray(data)
+	//disposeSmallByteArray(data)
 	return ret, true
 }
 
