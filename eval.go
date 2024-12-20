@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"sync"
 )
 
 // GlobalData represents the data to be evaluated. It is wrapped into the interface
@@ -41,18 +42,27 @@ func newEvalContext(varScope []*call, glb GlobalData) *evalContext {
 	}
 }
 
-func newCallParams(ctx *evalContext, args []*Expression) *CallParams {
-	return &CallParams{
-		ctx:  ctx,
-		args: args,
+var callPool sync.Pool
+
+func newCall(f EvalFunction, args []*Expression, ctx *evalContext) (ret *call) {
+	if retAny := callPool.Get(); retAny != nil {
+		ret = retAny.(*call)
+	} else {
+		ret = &call{}
 	}
+	*ret = call{
+		f: f,
+		params: &CallParams{
+			ctx:  ctx,
+			args: args,
+		},
+	}
+	return
 }
 
-func newCall(f EvalFunction, args []*Expression, ctx *evalContext) *call {
-	return &call{
-		f:      f,
-		params: newCallParams(ctx, args),
-	}
+func disposeCall(c *call) {
+	*c = call{}
+	callPool.Put(c)
 }
 
 // Eval evaluates the expression by calling it eval function with the parameter
@@ -84,7 +94,10 @@ func (p *CallParams) Arity() byte {
 }
 
 func (ctx *evalContext) eval(f *Expression) []byte {
-	return newCall(f.EvalFunc, f.Args, ctx).Eval()
+	c := newCall(f.EvalFunc, f.Args, ctx)
+	defer disposeCall(c)
+
+	return c.Eval()
 }
 
 // Arg evaluates argument if the call inside embedded function
