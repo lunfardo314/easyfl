@@ -379,13 +379,30 @@ func evalNot(par *CallParams) []byte {
 }
 
 func evalConcat(par *CallParams) []byte {
-	var buf bytes.Buffer
+	args := make([][]byte, par.Arity())
+	totalSize := 0
 	for i := byte(0); i < par.Arity(); i++ {
-		buf.Write(par.Arg(i))
+		args[i] = par.Arg(i)
+		totalSize += len(args[i])
 	}
-	ret := buf.Bytes()
+	ret := makeSmallByteArray(totalSize)[:0]
+	for i := range args {
+		ret = append(ret, args[i]...)
+		disposeSmallByteArray(args[i])
+	}
 	par.Trace("Concat:: %d params -> %s", par.Arity(), Fmt(ret))
 	return ret
+	//
+	//
+	//var buf bytes.Buffer
+	//
+	//
+	//for i := byte(0); i < par.Arity(); i++ {
+	//	buf.Write(par.Arg(i))
+	//}
+	//ret := buf.Bytes()
+	//par.Trace("Concat:: %d params -> %s", par.Arity(), Fmt(ret))
+	//return ret
 }
 
 func evalAnd(par *CallParams) []byte {
@@ -417,7 +434,8 @@ func ensureUint64Bytes(data []byte) ([]byte, bool) {
 	if len(data) == 0 || len(data) > 8 {
 		return nil, false
 	}
-	ret := make([]byte, 8)
+	//ret := make([]byte, 8)
+	ret := nulls(makeSmallByteArray(8)) // must nullify
 	copy(ret[8-len(data):], data)
 	return ret, true
 }
@@ -425,22 +443,29 @@ func ensureUint64Bytes(data []byte) ([]byte, bool) {
 // mustArithmeticArgs makes uint64 from both params (bigendian)
 // Parameters must be not nil with size <= 8. They are padded with 0 in upper bytes, if necessary
 func mustArithmeticArgs(par *CallParams, name string) (uint64, uint64) {
-	a0, ok := ensureUint64Bytes(par.Arg(0))
+	a0Bin := par.Arg(0)
+	a0, ok := ensureUint64Bytes(a0Bin)
 	if !ok {
 		par.TracePanic("%s:: wrong size of parameter 0", name)
 	}
-	a1, ok := ensureUint64Bytes(par.Arg(1))
+	defer disposeSmallByteArray(a0Bin)
+
+	a1Bin := par.Arg(1)
+	a1, ok := ensureUint64Bytes(a1Bin)
 	if !ok {
 		par.TracePanic("%s:: wrong size of parameter 1", name)
 	}
+	defer disposeSmallByteArray(a1Bin)
+
 	return binary.BigEndian.Uint64(a0), binary.BigEndian.Uint64(a1)
 }
 
 func evalAddUint(par *CallParams) []byte {
 	a0, a1 := mustArithmeticArgs(par, "addUint")
-	var ret [8]byte
-	binary.BigEndian.PutUint64(ret[:], a0+a1)
-	return ret[:]
+	//var ret [8]byte
+	ret := makeSmallByteArray(8)
+	binary.BigEndian.PutUint64(ret, a0+a1)
+	return ret
 }
 
 func evalSubUint(par *CallParams) []byte {
@@ -448,30 +473,34 @@ func evalSubUint(par *CallParams) []byte {
 	if a0 < a1 {
 		par.TracePanic("evalSubUint:: %d - %d -> underflow in subtraction", a0, a1)
 	}
-	var ret [8]byte
-	binary.BigEndian.PutUint64(ret[:], a0-a1)
-	return ret[:]
+	//var ret [8]byte
+	ret := makeSmallByteArray(8)
+	binary.BigEndian.PutUint64(ret, a0-a1)
+	return ret
 }
 
 func evalMulUint(par *CallParams) []byte {
 	a0, a1 := mustArithmeticArgs(par, "mulUint")
-	var ret [8]byte
-	binary.BigEndian.PutUint64(ret[:], a0*a1)
-	return ret[:]
+	//var ret [8]byte
+	ret := makeSmallByteArray(8)
+	binary.BigEndian.PutUint64(ret, a0*a1)
+	return ret
 }
 
 func evalDivUint(par *CallParams) []byte {
 	a0, a1 := mustArithmeticArgs(par, "divUint")
-	var ret [8]byte
-	binary.BigEndian.PutUint64(ret[:], a0/a1)
-	return ret[:]
+	//var ret [8]byte
+	ret := makeSmallByteArray(8)
+	binary.BigEndian.PutUint64(ret, a0/a1)
+	return ret
 }
 
 func evalModuloUint(par *CallParams) []byte {
 	a0, a1 := mustArithmeticArgs(par, "moduloUint")
-	var ret [8]byte
-	binary.BigEndian.PutUint64(ret[:], a0%a1)
-	return ret[:]
+	//var ret [8]byte
+	ret := makeSmallByteArray(8)
+	binary.BigEndian.PutUint64(ret, a0%a1)
+	return ret
 }
 
 func evalUint64Bytes(par *CallParams) []byte {
@@ -534,7 +563,8 @@ func evalBitwiseAND(par *CallParams) []byte {
 	if len(a0) != len(a1) {
 		par.TracePanic("evalBitwiseAND: equal length arguments expected: %s -- %s", Fmt(a0), Fmt(a1))
 	}
-	ret := make([]byte, len(a0))
+	//ret := make([]byte, len(a0))
+	ret := makeSmallByteArray(len(a0))
 	for i := range a0 {
 		ret[i] = a0[i] & a1[i]
 	}
@@ -548,7 +578,8 @@ func evalBitwiseOR(par *CallParams) []byte {
 	if len(a0) != len(a1) {
 		par.TracePanic("evalBitwiseOR: equal length arguments expected: %s -- %s", Fmt(a0), Fmt(a1))
 	}
-	ret := make([]byte, len(a0))
+	//ret := make([]byte, len(a0))
+	ret := makeSmallByteArray(len(a0))
 	for i := range a0 {
 		ret[i] = a0[i] | a1[i]
 	}
@@ -562,7 +593,8 @@ func evalBitwiseXOR(par *CallParams) []byte {
 	if len(a0) != len(a1) {
 		par.TracePanic("evalBitwiseXOR: equal length arguments expected: %s -- %s", Fmt(a0), Fmt(a1))
 	}
-	ret := make([]byte, len(a0))
+	//ret := make([]byte, len(a0))
+	ret := makeSmallByteArray(len(a0))
 	for i := range a0 {
 		ret[i] = a0[i] ^ a1[i]
 	}
@@ -572,7 +604,8 @@ func evalBitwiseXOR(par *CallParams) []byte {
 
 func evalBitwiseNOT(par *CallParams) []byte {
 	a0 := par.Arg(0)
-	ret := make([]byte, len(a0))
+	//ret := make([]byte, len(a0))
+	ret := makeSmallByteArray(len(a0))
 	for i := range a0 {
 		ret[i] = ^a0[i]
 	}
@@ -582,16 +615,18 @@ func evalBitwiseNOT(par *CallParams) []byte {
 
 func evalLShift64(par *CallParams) []byte {
 	a0, a1 := mustArithmeticArgs(par, "lshift64")
-	var ret [8]byte
-	binary.BigEndian.PutUint64(ret[:], a0<<a1)
-	return ret[:]
+	//var ret [8]byte
+	ret := makeSmallByteArray(8)
+	binary.BigEndian.PutUint64(ret, a0<<a1)
+	return ret
 }
 
 func evalRShift64(par *CallParams) []byte {
 	a0, a1 := mustArithmeticArgs(par, "lshift64")
-	var ret [8]byte
-	binary.BigEndian.PutUint64(ret[:], a0>>a1)
-	return ret[:]
+	//var ret [8]byte
+	ret := makeSmallByteArray(8)
+	binary.BigEndian.PutUint64(ret, a0>>a1)
+	return ret
 }
 
 // evalParseArgumentBytecode takes bytecode of the argument as is.
@@ -619,7 +654,6 @@ func (lib *Library) evalParseArgumentBytecode(par *CallParams) []byte {
 	if len(idx) != 1 || len(args) <= int(idx[0]) {
 		par.TracePanic("evalParseArgumentBytecode: wrong parameter index")
 	}
-	//ret := StripDataPrefix(args[idx[0]])
 	ret := args[idx[0]]
 	par.Trace("unwrapBytecodeArg:: %s, %s, %s -> %s", Fmt(a0), Fmt(expectedPrefix), Fmt(idx), Fmt(ret))
 	return ret

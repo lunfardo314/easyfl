@@ -383,7 +383,8 @@ func (fi *funInfo) callPrefix(numArgs byte) ([]byte, error) {
 		if !fi.IsLocal {
 			// normal long function call 2 bytes
 			u16 := (uint16(firstByte) << 8) | fi.FunCode
-			ret = make([]byte, 2)
+			//ret = make([]byte, 2)
+			ret = makeSmallByteArray(2)
 			binary.BigEndian.PutUint16(ret, u16)
 		} else {
 			Assertf(fi.FunCode <= FirstLocalFunCode+255 && FirstLocalFunCode <= fi.FunCode, "fi.FunCode <= FirstLocalFunCode+255 && FirstLocalFunCode <= fi.FunCode")

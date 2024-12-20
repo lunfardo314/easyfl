@@ -787,10 +787,14 @@ func ComposeBytecodeOneLevel(sym string, args [][]byte) string {
 
 func makeEmbeddedFunForExpression(sym string, expr *Expression) EmbeddedFunction {
 	return func(par *CallParams) []byte {
-		varScope := make([]*call, len(par.args))
+		//varScope := make([]*call, len(par.args))
+		varScope := newVarScope(len(par.args))
+
 		for i := range varScope {
 			varScope[i] = newCall(par.args[i].EvalFunc, par.args[i].Args, par.ctx)
 		}
+		defer disposeVarScope(varScope)
+
 		ret := evalExpression(par.ctx.glb, expr, varScope)
 		par.Trace("'%s':: %d params -> %s", sym, par.Arity(), Fmt(ret))
 		return ret

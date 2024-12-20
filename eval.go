@@ -42,7 +42,10 @@ func newEvalContext(varScope []*call, glb GlobalData) *evalContext {
 	}
 }
 
-var callPool sync.Pool
+var (
+	callPool     sync.Pool
+	varScopePool [16]sync.Pool
+)
 
 func newCall(f EvalFunction, args []*Expression, ctx *evalContext) (ret *call) {
 	if retAny := callPool.Get(); retAny != nil {
@@ -63,6 +66,28 @@ func newCall(f EvalFunction, args []*Expression, ctx *evalContext) (ret *call) {
 func disposeCall(c *call) {
 	*c = call{}
 	callPool.Put(c)
+}
+
+func newVarScope(sz int) []*call {
+	if sz == 0 {
+		return nil
+	}
+	Assertf(sz <= MaxParameters, "sz <= MaxParameters")
+	if retAny := varScopePool[sz-1].Get(); retAny != nil {
+		return retAny.([]*call)
+	}
+	return make([]*call, sz)
+}
+
+func disposeVarScope(vs []*call) {
+	if len(vs) == 0 {
+		return
+	}
+	for i := range vs {
+		disposeCall(vs[i])
+		vs[i] = nil
+	}
+	varScopePool[len(vs)-1].Put(vs)
 }
 
 // Eval evaluates the expression by calling it eval function with the parameter

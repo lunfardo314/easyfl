@@ -135,3 +135,35 @@ func disposeExpression(expr *Expression) {
 	*expr = Expression{}
 	expressionPool.Put(expr)
 }
+
+const smallByteArrayMax = 64
+
+var smallByteArrayPool [smallByteArrayMax]sync.Pool
+
+func makeSmallByteArray(sz int) []byte {
+	if sz == 0 {
+		return nil
+	}
+	if sz > smallByteArrayMax {
+		return make([]byte, sz)
+	}
+	if retAny := smallByteArrayPool[sz-1].Get(); retAny != nil {
+		return retAny.([]byte)
+	}
+	return make([]byte, sz)
+}
+
+// disposeSmallByteArray does not make zeroes
+func disposeSmallByteArray(arr []byte) {
+	if len(arr) == 0 || len(arr) > smallByteArrayMax {
+		return
+	}
+	smallByteArrayPool[len(arr)-1].Put(arr)
+}
+
+func nulls(data []byte) []byte {
+	for i := range data {
+		data[i] = 0
+	}
+	return data
+}
