@@ -449,14 +449,14 @@ func mustArithmeticArgs(par *CallParams, name string) (uint64, uint64) {
 	if !ok {
 		par.TracePanic("%s:: wrong size of parameter 0", name)
 	}
-	defer disposeSmallByteArray(a0Bin)
+	//defer disposeSmallByteArray(a0Bin)
 
 	a1Bin := par.Arg(1)
 	a1, ok := ensureUint64Bytes(a1Bin)
 	if !ok {
 		par.TracePanic("%s:: wrong size of parameter 1", name)
 	}
-	defer disposeSmallByteArray(a1Bin)
+	//defer disposeSmallByteArray(a1Bin)
 
 	return binary.BigEndian.Uint64(a0), binary.BigEndian.Uint64(a1)
 }
