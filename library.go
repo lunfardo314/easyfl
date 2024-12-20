@@ -7,97 +7,6 @@ import (
 	"fmt"
 )
 
-const (
-
-	// ---- embedded parameter access codes
-
-	FirstEmbeddedReserved = 0x00
-	// MaxParameters maximum number of parameters in the function definition and the call.
-	MaxParameters         = 0x08
-	LastEmbeddedReserved  = FirstEmbeddedReserved + 2*MaxParameters - 1 // 15 reserved for parameter access 2 x 8
-	BytecodeParameterFlag = byte(0x08)
-
-	// ----- embedded short
-
-	FirstEmbeddedShort             = LastEmbeddedReserved + 1
-	LastEmbeddedShort              = 0x3f // 63
-	MaxNumEmbeddedAndReservedShort = LastEmbeddedShort + 1
-
-	// ---- embedded long codes
-
-	FirstEmbeddedLongFun = LastEmbeddedShort + 1 // 64
-	MaxNumEmbeddedLong   = 0xff
-	LastEmbeddedLongFun  = FirstEmbeddedLongFun + MaxNumEmbeddedLong - 1
-
-	// ---- extended codes
-
-	FirstExtendedFun     = LastEmbeddedLongFun + 1
-	LastGlobalFunCode    = 1022 // biggest global function code. All the rest are local
-	MaxNumExtendedGlobal = LastGlobalFunCode - FirstExtendedFun
-	FirstLocalFunCode    = LastGlobalFunCode + 1 // functions in local libraries uses extra byte for local function codes
-)
-
-type (
-	Expression struct {
-		// for evaluation
-		Args     []*Expression
-		EvalFunc EvalFunction
-		// for code parsing
-		FunctionName string
-		CallPrefix   []byte
-	}
-
-	EmbeddedFunction func(glb *CallParams) []byte
-	EvalFunction     struct {
-		EmbeddedFunction
-		bytecode []byte
-	}
-
-	funDescriptor struct {
-		// source name of the functions
-		sym string
-		// code of the function
-		funCode uint16
-		// nil for embedded functions
-		bytecode []byte
-		// number of parameters (up to 15) or -1 for vararg
-		requiredNumParams int
-		// for embedded functions it is hardcoded function, for extended functions is
-		// interpreter closure of the bytecode
-		embeddedFun EmbeddedFunction
-	}
-
-	funInfo struct {
-		Sym        string
-		FunCode    uint16
-		IsEmbedded bool
-		IsShort    bool
-		IsLocal    bool
-		NumParams  int
-	}
-
-	Library struct {
-		funByName        map[string]*funDescriptor
-		funByFunCode     map[uint16]*funDescriptor
-		numEmbeddedShort uint16
-		numEmbeddedLong  uint16
-		numExtended      uint16
-	}
-
-	EmbeddedFunctionData struct {
-		Sym            string
-		RequiredNumPar int
-		EmbeddedFun    EmbeddedFunction
-	}
-
-	ExtendedFunctionData struct {
-		Sym    string
-		Source string
-	}
-)
-
-const traceYN = false
-
 /*
 
 EasyFL runtime defines a standard library. It is always compiled at startup, in the `initBase` function.
@@ -213,7 +122,7 @@ func (lib *Library) embedShortErr(sym string, requiredNumPar int, embeddedFun Em
 		}
 		codeBytes, err := lib.FunctionCallPrefixByName(sym, byte(requiredNumPar))
 		AssertNoError(err)
-		Assert(len(codeBytes) == 1, "expected short code")
+		Assertf(len(codeBytes) == 1, "expected short code")
 	}
 	return byte(dscr.funCode), nil
 }
@@ -253,7 +162,7 @@ func (lib *Library) embedLongErr(sym string, requiredNumPar int, embeddedFun Emb
 		}
 		codeBytes, err := lib.FunctionCallPrefixByName(sym, byte(requiredNumPar))
 		AssertNoError(err)
-		Assert(len(codeBytes) == 2, "expected long code")
+		Assertf(len(codeBytes) == 2, "expected long code")
 	}
 	return dscr.funCode, nil
 }
@@ -319,7 +228,7 @@ func (lib *Library) ExtendErr(sym string, source string) (uint16, error) {
 		return 0, fmt.Errorf("error while compiling '%s': %v", sym, err)
 	}
 
-	Assert(lib.numExtended < MaxNumExtendedGlobal, "too many extended functions")
+	Assertf(lib.numExtended < MaxNumExtendedGlobal, "too many extended functions")
 
 	if lib.existsFunction(sym) {
 		return 0, errors.New("repeating symbol '" + sym + "'")
@@ -344,7 +253,7 @@ func (lib *Library) ExtendErr(sym string, source string) (uint16, error) {
 		// sanity check
 		codeBytes, err := lib.FunctionCallPrefixByName(sym, byte(numParam))
 		AssertNoError(err)
-		Assert(len(codeBytes) == 2, "expected long code")
+		Assertf(len(codeBytes) == 2, "expected long code")
 	}
 
 	return dscr.funCode, nil
@@ -457,7 +366,7 @@ func (lib *Library) functionByCode(funCode uint16, localLib ...*LocalLibrary) (E
 func (fi *funInfo) callPrefix(numArgs byte) ([]byte, error) {
 	var ret []byte
 	if fi.IsShort {
-		Assert(fi.FunCode > LastEmbeddedReserved, "internal inconsistency: fi.FunCode must be > %d", LastEmbeddedReserved)
+		Assertf(fi.FunCode > LastEmbeddedReserved, "internal inconsistency: fi.FunCode must be > %d", LastEmbeddedReserved)
 		ret = []byte{byte(fi.FunCode)}
 	} else {
 		if fi.NumParams < 0 {
@@ -477,7 +386,7 @@ func (fi *funInfo) callPrefix(numArgs byte) ([]byte, error) {
 			ret = make([]byte, 2)
 			binary.BigEndian.PutUint16(ret, u16)
 		} else {
-			Assert(fi.FunCode <= FirstLocalFunCode+255 && FirstLocalFunCode <= fi.FunCode, "fi.FunCode <= FirstLocalFunCode+255 && FirstLocalFunCode <= fi.FunCode")
+			Assertf(fi.FunCode <= FirstLocalFunCode+255 && FirstLocalFunCode <= fi.FunCode, "fi.FunCode <= FirstLocalFunCode+255 && FirstLocalFunCode <= fi.FunCode")
 			// local function call 3 bytes
 			u16 := (uint16(firstByte) << 8) | FirstLocalFunCode
 			ret = make([]byte, 3)

@@ -54,14 +54,14 @@ func RequireErrorWith(t *testing.T, err error, s string) {
 	require.Contains(t, err.Error(), s)
 }
 
-func Assert(cond bool, format string, args ...interface{}) {
+func Assertf(cond bool, format string, args ...interface{}) {
 	if !cond {
 		panic(fmt.Sprintf("assertion failed:: "+format, args...))
 	}
 }
 
 func AssertNoError(err error) {
-	Assert(err == nil, "error: %v", err)
+	Assertf(err == nil, "error: %v", err)
 }
 
 func Hex(data []byte) string {

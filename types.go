@@ -1,0 +1,137 @@
+package easyfl
+
+import "sync"
+
+const (
+
+	// ---- embedded parameter access codes
+
+	FirstEmbeddedReserved = 0x00
+	// MaxParameters maximum number of parameters in the function definition and the call.
+	MaxParameters         = 0x08
+	LastEmbeddedReserved  = FirstEmbeddedReserved + 2*MaxParameters - 1 // 15 reserved for parameter access 2 x 8
+	BytecodeParameterFlag = byte(0x08)
+
+	// ----- embedded short
+
+	FirstEmbeddedShort             = LastEmbeddedReserved + 1
+	LastEmbeddedShort              = 0x3f // 63
+	MaxNumEmbeddedAndReservedShort = LastEmbeddedShort + 1
+
+	// ---- embedded long codes
+
+	FirstEmbeddedLongFun = LastEmbeddedShort + 1 // 64
+	MaxNumEmbeddedLong   = 0xff
+	LastEmbeddedLongFun  = FirstEmbeddedLongFun + MaxNumEmbeddedLong - 1
+
+	// ---- extended codes
+
+	FirstExtendedFun     = LastEmbeddedLongFun + 1
+	LastGlobalFunCode    = 1022 // biggest global function code. All the rest are local
+	MaxNumExtendedGlobal = LastGlobalFunCode - FirstExtendedFun
+	FirstLocalFunCode    = LastGlobalFunCode + 1 // functions in local libraries uses extra byte for local function codes
+)
+
+type (
+	Expression struct {
+		// for evaluation
+		Args     []*Expression
+		EvalFunc EvalFunction
+		// for code parsing
+		FunctionName string
+		CallPrefix   []byte
+	}
+
+	EmbeddedFunction func(glb *CallParams) []byte
+	EvalFunction     struct {
+		EmbeddedFunction
+		bytecode []byte
+	}
+
+	funDescriptor struct {
+		// source name of the functions
+		sym string
+		// code of the function
+		funCode uint16
+		// nil for embedded functions
+		bytecode []byte
+		// number of parameters (up to 15) or -1 for vararg
+		requiredNumParams int
+		// for embedded functions it is hardcoded function, for extended functions is
+		// interpreter closure of the bytecode
+		embeddedFun EmbeddedFunction
+	}
+
+	funInfo struct {
+		Sym        string
+		FunCode    uint16
+		IsEmbedded bool
+		IsShort    bool
+		IsLocal    bool
+		NumParams  int
+	}
+
+	Library struct {
+		funByName        map[string]*funDescriptor
+		funByFunCode     map[uint16]*funDescriptor
+		numEmbeddedShort uint16
+		numEmbeddedLong  uint16
+		numExtended      uint16
+	}
+
+	EmbeddedFunctionData struct {
+		Sym            string
+		RequiredNumPar int
+		EmbeddedFun    EmbeddedFunction
+	}
+
+	ExtendedFunctionData struct {
+		Sym    string
+		Source string
+	}
+)
+
+const traceYN = false
+
+var (
+	expressionArrayPool [15]sync.Pool
+	expressionPool      sync.Pool
+)
+
+func newArgArray(argNum int) (ret []*Expression) {
+	Assertf(argNum <= MaxParameters, "size<=MaxParameters")
+	if argNum > 0 {
+		if retAny := expressionArrayPool[argNum].Get(); retAny != nil {
+			ret = retAny.([]*Expression)
+		} else {
+			ret = make([]*Expression, argNum)
+		}
+	}
+	return ret
+}
+
+func disposeArgArray(argArr []*Expression) {
+	for i := range argArr {
+		disposeExpression(argArr[i])
+		argArr[i] = nil
+	}
+	expressionArrayPool[len(argArr)].Put(argArr)
+}
+
+func newExpression(funName string, callPrefix []byte, numArg int) (ret *Expression) {
+	if retAny := expressionPool.Get(); retAny != nil {
+		ret = retAny.(*Expression)
+	} else {
+		ret = &Expression{}
+	}
+	ret.FunctionName = funName
+	ret.CallPrefix = callPrefix
+	ret.Args = newArgArray(numArg)
+	return
+}
+
+func disposeExpression(expr *Expression) {
+	disposeArgArray(expr.Args)
+	*expr = Expression{}
+	expressionPool.Put(expr)
+}

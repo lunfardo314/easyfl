@@ -317,6 +317,7 @@ func evalIf(par *CallParams) []byte {
 	return no
 }
 
+// evalFirstCaseIndex evaluates and returns first argument with not-nil value
 func evalFirstCaseIndex(par *CallParams) []byte {
 	for i := byte(0); i < par.Arity(); i++ {
 		if ret := par.Arg(i); len(ret) > 0 {

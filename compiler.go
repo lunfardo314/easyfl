@@ -508,11 +508,8 @@ func (lib *Library) expressionFromBytecode(bytecode []byte, localLib ...*LocalLi
 		default:
 			sym = fmt.Sprintf("0x%s", hex.EncodeToString(dataPrefix[1:]))
 		}
-		ret := &Expression{
-			EvalFunc:     dataFunction(dataPrefix[1:]),
-			FunctionName: sym,
-			CallPrefix:   dataPrefix,
-		}
+		ret := newExpression(sym, dataPrefix, 0)
+		ret.EvalFunc = dataFunction(dataPrefix[1:])
 		return ret, bytecode[len(dataPrefix):], 0xff, nil
 	}
 	maxParameterNumber := byte(0xff)
@@ -529,13 +526,9 @@ func (lib *Library) expressionFromBytecode(bytecode []byte, localLib ...*LocalLi
 	if len(callPrefix) == 1 && arity < 0 {
 		return nil, nil, 0xff, fmt.Errorf("EasyFL: short embedded with vararg is not allowed")
 	}
-	Assert(arity >= 0, "EasyFL: arity >= 0")
+	Assertf(arity >= 0, "EasyFL: arity >= 0")
 
-	ret := &Expression{
-		Args:         make([]*Expression, 0),
-		FunctionName: sym,
-		CallPrefix:   callPrefix,
-	}
+	ret := newExpression(sym, callPrefix, arity)
 
 	bytecode = bytecode[len(callPrefix):]
 	// collect call Args
@@ -551,7 +544,7 @@ func (lib *Library) expressionFromBytecode(bytecode []byte, localLib ...*LocalLi
 				maxParameterNumber = m
 			}
 		}
-		ret.Args = append(ret.Args, p)
+		ret.Args[i] = p
 	}
 	ret.EvalFunc = evalFun
 	return ret, bytecode, maxParameterNumber, nil

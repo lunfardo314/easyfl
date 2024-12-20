@@ -53,10 +53,10 @@ func (fd *funDescriptor) write(w io.Writer) {
 	_ = binary.Write(w, binary.BigEndian, np)
 
 	// function name
-	Assert(len(fd.sym) < 256, "EasyFL: len(fd.sym)<256")
+	Assertf(len(fd.sym) < 256, "EasyFL: len(fd.sym)<256")
 	_, _ = w.Write([]byte{byte(len(fd.sym))})
 	_, _ = w.Write([]byte(fd.sym))
-	Assert(len(fd.bytecode) < 256*256, "EasyFL: len(fd.bytecode)<256*256")
+	Assertf(len(fd.bytecode) < 256*256, "EasyFL: len(fd.bytecode)<256*256")
 	// bytecode (nil for embedded)
 	_ = binary.Write(w, binary.BigEndian, uint16(len(fd.bytecode)))
 	_, _ = w.Write(fd.bytecode)
