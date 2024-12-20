@@ -437,6 +437,7 @@ func ensureUint64Bytes(data []byte) ([]byte, bool) {
 	//ret := make([]byte, 8)
 	ret := nulls(makeSmallByteArray(8)) // must nullify
 	copy(ret[8-len(data):], data)
+	disposeSmallByteArray(data)
 	return ret, true
 }
 
@@ -514,7 +515,11 @@ func evalUint64Bytes(par *CallParams) []byte {
 // lexicographical comparison of two slices of equal length
 func evalLessThan(par *CallParams) []byte {
 	a0 := par.Arg(0)
+	defer disposeSmallByteArray(a0)
+
 	a1 := par.Arg(1)
+	defer disposeSmallByteArray(a1)
+
 	if len(a0) != len(a1) {
 		par.TracePanic("lessThan: operands must be equal length. %s, %s", Fmt(a0), Fmt(a1))
 	}
