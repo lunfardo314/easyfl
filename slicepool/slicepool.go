@@ -9,7 +9,9 @@ type (
 		array   [segmentSize]byte
 		allocAt uint16
 	}
-	SlicePool []*segment
+	SlicePool struct {
+		segs []*segment
+	}
 )
 
 var (
@@ -21,27 +23,30 @@ func New() (ret *SlicePool) {
 	if p := mpools.Get(); p != nil {
 		ret = p.(*SlicePool)
 	} else {
-		ret = new(SlicePool)
+		ret = &SlicePool{
+			segs: make([]*segment, 0),
+		}
 	}
 	return
 }
 
-func (p SlicePool) Dispose() {
-	for i := range p {
-		p[i].dispose()
-		p[i] = nil
+func (p *SlicePool) Dispose() {
+	for i := range p.segs {
+		p.segs[i].dispose()
+		p.segs[i] = nil
 	}
-	mpools.Put(p[:0])
+	p.segs = p.segs[:0]
+	mpools.Put(p)
 }
 
-func (p SlicePool) Alloc(size uint16) (ret []byte) {
+func (p *SlicePool) Alloc(size uint16) (ret []byte) {
 	if size > segmentSize {
 		return make([]byte, size)
 	}
 	var seg *segment
-	for i := range p {
-		if p[i].allocAt+size < segmentSize {
-			seg = p[i]
+	for i := range p.segs {
+		if p.segs[i].allocAt+size < segmentSize {
+			seg = p.segs[i]
 			break
 		}
 	}
@@ -51,7 +56,7 @@ func (p SlicePool) Alloc(size uint16) (ret []byte) {
 		} else {
 			seg = new(segment)
 		}
-		p = append(p, seg)
+		p.segs = append(p.segs, seg)
 	}
 	ret = seg.array[seg.allocAt : seg.allocAt+size]
 	seg.allocAt += size
