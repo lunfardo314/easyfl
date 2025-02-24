@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/lunfardo314/easyfl/slicepool"
 )
 
 // funParsed is an interim representation of the source code
@@ -787,7 +789,6 @@ func ComposeBytecodeOneLevel(sym string, args [][]byte) string {
 
 func makeEmbeddedFunForExpression(sym string, expr *Expression) EmbeddedFunction {
 	return func(par *CallParams) []byte {
-		//varScope := make([]*call, len(par.args))
 		varScope := newVarScope(len(par.args))
 
 		for i := range varScope {
@@ -795,7 +796,12 @@ func makeEmbeddedFunForExpression(sym string, expr *Expression) EmbeddedFunction
 		}
 		defer disposeVarScope(varScope)
 
-		ret := evalExpression(par.ctx.glb, expr, varScope)
+		spool := slicepool.New()
+		retp := evalExpression(par.ctx.glb, spool, expr, varScope)
+		ret := make([]byte, len(retp))
+		copy(ret, retp)
+		spool.Dispose()
+
 		par.Trace("'%s':: %d params -> %s", sym, par.Arity(), Fmt(ret))
 		return ret
 	}

@@ -1,3 +1,13 @@
+// Package slicepool implements optimized heap allocation mechanism performance and GC-wise
+// One slice pool can be imagined as one heap of byte slices, where each slice is allocated and never garbage collected.
+// With each call Alloc memory occupied by pool only grows util pool is disposed.
+// Dispose pool means all memory occupied by slices in pool is fried (returned to sync pools) and nullified.
+// So, it is not memory safe mechanism because after pool is disposed, slices allocated in it should not be used
+// Slice pools ARE NOT THREAD SAFE
+//
+// In EasyFL all interim byte slices which occur during evaluation of the expression
+// will be allocated in the slice pool incrementally. When evaluation is finished, final value is copied into
+// the slice allocated with make([]byte, ..) and whole pool is disposed in one operation
 package slicepool
 
 import "sync"

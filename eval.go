@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+
+	"github.com/lunfardo314/easyfl/slicepool"
 )
 
 // GlobalData represents the data to be evaluated. It is wrapped into the interface
@@ -18,6 +20,7 @@ type GlobalData interface {
 // evalContext is the structure through which the EasyFL script accesses data structure it is validating
 type evalContext struct {
 	glb      GlobalData
+	spool    *slicepool.SlicePool
 	varScope []*call
 }
 
@@ -35,9 +38,10 @@ type call struct {
 	cached bool
 }
 
-func newEvalContext(varScope []*call, glb GlobalData) *evalContext {
+func newEvalContext(varScope []*call, glb GlobalData, spool *slicepool.SlicePool) *evalContext {
 	return &evalContext{
 		varScope: varScope,
+		spool:    spool,
 		glb:      glb,
 	}
 }
@@ -158,18 +162,25 @@ func (p *CallParams) GetBytecode(paramNr byte) []byte {
 	return p.ctx.varScope[paramNr].f.bytecode
 }
 
-func evalExpression(glb GlobalData, f *Expression, varScope []*call) []byte {
-	return newEvalContext(varScope, glb).eval(f)
+func evalExpression(glb GlobalData, spool *slicepool.SlicePool, f *Expression, varScope []*call) []byte {
+	return newEvalContext(varScope, glb, spool).eval(f)
 }
 
 // EvalExpression evaluates expression, in the context of any data context and given values of parameters
 func EvalExpression(glb GlobalData, f *Expression, args ...[]byte) []byte {
 	argsForData := make([]*call, len(args))
-	ctx := newEvalContext(nil, glb)
+
+	spool := slicepool.New()
+	ctx := newEvalContext(nil, glb, spool)
 	for i, d := range args {
 		argsForData[i] = newCall(dataFunction(d), nil, ctx)
 	}
-	return evalExpression(glb, f, argsForData)
+	retp := evalExpression(glb, spool, f, argsForData)
+	ret := make([]byte, len(retp))
+	copy(ret, retp)
+	spool.Dispose()
+
+	return ret
 }
 
 // EvalFromSource compiles source of the expression and evaluates it
@@ -273,7 +284,13 @@ func (lib *Library) CallLocalLibrary(ctx *CallParams, libBin [][]byte, idx int) 
 	for i := range varScope {
 		varScope[i] = newCall(ctx.args[i].EvalFunc, ctx.args[i].Args, ctx.ctx)
 	}
-	ret := evalExpression(ctx.ctx.glb, expr, varScope)
+
+	spool := slicepool.New()
+	retp := evalExpression(ctx.ctx.glb, spool, expr, varScope)
+	ret := make([]byte, len(retp))
+	copy(ret, retp)
+	spool.Dispose()
+
 	ctx.Trace("'lib#%d':: %d params -> %s", idx, ctx.Arity(), Fmt(ret))
 	return ret
 }
