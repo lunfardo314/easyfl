@@ -106,3 +106,9 @@ func Hex(data []byte) string {
 func Fmt(data []byte) string {
 	return Hex(data)
 }
+
+func FmtLazy(data []byte) func() string {
+	return func() string {
+		return Hex(data)
+	}
+}

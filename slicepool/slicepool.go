@@ -78,6 +78,12 @@ func (p *SlicePool) Alloc(size uint16) (ret []byte) {
 	return
 }
 
+func (p *SlicePool) AllocData(data ...byte) (ret []byte) {
+	ret = p.Alloc(uint16(len(data)))
+	copy(ret, data)
+	return
+}
+
 func (s *segment) dispose() {
 	*s = segment{}
 	segments.Put(s)

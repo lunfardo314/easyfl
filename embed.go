@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/lunfardo314/easyfl/slicepool"
 	"golang.org/x/crypto/blake2b"
 )
 
@@ -228,7 +229,7 @@ func evalSlice(par *CallParams) []byte {
 	from := par.Arg(1)
 	to := par.Arg(2)
 	if len(from) != 1 || len(to) != 1 {
-		par.TracePanic("slice:: data: %s, from: %s, to: %s -- wrong bound values", Fmt(data), Fmt(from), Fmt(to))
+		par.TracePanic("slice:: data: %s, from: %s, to: %s -- wrong bound values", FmtLazy(data), FmtLazy(from), FmtLazy(to))
 	}
 	if from[0] > to[0] {
 		par.TracePanic("slice:: data: %s, from: %s, to: %s -- wrong slice bounds. ", Fmt(data), Fmt(from), Fmt(to))
@@ -238,7 +239,7 @@ func evalSlice(par *CallParams) []byte {
 		par.TracePanic("slice:: data: %s, from: %s, to: %s -- slice out of bounds. ", Fmt(data), Fmt(from), Fmt(to))
 	}
 	ret := data[from[0]:upper]
-	par.Trace("slice:: data: %s, from: %s, to: %s -> %s", Fmt(data), Fmt(from), Fmt(to), Fmt(ret))
+	par.Trace("slice:: data: %s, from: %s, to: %s -> %s", FmtLazy(data), FmtLazy(from), FmtLazy(to), FmtLazy(ret))
 	return ret
 }
 
@@ -246,10 +247,10 @@ func evalByte(par *CallParams) []byte {
 	data := par.Arg(0)
 	idx := par.Arg(1)
 	if len(idx) != 1 || int(idx[0]) >= len(data) {
-		par.TracePanic("byte:: data: %s, idx: %s -- wrong index value", Fmt(data), Fmt(idx))
+		par.TracePanic("byte:: data: %s, idx: %s -- wrong index value", FmtLazy(data), FmtLazy(idx))
 	}
 	ret := data[idx[0] : idx[0]+1]
-	par.Trace("byte:: data: %s, idx: %s -> %s", Fmt(data), Fmt(idx), Fmt(ret))
+	par.Trace("byte:: data: %s, idx: %s -> %s", FmtLazy(data), FmtLazy(idx), FmtLazy(ret))
 	return ret
 }
 
@@ -257,10 +258,10 @@ func evalTail(par *CallParams) []byte {
 	data := par.Arg(0)
 	from := par.Arg(1)
 	if len(from) != 1 || int(from[0]) >= len(data) {
-		par.TracePanic("tail:: data: %s, from: %s -- index out of bounds. ", Fmt(data), Fmt(from))
+		par.TracePanic("tail:: data: %s, from: %s -- index out of bounds. ", FmtLazy(data), FmtLazy(from))
 	}
 	ret := data[from[0]:]
-	par.Trace("tail:: data: %s, from: %s -> %s", Fmt(data), Fmt(from), Fmt(ret))
+	par.Trace("tail:: data: %s, from: %s -> %s", FmtLazy(data), FmtLazy(from), FmtLazy(ret))
 	return ret
 }
 
@@ -269,9 +270,9 @@ func evalEqual(par *CallParams) []byte {
 	p0 := par.Arg(0)
 	p1 := par.Arg(1)
 	if bytes.Equal(p0, p1) {
-		ret = []byte{0xff}
+		ret = par.ctx.Spool.AllocData(0xff)
 	}
-	par.Trace("equal:: %s, %s -> %s", Fmt(p0), Fmt(p1), Fmt(ret))
+	par.Trace("equal:: %s, %s -> %s", FmtLazy(p0), FmtLazy(p1), FmtLazy(ret))
 	return ret
 }
 
@@ -280,9 +281,10 @@ func evalHasPrefix(par *CallParams) []byte {
 	data := par.Arg(0)
 	prefix := par.Arg(1)
 	if bytes.HasPrefix(data, prefix) {
-		ret = []byte{0xff}
+		ret = par.ctx.Spool.AllocData(0xff)
+		//ret = []byte{0xff}
 	}
-	par.Trace("hasPrefix:: %s, %s -> %s", Fmt(data), Fmt(prefix), Fmt(ret))
+	par.Trace("hasPrefix:: %s, %s -> %s", FmtLazy(data), FmtLazy(prefix), FmtLazy(ret))
 	return ret
 }
 
@@ -293,15 +295,15 @@ func evalRepeat(par *CallParams) []byte {
 		par.TracePanic("evalRepeat: count must be 1-byte long")
 	}
 	ret := bytes.Repeat(fragment, int(n[0]))
-	par.Trace("hasPrefix:: %s, %s -> %s", Fmt(fragment), Fmt(n), Fmt(ret))
+	par.Trace("hasPrefix:: %s, %s -> %s", FmtLazy(fragment), FmtLazy(n), FmtLazy(ret))
 	return ret
 }
 
 func evalLen(par *CallParams) []byte {
 	data := par.Arg(0)
-	var ret [8]byte
-	binary.BigEndian.PutUint64(ret[:], uint64(len(data)))
-	par.Trace("len:: %s -> %s", Fmt(data), Fmt(ret[:]))
+	ret := par.ctx.Spool.Alloc(8)
+	binary.BigEndian.PutUint64(ret, uint64(len(data)))
+	par.Trace("len:: %s -> %s", FmtLazy(data), FmtLazy(ret[:]))
 	return ret[:]
 }
 
@@ -309,20 +311,20 @@ func evalIf(par *CallParams) []byte {
 	cond := par.Arg(0)
 	if len(cond) != 0 {
 		yes := par.Arg(1)
-		par.Trace("if:: %s -> %s", Fmt(cond), Fmt(yes))
+		par.Trace("if:: %s -> %s", FmtLazy(cond), FmtLazy(yes))
 		return yes
 	}
 	no := par.Arg(2)
-	par.Trace("if:: %s -> %s", Fmt(cond), Fmt(no))
+	par.Trace("if:: %s -> %s", FmtLazy(cond), FmtLazy(no))
 	return no
 }
 
 // evalFirstCaseIndex evaluates and returns first argument with not-nil value
 func evalFirstCaseIndex(par *CallParams) []byte {
 	for i := byte(0); i < par.Arity(); i++ {
-		if ret := par.Arg(i); len(ret) > 0 {
+		if c := par.Arg(i); len(c) > 0 {
 			par.Trace("firstCaseIndex:: -> %d", i)
-			return []byte{i}
+			return par.ctx.Spool.AllocData(i)
 		}
 	}
 	par.Trace("firstCaseIndex:: -> nil")
@@ -338,7 +340,7 @@ func evalFirstEqualIndex(par *CallParams) []byte {
 	for i := byte(1); i < par.Arity(); i++ {
 		if bytes.Equal(v, par.Arg(i)) {
 			par.Trace("firstEqualIndex:: -> %d", i)
-			return []byte{i - 1}
+			return par.ctx.Spool.AllocData(i - 1)
 		}
 	}
 	par.Trace("firstEqualIndex:: -> nil")
@@ -360,49 +362,39 @@ func evalIsZero(par *CallParams) []byte {
 	arg := par.Arg(0)
 	for _, b := range arg {
 		if b != 0 {
-			par.Trace("isZero:: %s -> nil", Fmt(arg))
+			par.Trace("isZero:: %s -> nil", FmtLazy(arg))
 			return nil
 		}
 	}
-	par.Trace("isZero:: %s -> true", Fmt(arg))
-	return []byte{0xff}
+	par.Trace("isZero:: %s -> true", FmtLazy(arg))
+	return par.ctx.Spool.AllocData(0xff)
 }
 
 func evalNot(par *CallParams) []byte {
 	arg := par.Arg(0)
 	if len(arg) == 0 {
-		par.Trace("not:: %s -> true", Fmt(arg))
-		return []byte{0xff}
+		par.Trace("not:: %s -> true", FmtLazy(arg))
+		return par.ctx.Spool.AllocData(0xff)
 	}
-	par.Trace("not:: %s -> nil", Fmt(arg))
+	par.Trace("not:: %s -> nil", FmtLazy(arg))
 	return nil
 }
 
 func evalConcat(par *CallParams) []byte {
-	args := make([][]byte, par.Arity())
+	var args [16][]byte
+	a := args[:par.Arity()]
 	totalSize := 0
-	for i := byte(0); i < par.Arity(); i++ {
-		args[i] = par.Arg(i)
-		totalSize += len(args[i])
+	for i := range a {
+		a[i] = par.Arg(byte(i))
+		totalSize += len(a[i])
 	}
-	ret := makeSmallByteArray(totalSize)[:0]
-	for i := range args {
-		ret = append(ret, args[i]...)
-		disposeSmallByteArray(args[i])
+
+	ret := par.ctx.Spool.Alloc(uint16(totalSize))[:0]
+	for i := range a {
+		ret = append(ret, a[i]...)
 	}
-	par.Trace("Concat:: %d params -> %s", par.Arity(), Fmt(ret))
+	par.Trace("Concat:: %d params -> %s", par.Arity(), FmtLazy(ret))
 	return ret
-	//
-	//
-	//var buf bytes.Buffer
-	//
-	//
-	//for i := byte(0); i < par.Arity(); i++ {
-	//	buf.Write(par.Arg(i))
-	//}
-	//ret := buf.Bytes()
-	//par.Trace("Concat:: %d params -> %s", par.Arity(), Fmt(ret))
-	//return ret
 }
 
 func evalAnd(par *CallParams) []byte {
@@ -412,32 +404,30 @@ func evalAnd(par *CallParams) []byte {
 			return nil
 		}
 	}
-	par.Trace("and:: %d params -> true", par.Arity())
-	return []byte{0xff}
+	par.Trace("and:: %d params -> true", par.Arity)
+	return par.ctx.Spool.AllocData(0xff)
 }
 
 func evalOr(par *CallParams) []byte {
 	for i := byte(0); i < par.Arity(); i++ {
 		if len(par.Arg(i)) != 0 {
 			par.Trace("or:: param %d -> true", i)
-			return []byte{0xff}
+			return par.ctx.Spool.AllocData(0xff)
 		}
 	}
-	par.Trace("or:: %d params -> nil", par.Arity())
+	par.Trace("or:: %d params -> nil", par.Arity)
 	return nil
 }
 
-func ensureUint64Bytes(data []byte) ([]byte, bool) {
+func ensureUint64Bytes(spool *slicepool.SlicePool, data []byte) ([]byte, bool) {
 	if len(data) == 8 {
 		return data, true
 	}
 	if len(data) == 0 || len(data) > 8 {
 		return nil, false
 	}
-	ret := make([]byte, 8)
-	//ret := nulls(makeSmallByteArray(8)) // must nullify
+	ret := spool.Alloc(8)
 	copy(ret[8-len(data):], data)
-	//disposeSmallByteArray(data)
 	return ret, true
 }
 
@@ -445,26 +435,22 @@ func ensureUint64Bytes(data []byte) ([]byte, bool) {
 // Parameters must be not nil with size <= 8. They are padded with 0 in upper bytes, if necessary
 func mustArithmeticArgs(par *CallParams, name string) (uint64, uint64) {
 	a0Bin := par.Arg(0)
-	a0, ok := ensureUint64Bytes(a0Bin)
+	a0, ok := ensureUint64Bytes(par.ctx.Spool, a0Bin)
 	if !ok {
 		par.TracePanic("%s:: wrong size of parameter 0", name)
 	}
-	//defer disposeSmallByteArray(a0Bin)
 
 	a1Bin := par.Arg(1)
-	a1, ok := ensureUint64Bytes(a1Bin)
+	a1, ok := ensureUint64Bytes(par.ctx.Spool, a1Bin)
 	if !ok {
 		par.TracePanic("%s:: wrong size of parameter 1", name)
 	}
-	//defer disposeSmallByteArray(a1Bin)
-
 	return binary.BigEndian.Uint64(a0), binary.BigEndian.Uint64(a1)
 }
 
 func evalAddUint(par *CallParams) []byte {
 	a0, a1 := mustArithmeticArgs(par, "addUint")
-	//var ret [8]byte
-	ret := makeSmallByteArray(8)
+	ret := par.ctx.Spool.Alloc(8)
 	binary.BigEndian.PutUint64(ret, a0+a1)
 	return ret
 }
@@ -474,38 +460,34 @@ func evalSubUint(par *CallParams) []byte {
 	if a0 < a1 {
 		par.TracePanic("evalSubUint:: %d - %d -> underflow in subtraction", a0, a1)
 	}
-	//var ret [8]byte
-	ret := makeSmallByteArray(8)
+	ret := par.ctx.Spool.Alloc(8)
 	binary.BigEndian.PutUint64(ret, a0-a1)
 	return ret
 }
 
 func evalMulUint(par *CallParams) []byte {
 	a0, a1 := mustArithmeticArgs(par, "mulUint")
-	//var ret [8]byte
-	ret := makeSmallByteArray(8)
+	ret := par.ctx.Spool.Alloc(8)
 	binary.BigEndian.PutUint64(ret, a0*a1)
 	return ret
 }
 
 func evalDivUint(par *CallParams) []byte {
 	a0, a1 := mustArithmeticArgs(par, "divUint")
-	//var ret [8]byte
-	ret := makeSmallByteArray(8)
+	ret := par.ctx.Spool.Alloc(8)
 	binary.BigEndian.PutUint64(ret, a0/a1)
 	return ret
 }
 
 func evalModuloUint(par *CallParams) []byte {
 	a0, a1 := mustArithmeticArgs(par, "moduloUint")
-	//var ret [8]byte
-	ret := makeSmallByteArray(8)
+	ret := par.ctx.Spool.Alloc(8)
 	binary.BigEndian.PutUint64(ret, a0%a1)
 	return ret
 }
 
 func evalUint64Bytes(par *CallParams) []byte {
-	ret, ok := ensureUint64Bytes(par.Arg(0))
+	ret, ok := ensureUint64Bytes(par.ctx.Spool, par.Arg(0))
 	if !ok {
 		par.TracePanic("%s:: wrong size of parameter", "uint64Bytes")
 	}
@@ -515,25 +497,22 @@ func evalUint64Bytes(par *CallParams) []byte {
 // lexicographical comparison of two slices of equal length
 func evalLessThan(par *CallParams) []byte {
 	a0 := par.Arg(0)
-	defer disposeSmallByteArray(a0)
-
 	a1 := par.Arg(1)
-	defer disposeSmallByteArray(a1)
 
 	if len(a0) != len(a1) {
-		par.TracePanic("lessThan: operands must be equal length. %s, %s", Fmt(a0), Fmt(a1))
+		par.TracePanic("lessThan: operands must be equal length. %s, %s", FmtLazy(a0), FmtLazy(a1))
 	}
 	for i := range a0 {
 		switch {
 		case a0[i] < a1[i]:
 			par.Trace("lessThan: %s, %s -> true", Fmt(a0), Fmt(a1))
-			return []byte{0xff} // true
+			return par.ctx.Spool.AllocData(0xff) // true
 		case a0[i] > a1[i]:
 			par.Trace("lessThan: %s, %s -> false", Fmt(a0), Fmt(a1))
 			return nil //false
 		}
 	}
-	par.Trace("lessThan: %s, %s -> false", Fmt(a0), Fmt(a1))
+	par.Trace("lessThan: %s, %s -> false", FmtLazy(a0), FmtLazy(a1))
 	return nil // equal -> false
 }
 
@@ -544,11 +523,11 @@ func evalValidSigED25519(par *CallParams) []byte {
 
 	if ed25519.Verify(pubKey, msg, signature) {
 		par.Trace("ValidSigED25519: msg=%s, sig=%s, pubKey=%s -> true",
-			Fmt(msg), Fmt(signature), Fmt(pubKey))
-		return []byte{0xff}
+			FmtLazy(msg), FmtLazy(signature), FmtLazy(pubKey))
+		return par.ctx.Spool.AllocData(0xff) // true
 	}
 	par.Trace("ValidSigED25519: msg=%s, sig=%s, pubKey=%s -> false",
-		Fmt(msg), Fmt(signature), Fmt(pubKey))
+		FmtLazy(msg), FmtLazy(signature), FmtLazy(pubKey))
 	return nil
 }
 
@@ -558,22 +537,22 @@ func evalBlake2b(par *CallParams) []byte {
 		buf.Write(par.Arg(i))
 	}
 	ret := blake2b.Sum256(buf.Bytes())
-	par.Trace("blake2b: %d params -> %s", par.Arity(), Fmt(ret[:]))
-	return ret[:]
+	par.Trace("blake2b: %d params -> %s", par.Arity(), FmtLazy(ret[:]))
+	return par.ctx.Spool.AllocData(ret[:]...) // true
 }
 
 func evalBitwiseAND(par *CallParams) []byte {
 	a0 := par.Arg(0)
 	a1 := par.Arg(1)
 	if len(a0) != len(a1) {
-		par.TracePanic("evalBitwiseAND: equal length arguments expected: %s -- %s", Fmt(a0), Fmt(a1))
+		par.TracePanic("evalBitwiseAND: equal length arguments expected: %s -- %s", FmtLazy(a0), FmtLazy(a1))
 	}
-	//ret := make([]byte, len(a0))
-	ret := makeSmallByteArray(len(a0))
+	ret := par.ctx.Spool.Alloc(uint16(len(a0))) // true
+
 	for i := range a0 {
 		ret[i] = a0[i] & a1[i]
 	}
-	par.Trace("evalBitwiseAND: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
+	par.Trace("evalBitwiseAND: %s, %s -> %s", FmtLazy(a0), FmtLazy(a1), FmtLazy(ret))
 	return ret
 }
 
@@ -581,14 +560,13 @@ func evalBitwiseOR(par *CallParams) []byte {
 	a0 := par.Arg(0)
 	a1 := par.Arg(1)
 	if len(a0) != len(a1) {
-		par.TracePanic("evalBitwiseOR: equal length arguments expected: %s -- %s", Fmt(a0), Fmt(a1))
+		par.TracePanic("evalBitwiseOR: equal length arguments expected: %s -- %s", FmtLazy(a0), FmtLazy(a1))
 	}
-	//ret := make([]byte, len(a0))
-	ret := makeSmallByteArray(len(a0))
+	ret := par.ctx.Spool.Alloc(uint16(len(a0))) // true
 	for i := range a0 {
 		ret[i] = a0[i] | a1[i]
 	}
-	par.Trace("evalBitwiseOR: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
+	par.Trace("evalBitwiseOR: %s, %s -> %s", FmtLazy(a0), FmtLazy(a1), FmtLazy(ret))
 	return ret
 }
 
@@ -596,40 +574,36 @@ func evalBitwiseXOR(par *CallParams) []byte {
 	a0 := par.Arg(0)
 	a1 := par.Arg(1)
 	if len(a0) != len(a1) {
-		par.TracePanic("evalBitwiseXOR: equal length arguments expected: %s -- %s", Fmt(a0), Fmt(a1))
+		par.TracePanic("evalBitwiseXOR: equal length arguments expected: %s -- %s", FmtLazy(a0), FmtLazy(a1))
 	}
-	//ret := make([]byte, len(a0))
-	ret := makeSmallByteArray(len(a0))
+	ret := par.ctx.Spool.Alloc(uint16(len(a0))) // true
 	for i := range a0 {
 		ret[i] = a0[i] ^ a1[i]
 	}
-	par.Trace("evalBitwiseXOR: %s, %s -> %s", Fmt(a0), Fmt(a1), Fmt(ret))
+	par.Trace("evalBitwiseXOR: %s, %s -> %s", FmtLazy(a0), FmtLazy(a1), FmtLazy(ret))
 	return ret
 }
 
 func evalBitwiseNOT(par *CallParams) []byte {
 	a0 := par.Arg(0)
-	//ret := make([]byte, len(a0))
-	ret := makeSmallByteArray(len(a0))
+	ret := par.ctx.Spool.Alloc(uint16(len(a0))) // true
 	for i := range a0 {
 		ret[i] = ^a0[i]
 	}
-	par.Trace("evalBitwiseNOT: %s -> %s", Fmt(a0), Fmt(ret))
+	par.Trace("evalBitwiseNOT: %s -> %s", FmtLazy(a0), FmtLazy(ret))
 	return ret
 }
 
 func evalLShift64(par *CallParams) []byte {
 	a0, a1 := mustArithmeticArgs(par, "lshift64")
-	//var ret [8]byte
-	ret := makeSmallByteArray(8)
+	ret := par.ctx.Spool.Alloc(8) // true
 	binary.BigEndian.PutUint64(ret, a0<<a1)
 	return ret
 }
 
 func evalRShift64(par *CallParams) []byte {
 	a0, a1 := mustArithmeticArgs(par, "lshift64")
-	//var ret [8]byte
-	ret := makeSmallByteArray(8)
+	ret := par.ctx.Spool.Alloc(8) // true
 	binary.BigEndian.PutUint64(ret, a0>>a1)
 	return ret
 }
@@ -647,20 +621,20 @@ func (lib *Library) evalParseArgumentBytecode(par *CallParams) []byte {
 	if !bytes.Equal(prefix, expectedPrefix) {
 		_, _, _, symPrefix, err := lib.parseCallPrefix(prefix)
 		if err != nil {
-			par.TracePanic("evalParseArgumentBytecode: can't parse prefix '%s': %v", Fmt(prefix), err)
+			par.TracePanic("evalParseArgumentBytecode: can't parse prefix '%s': %v", FmtLazy(prefix), err)
 		}
 		_, _, _, symExpectedPrefix, err := lib.parseCallPrefix(expectedPrefix)
 		if err != nil {
-			par.TracePanic("evalParseArgumentBytecode: can't parse expected prefix '%s': %v", Fmt(expectedPrefix), err)
+			par.TracePanic("evalParseArgumentBytecode: can't parse expected prefix '%s': %v", FmtLazy(expectedPrefix), err)
 		}
 		par.TracePanic("evalParseArgumentBytecode: unexpected function prefix. Expected '%s'('%s'), got '%s'('%s')",
-			Fmt(expectedPrefix), symExpectedPrefix, Fmt(prefix), symPrefix)
+			FmtLazy(expectedPrefix), symExpectedPrefix, FmtLazy(prefix), symPrefix)
 	}
 	if len(idx) != 1 || len(args) <= int(idx[0]) {
 		par.TracePanic("evalParseArgumentBytecode: wrong parameter index")
 	}
 	ret := args[idx[0]]
-	par.Trace("unwrapBytecodeArg:: %s, %s, %s -> %s", Fmt(a0), Fmt(expectedPrefix), Fmt(idx), Fmt(ret))
+	par.Trace("unwrapBytecodeArg:: %s, %s, %s -> %s", FmtLazy(a0), FmtLazy(expectedPrefix), FmtLazy(idx), FmtLazy(ret))
 	return ret
 }
 
@@ -670,7 +644,7 @@ func (lib *Library) evalParsePrefixBytecode(par *CallParams) []byte {
 	if err != nil {
 		par.TracePanic("evalParsePrefixBytecode: %v", err)
 	}
-	par.Trace("parseBytecodePrefix::%s -> %s", Fmt(code), Fmt(prefix))
+	par.Trace("parseBytecodePrefix::%s -> %s", FmtLazy(code), FmtLazy(prefix))
 	return prefix
 }
 
@@ -685,33 +659,27 @@ func (lib *Library) evalBytecodeArg(par *CallParams) []byte {
 	if !bytes.Equal(prefix, expectedPrefix) {
 		_, _, _, symPrefix, err := lib.parseCallPrefix(prefix)
 		if err != nil {
-			par.TracePanic("evalBytecodeArg: can't parse prefix '%s': %v", Fmt(prefix), err)
+			par.TracePanic("evalBytecodeArg: can't parse prefix '%s': %v", FmtLazy(prefix), err)
 		}
 		_, _, _, symExpectedPrefix, err := lib.parseCallPrefix(expectedPrefix)
 		if err != nil {
-			par.TracePanic("evalBytecodeArg: can't parse expected prefix '%s': %v", Fmt(expectedPrefix), err)
+			par.TracePanic("evalBytecodeArg: can't parse expected prefix '%s': %v", FmtLazy(expectedPrefix), err)
 		}
 		par.TracePanic("evalBytecodeArg: unexpected function prefix. Expected '%s'('%s'), got '%s'('%s')",
-			Fmt(expectedPrefix), symExpectedPrefix, Fmt(prefix), symPrefix)
+			FmtLazy(expectedPrefix), symExpectedPrefix, FmtLazy(prefix), symPrefix)
 	}
 	if len(idx) != 1 || len(args) <= int(idx[0]) {
 		par.TracePanic("evalParseArgumentBytecode: wrong parameter index")
 	}
 
-	ret, err := lib.EvalFromBytecode(par.ctx.glb, args[idx[0]])
-	if err != nil {
-		par.TracePanic("evalBytecodeArg:: %s, %s, %s", Fmt(a0), Fmt(expectedPrefix), Fmt(idx))
-	}
+	ret := lib.MustEvalFromBytecodeWithSlicePool(par.ctx.glb, par.ctx.Spool, args[idx[0]])
 
-	par.Trace("evalBytecodeArg:: %s, %s, %s -> %s", Fmt(a0), Fmt(expectedPrefix), Fmt(idx), Fmt(ret))
+	par.Trace("evalBytecodeArg:: %s, %s, %s -> %s", FmtLazy(a0), FmtLazy(expectedPrefix), FmtLazy(idx), FmtLazy(ret))
 	return ret
 }
 
 func (lib *Library) evalBytecode(par *CallParams) []byte {
-	ret, err := lib.EvalFromBytecode(par.ctx.glb, par.Arg(0))
-	if err != nil {
-		par.TracePanic("evalBytecode:: %v", err)
-	}
-	par.Trace("evalBytecode:: %s} -> %s", Fmt(par.Arg(0)), Fmt(ret))
+	ret := lib.MustEvalFromBytecodeWithSlicePool(par.ctx.glb, par.ctx.Spool, par.Arg(0))
+	par.Trace("evalBytecode:: %s} -> %s", FmtLazy(par.Arg(0)), FmtLazy(ret))
 	return ret
 }

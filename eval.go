@@ -20,7 +20,7 @@ type GlobalData interface {
 // evalContext is the structure through which the EasyFL script accesses data structure it is validating
 type evalContext struct {
 	glb      GlobalData
-	spool    *slicepool.SlicePool
+	Spool    *slicepool.SlicePool
 	varScope []*call
 }
 
@@ -41,7 +41,7 @@ type call struct {
 func newEvalContext(varScope []*call, glb GlobalData, spool *slicepool.SlicePool) *evalContext {
 	return &evalContext{
 		varScope: varScope,
-		spool:    spool,
+		Spool:    spool,
 		glb:      glb,
 	}
 }
@@ -142,16 +142,16 @@ func (p *CallParams) Arg(n byte) []byte {
 	return ret
 }
 
-func (p *CallParams) Trace(format string, args ...interface{}) {
+func (p *CallParams) Trace(format string, args ...any) {
 	if isNil(p.ctx.glb) || !p.ctx.glb.Trace() {
 		return
 	}
-	p.ctx.glb.PutTrace(fmt.Sprintf(format, args...))
+	p.ctx.glb.PutTrace(fmt.Sprintf(format, evalLazyArgs(args...)...))
 }
 
-func (p *CallParams) TracePanic(format string, args ...interface{}) {
+func (p *CallParams) TracePanic(format string, args ...any) {
 	p.Trace("panic: "+format, args...)
-	panic(fmt.Sprintf("panic: "+format, args...))
+	panic(fmt.Sprintf("panic: "+format, evalLazyArgs(args...)...))
 }
 
 func (p *CallParams) EvalParam(paramNr byte) []byte {
@@ -238,6 +238,16 @@ func (lib *Library) MustEvalFromBytecode(glb GlobalData, code []byte, args ...[]
 	defer disposeExpression(expr)
 
 	return EvalExpression(glb, expr, args...)
+}
+
+func (lib *Library) MustEvalFromBytecodeWithSlicePool(glb GlobalData, spool *slicepool.SlicePool, code []byte, args ...[]byte) []byte {
+	expr, err := lib.ExpressionFromBytecode(code)
+	if err != nil {
+		panic(err)
+	}
+	defer disposeExpression(expr)
+
+	return EvalExpressionWithSlicePool(glb, spool, expr, args...)
 }
 
 // EvalFromBytecode evaluates expression, never panics but return an error
