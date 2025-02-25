@@ -183,6 +183,22 @@ func EvalExpression(glb GlobalData, f *Expression, args ...[]byte) []byte {
 	return ret
 }
 
+// EvalExpressionWithSlicePool evaluates expression, in the context of any data context and given values of parameters
+// It must be provided slice pool for allocation of interim  data
+func EvalExpressionWithSlicePool(glb GlobalData, spool *slicepool.SlicePool, f *Expression, args ...[]byte) []byte {
+	argsForData := make([]*call, len(args))
+
+	ctx := newEvalContext(nil, glb, spool)
+	for i, d := range args {
+		argsForData[i] = newCall(dataFunction(d), nil, ctx)
+	}
+	retp := evalExpression(glb, spool, f, argsForData)
+	ret := make([]byte, len(retp))
+	copy(ret, retp)
+
+	return ret
+}
+
 // EvalFromSource compiles source of the expression and evaluates it
 // Never panics
 func (lib *Library) EvalFromSource(glb GlobalData, source string, args ...[]byte) ([]byte, error) {

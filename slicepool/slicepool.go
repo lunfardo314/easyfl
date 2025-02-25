@@ -3,7 +3,6 @@
 // With each call Alloc memory occupied by pool only grows util pool is disposed.
 // Dispose pool means all memory occupied by slices in pool is fried (returned to sync pools) and nullified.
 // So, it is not memory safe mechanism because after pool is disposed, slices allocated in it should not be used
-// Slice pools ARE NOT THREAD SAFE
 //
 // In EasyFL all interim byte slices which occur during evaluation of the expression
 // will be allocated in the slice pool incrementally. When evaluation is finished, final value is copied into
@@ -20,7 +19,8 @@ type (
 		allocAt uint16
 	}
 	SlicePool struct {
-		segs []*segment
+		mutex sync.Mutex
+		segs  []*segment
 	}
 )
 
@@ -40,6 +40,7 @@ func New() (ret *SlicePool) {
 	return
 }
 
+// Dispose not thread safe!
 func (p *SlicePool) Dispose() {
 	for i := range p.segs {
 		p.segs[i].dispose()
@@ -49,7 +50,11 @@ func (p *SlicePool) Dispose() {
 	mpools.Put(p)
 }
 
+// Alloc thread safe
 func (p *SlicePool) Alloc(size uint16) (ret []byte) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
 	if size > segmentSize {
 		return make([]byte, size)
 	}

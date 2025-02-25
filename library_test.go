@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lunfardo314/easyfl/slicepool"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/blake2b"
 )
@@ -1069,6 +1070,101 @@ func TestBytecodeParams(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, code, concat(prefix, arg0, arg1))
 
+	})
+}
+
+func TestBytecodeParamsWithSlicePool(t *testing.T) {
+	lib := NewBase()
+	spool := slicepool.New()
+
+	t.Run("1", func(t *testing.T) {
+		const src = "concat(1,2)"
+		_, _, code, err := lib.CompileExpression(src)
+		require.NoError(t, err)
+
+		src1 := fmt.Sprintf("bytecode(%s)", src)
+		expr1, nPar, code1, err := lib.CompileExpression(src1)
+		require.NoError(t, err)
+		require.EqualValues(t, 0, nPar)
+		t.Logf("compile '%s' -> %s", src1, Fmt(code1))
+
+		res := EvalExpressionWithSlicePool(nil, spool, expr1)
+		t.Logf("Result: '%s'", Fmt(res))
+
+		require.EqualValues(t, code, res)
+
+		decompiled1, err := lib.DecompileBytecode(code1)
+		require.NoError(t, err)
+		t.Logf("decompiled1: '%s'", decompiled1)
+
+		decompiled, err := lib.DecompileBytecode(code)
+		require.NoError(t, err)
+		t.Logf("decompiled: '%s'", decompiled)
+	})
+	t.Run("2", func(t *testing.T) {
+		const src = "and(concat(1,2), if(1,2,3))"
+		_, _, code, err := lib.CompileExpression(src)
+		require.NoError(t, err)
+
+		src1 := fmt.Sprintf("bytecode(%s)", src)
+		expr1, nPar, code1, err := lib.CompileExpression(src1)
+		require.NoError(t, err)
+		require.EqualValues(t, 0, nPar)
+		t.Logf("compile '%s' -> %s", src1, Fmt(code1))
+
+		res := EvalExpressionWithSlicePool(nil, spool, expr1)
+		t.Logf("Result: '%s'", Fmt(res))
+
+		require.EqualValues(t, code, res)
+
+		decompiled1, err := lib.DecompileBytecode(code1)
+		require.NoError(t, err)
+		t.Logf("decompiled: '%s'", decompiled1)
+
+		decompiled, err := lib.DecompileBytecode(code)
+		require.NoError(t, err)
+		t.Logf("decompiled: '%s'", decompiled)
+	})
+	t.Run("3", func(t *testing.T) {
+		const src = "concat($0,$$0)"
+
+		expr, n, code, err := lib.CompileExpression(src)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, n)
+		t.Logf("code: %s", Fmt(code))
+
+		res := EvalExpressionWithSlicePool(nil, spool, expr, []byte{0xff})
+		t.Logf("eval: %s", Fmt(res))
+		require.EqualValues(t, []byte{0xff, 0x81, 0xff}, res)
+	})
+	t.Run("4", func(t *testing.T) {
+		const src = "concat(1,$$0, $$1, $$2)"
+
+		expr, n, code, err := lib.CompileExpression(src)
+		require.NoError(t, err)
+		require.EqualValues(t, 3, n)
+		t.Logf("code: %s", Fmt(code))
+
+		res := EvalExpressionWithSlicePool(nil, spool, expr, []byte{0xff}, []byte{0xff}, []byte{0xff})
+		t.Logf("eval: %s", Fmt(res))
+		require.EqualValues(t, hex.EncodeToString(res), "0181ff81ff81ff")
+	})
+	t.Run("5", func(t *testing.T) {
+		for i := 0; i < 100; i++ {
+			spool := slicepool.New()
+			sources := []string{"123", "0x", "u64/1234567890", "concat(1,2,3)", "lessOrEqualThan(1,2)", "lessOrEqualThan(2, 1)",
+				"lessOrEqualThan(0xabcdef123456, 0xabcdef123000)", "concat(1,concat(2,3), concat)", "nil"}
+			for _, src := range sources {
+				expr, n, code, err := lib.CompileExpression(src)
+				require.NoError(t, err)
+				require.EqualValues(t, 0, n)
+				t.Logf("code: %s", Fmt(code))
+
+				res := EvalExpressionWithSlicePool(nil, spool, expr, []byte{0xff})
+				t.Logf("eval: %s", Fmt(res))
+			}
+			spool.Dispose()
+		}
 	})
 }
 
