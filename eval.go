@@ -268,6 +268,16 @@ func (lib *Library) EvalFromBytecode(glb GlobalData, code []byte, args ...[]byte
 	return ret, err
 }
 
+// EvalFromBytecodeWithSlicePool evaluates expression, never panics but return an error
+func (lib *Library) EvalFromBytecodeWithSlicePool(glb GlobalData, spool *slicepool.SlicePool, code []byte, args ...[]byte) ([]byte, error) {
+	var ret []byte
+	err := CatchPanicOrError(func() error {
+		ret = lib.MustEvalFromBytecodeWithSlicePool(glb, spool, code, args...)
+		return nil
+	})
+	return ret, err
+}
+
 func (lib *Library) expressionFromLibrary(libraryBin [][]byte, funIndex int) (*Expression, error) {
 	libLoc, err := lib.LocalLibraryFromBytes(libraryBin[:funIndex])
 	if err != nil {
