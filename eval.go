@@ -20,7 +20,7 @@ type GlobalData interface {
 // evalContext is the structure through which the EasyFL script accesses data structure it is validating
 type evalContext struct {
 	glb      GlobalData
-	Spool    *slicepool.SlicePool
+	spool    *slicepool.SlicePool
 	varScope []*call
 }
 
@@ -41,7 +41,7 @@ type call struct {
 func newEvalContext(varScope []*call, glb GlobalData, spool *slicepool.SlicePool) *evalContext {
 	return &evalContext{
 		varScope: varScope,
-		Spool:    spool,
+		spool:    spool,
 		glb:      glb,
 	}
 }
@@ -152,6 +152,14 @@ func (p *CallParams) Trace(format string, args ...any) {
 func (p *CallParams) TracePanic(format string, args ...any) {
 	p.Trace("panic: "+format, args...)
 	panic(fmt.Sprintf("panic: "+format, evalLazyArgs(args...)...))
+}
+
+func (p *CallParams) Alloc(size uint16) []byte {
+	return p.ctx.spool.Alloc(size)
+}
+
+func (p *CallParams) AllocData(data ...byte) []byte {
+	return p.ctx.spool.AllocData(data...)
 }
 
 func (p *CallParams) EvalParam(paramNr byte) []byte {
