@@ -25,11 +25,22 @@ type (
 )
 
 var (
-	mpools   sync.Pool
-	segments sync.Pool
+	mpools      sync.Pool
+	segments    sync.Pool
+	disableOnce sync.Once
+	enabled     = true
 )
 
+func Disable() {
+	disableOnce.Do(func() {
+		enabled = false
+	})
+}
+
 func New() (ret *SlicePool) {
+	if !enabled {
+		return nil
+	}
 	if p := mpools.Get(); p != nil {
 		ret = p.(*SlicePool)
 	} else {
@@ -42,6 +53,9 @@ func New() (ret *SlicePool) {
 
 // Dispose not thread safe!
 func (p *SlicePool) Dispose() {
+	if p == nil {
+		return
+	}
 	for i := range p.segs {
 		p.segs[i].dispose()
 		p.segs[i] = nil
@@ -52,6 +66,10 @@ func (p *SlicePool) Dispose() {
 
 // Alloc thread safe
 func (p *SlicePool) Alloc(size uint16) (ret []byte) {
+	if p == nil {
+		return make([]byte, size)
+	}
+
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 

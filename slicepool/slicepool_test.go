@@ -9,6 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func init() {
+	Disable()
+}
+
 func TestSlicePool(t *testing.T) {
 	sp := New()
 

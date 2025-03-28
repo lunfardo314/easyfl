@@ -17,6 +17,10 @@ import (
 	"golang.org/x/crypto/blake2b"
 )
 
+func init() {
+	slicepool.Disable()
+}
+
 const formula1 = "func unlockBlock: concat(concat(0x0000, slice(0x01020304050607, 2, 5)))"
 
 func TestAux(t *testing.T) {
