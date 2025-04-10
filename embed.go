@@ -45,7 +45,9 @@ var (
 		{"mul", 2, evalMulUint},
 		{"div", 2, evalDivUint},
 		{"mod", 2, evalModuloUint},
-		{"uint64Bytes", 1, evalUint64Bytes},
+		// pads with 0 prefix up to 8 bytes
+		// nil, 0x becomes u64/0
+		{"uint8Bytes", 1, evalUint8Bytes},
 	}
 	embedBitwiseAndCmpShort = []*EmbeddedFunctionData{
 		{"lessThan", 2, evalLessThan},
@@ -115,38 +117,45 @@ func (lib *Library) embedMain() {
 func (lib *Library) embedArithmetics() {
 	lib.UpgradeWithEmbeddedShort(embedArithmeticsShort...)
 
+	lib.MustTrue("isZero(uint8Bytes(0x))")
+	lib.MustTrue("equal(uint8Bytes(0x), u64/0)")
+	lib.MustEqual("uint8Bytes(1)", "u64/1")
+	lib.MustEqual("uint8Bytes(u16/1)", "u64/1")
+
 	lib.MustEqual("add(5,6)", "add(10,1)")
 	lib.MustEqual("add(5,6)", "u64/11")
 	lib.MustEqual("add(0, 0)", "u64/0")
 	lib.MustEqual("add(u16/1337, 0)", "u64/1337")
-	lib.MustError("add(nil, 0)", "wrong size of parameter")
+	lib.MustEqual("add(nil, 0)", "u64/0")
+	lib.MustEqual("add(0, 0)", "u64/0")
+	lib.MustEqual("add(0x, 0x)", "u64/0")
 
 	lib.MustEqual("sub(6,6)", "u64/0")
 	lib.MustEqual("sub(6,5)", "u64/1")
 	lib.MustEqual("sub(0, 0)", "u64/0")
 	lib.MustEqual("sub(u16/1337, 0)", "u64/1337")
-	lib.MustError("sub(nil, 0)", "wrong size of parameter")
+	lib.MustEqual("sub(nil, 0)", "u64/0")
 	lib.MustError("sub(10, 100)", "underflow in subtraction")
 
 	lib.MustEqual("mul(5,6)", "mul(15,2)")
 	lib.MustEqual("mul(5,6)", "u64/30")
 	lib.MustEqual("mul(u16/1337, 0)", "u64/0")
 	lib.MustEqual("mul(0, u32/1337133700)", "u64/0")
-	lib.MustError("mul(nil, 5)", "wrong size of parameter")
+	lib.MustEqual("mul(nil, 5)", "u64/0")
 
 	lib.MustEqual("div(100,100)", "u64/1")
 	lib.MustEqual("div(100,110)", "u64/0")
 	lib.MustEqual("div(u32/10000,u16/10000)", "u64/1")
 	lib.MustEqual("div(0, u32/1337133700)", "u64/0")
 	lib.MustError("div(u32/1337133700, 0)", "integer divide by zero")
-	lib.MustError("div(nil, 5)", "wrong size of parameter")
+	lib.MustEqual("div(nil, 5)", "u64/0")
 
 	lib.MustEqual("mod(100,100)", "u64/0")
 	lib.MustEqual("mod(107,100)", "u64/7")
 	lib.MustEqual("mod(u32/10100,u16/10000)", "u64/100")
 	lib.MustEqual("mod(0, u32/1337133700)", "u64/0")
 	lib.MustError("mod(u32/1337133700, 0)", "integer divide by zero")
-	lib.MustError("mod(nil, 5)", "wrong size of parameter")
+	lib.MustEqual("mod(nil, 5)", "u64/0")
 	lib.MustEqual("add(mul(div(u32/27, u16/4), 4), mod(u32/27, 4))", "u64/27")
 }
 
@@ -175,13 +184,13 @@ func (lib *Library) embedBitwiseAndCmp() {
 	lib.MustEqual("lshift64(u64/3, u64/2)", "u64/12")
 	lib.MustTrue("isZero(lshift64(u64/2001, u64/64))")
 	lib.MustTrue("equal(lshift64(u64/2001, u64/4), mul(u64/2001, u16/16))")
-	lib.MustError("lshift64(u64/2001, nil)", "wrong size of parameter")
+	lib.MustEqual("lshift64(u64/2001, nil)", "u64/2001")
 
 	//lib.embedLong("rshift64", 2, evalRShift64)
 	lib.MustEqual("rshift64(u64/15, u64/2)", "u64/3")
 	lib.MustTrue("isZero(rshift64(0xffffffffffffffff, u64/64))")
 	lib.MustTrue("equal(rshift64(u64/2001, u64/3), div(u64/2001, 8))")
-	lib.MustError("rshift64(u64/2001, nil)", "wrong size of parameter")
+	lib.MustEqual("rshift64(u64/2001, nil)", "u64/2001")
 }
 
 func (lib *Library) embedBaseCrypto() {
@@ -419,11 +428,11 @@ func evalOr(par *CallParams) []byte {
 	return nil
 }
 
-func ensureUint64Bytes(spool *slicepool.SlicePool, data []byte) ([]byte, bool) {
+func ensure8Bytes(spool *slicepool.SlicePool, data []byte) ([]byte, bool) {
 	if len(data) == 8 {
 		return data, true
 	}
-	if len(data) == 0 || len(data) > 8 {
+	if len(data) > 8 {
 		return nil, false
 	}
 	ret := spool.Alloc(8)
@@ -435,13 +444,13 @@ func ensureUint64Bytes(spool *slicepool.SlicePool, data []byte) ([]byte, bool) {
 // Parameters must be not nil with size <= 8. They are padded with 0 in upper bytes, if necessary
 func mustArithmeticArgs(par *CallParams, name string) (uint64, uint64) {
 	a0Bin := par.Arg(0)
-	a0, ok := ensureUint64Bytes(par.ctx.spool, a0Bin)
+	a0, ok := ensure8Bytes(par.ctx.spool, a0Bin)
 	if !ok {
 		par.TracePanic("%s:: wrong size of parameter 0", name)
 	}
 
 	a1Bin := par.Arg(1)
-	a1, ok := ensureUint64Bytes(par.ctx.spool, a1Bin)
+	a1, ok := ensure8Bytes(par.ctx.spool, a1Bin)
 	if !ok {
 		par.TracePanic("%s:: wrong size of parameter 1", name)
 	}
@@ -486,8 +495,8 @@ func evalModuloUint(par *CallParams) []byte {
 	return ret
 }
 
-func evalUint64Bytes(par *CallParams) []byte {
-	ret, ok := ensureUint64Bytes(par.ctx.spool, par.Arg(0))
+func evalUint8Bytes(par *CallParams) []byte {
+	ret, ok := ensure8Bytes(par.ctx.spool, par.Arg(0))
 	if !ok {
 		par.TracePanic("%s:: wrong size of parameter", "uint64Bytes")
 	}
