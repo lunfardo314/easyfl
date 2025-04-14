@@ -12,6 +12,10 @@ func TestLibrary_ToYAML(t *testing.T) {
 	yamlData := lib.ToYAML()
 	t.Logf("----------------------------\n%s", string(yamlData))
 
-	_, err := ReadLibraryFromYAML(yamlData)
+	libBack, err := ReadLibraryFromYAML(yamlData)
+	require.NoError(t, err)
+	err = libBack.ValidateExtended()
+	require.NoError(t, err)
+	err = libBack.Embed(lib.BaseEmbeddingMap())
 	require.NoError(t, err)
 }

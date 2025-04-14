@@ -75,14 +75,23 @@ func (lib *Library) addDescriptor(fd *funDescriptor) {
 	lib.funByName[fd.sym] = fd
 	lib.funByFunCode[fd.funCode] = fd
 	isEmbedded, isShort := fd.isEmbeddedOrShort()
-	switch {
-	case isEmbedded && isShort:
-		lib.numEmbeddedShort++
-	case isEmbedded && !isShort:
-		lib.numEmbeddedLong++
-	default:
+	if isEmbedded {
+		if isShort {
+			lib.numEmbeddedShort++
+		} else {
+			lib.numEmbeddedLong++
+		}
+	} else {
 		lib.numExtended++
 	}
+	//switch {
+	//case isEmbedded && isShort:
+	//	lib.numEmbeddedShort++
+	//case isEmbedded && !isShort:
+	//	lib.numEmbeddedLong++
+	//default:
+	//	lib.numExtended++
+	//}
 }
 
 // embedShort embeds short-callable function into the library
@@ -117,9 +126,9 @@ func (lib *Library) embedShortErr(sym string, requiredNumPar int, embeddedFun Em
 	lib.addDescriptor(dscr)
 	{
 		// sanity check
-		if requiredNumPar < 0 {
-			requiredNumPar = 1
-		}
+		//if requiredNumPar < 0 {
+		//	requiredNumPar = 1
+		//}
 		codeBytes, err := lib.FunctionCallPrefixByName(sym, byte(requiredNumPar))
 		AssertNoError(err)
 		Assertf(len(codeBytes) == 1, "expected short code")

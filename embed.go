@@ -73,6 +73,26 @@ var (
 	}
 )
 
+func mustAddToEmbeddingMap(m map[string]*EmbeddedFunctionData, embeddedFunData ...*EmbeddedFunctionData) {
+	for _, e := range embeddedFunData {
+		_, already := m[e.Sym]
+		Assertf(!already, "addToEmbeddingMap: duplicate embedded function: '%s'", e.Sym)
+		m[e.Sym] = e
+	}
+}
+
+func (lib *Library) BaseEmbeddingMap() map[string]*EmbeddedFunctionData {
+	ret := make(map[string]*EmbeddedFunctionData)
+	mustAddToEmbeddingMap(ret, embedShortBase...)
+	mustAddToEmbeddingMap(ret, embedLongBase...)
+	mustAddToEmbeddingMap(ret, embedArithmeticsShort...)
+	mustAddToEmbeddingMap(ret, embedBitwiseAndCmpShort...)
+	mustAddToEmbeddingMap(ret, embedBitwiseAndCmpLong...)
+	mustAddToEmbeddingMap(ret, embedBaseCrypto...)
+	mustAddToEmbeddingMap(ret, embedBytecodeManipulation(lib)...)
+	return ret
+}
+
 // embedding functions with inline tests
 
 func (lib *Library) embedMain() {

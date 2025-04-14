@@ -14,12 +14,9 @@ import (
 
 type (
 	LibraryFromYAML struct {
-		Name             string                   `yaml:"name"`
-		Hash             string                   `yaml:"hash"`
-		NumEmbeddedShort uint16                   `yaml:"num_embedded_short"`
-		NumEmbeddedLong  uint16                   `yaml:"num_embedded_long"`
-		NumExtended      uint16                   `yaml:"num_extended"`
-		Functions        []FuncDescriptorYAMLable `yaml:"functions"`
+		Name      string                   `yaml:"name"`
+		Hash      string                   `yaml:"hash"`
+		Functions []FuncDescriptorYAMLable `yaml:"functions"`
 	}
 
 	FuncDescriptorYAMLable struct {
@@ -45,39 +42,36 @@ func (lib *Library) ToYAML() []byte {
 	prn(&buf, "num_embedded_long: %d\n", lib.numEmbeddedLong)
 	prn(&buf, "num_extended: %d\n", lib.numExtended)
 
-	embedded := make([]*FuncDescriptorYAMLable, 0)
-	for sym := range lib.funByName {
-		dscr := lib.findByName(sym)
-		if !dscr.Embedded {
-			continue
+	numEmbeddedShort := 0
+	numEmbeddedLong := 0
+	numExtended := 0
+
+	functions := make([]*FuncDescriptorYAMLable, 0)
+	for sym, fd := range lib.funByName {
+		functions = append(functions, lib.funYAMLAbleByName(sym))
+		isEmbedded, isShort := fd.isEmbeddedOrShort()
+		if isEmbedded {
+			if isShort {
+				numEmbeddedShort++
+			} else {
+				numEmbeddedLong++
+			}
+		} else {
+			numExtended++
 		}
-		embedded = append(embedded, dscr)
 	}
-	sort.Slice(embedded, func(i, j int) bool {
-		return embedded[i].FunCode < embedded[j].FunCode
+	Assertf(numEmbeddedLong+numEmbeddedShort+numExtended == len(lib.funByName), "numEmbeddedLong+numEmbeddedShort+numExtended==len(lib.funByName)")
+	Assertf(int(lib.numEmbeddedShort)-FirstEmbeddedShort == numEmbeddedShort, "int(lib.numEmbeddedShort)==numEmbeddedShort")
+	Assertf(int(lib.numEmbeddedLong) == numEmbeddedLong, "int(lib.numEmbeddedLong)==numEmbeddedLong")
+	Assertf(int(lib.numExtended) == numExtended, "int(lib.numExtended)==numExtended")
+
+	sort.Slice(functions, func(i, j int) bool {
+		return functions[i].FunCode < functions[j].FunCode
 	})
 
 	prn(&buf, "functions:\n")
 
-	prn(&buf, "# ------------ embedded functions\n")
-	for _, dscr := range embedded {
-		prnFuncDescription(&buf, dscr)
-	}
-
-	extended := make([]*FuncDescriptorYAMLable, 0)
-	for sym := range lib.funByName {
-		dscr := lib.findByName(sym)
-		if dscr.Embedded {
-			continue
-		}
-		extended = append(extended, dscr)
-	}
-	sort.Slice(extended, func(i, j int) bool {
-		return extended[i].FunCode < extended[j].FunCode
-	})
-
-	prn(&buf, "# ------------ extended functions\n")
-	for _, dscr := range extended {
+	for _, dscr := range functions {
 		prnFuncDescription(&buf, dscr)
 	}
 
@@ -113,7 +107,7 @@ func prnFuncDescription(w io.Writer, f *FuncDescriptorYAMLable) {
 	}
 }
 
-func (lib *Library) findByName(sym string) *FuncDescriptorYAMLable {
+func (lib *Library) funYAMLAbleByName(sym string) *FuncDescriptorYAMLable {
 	fi, err := lib.functionByName(sym)
 	AssertNoError(err)
 	dscr := lib.funByFunCode[fi.FunCode]
@@ -151,18 +145,92 @@ func ReadLibraryFromYAML(data []byte) (*Library, error) {
 	if err != nil {
 		return nil, err
 	}
-	isSorted := sort.SliceIsSorted(fromYAML.Functions, func(i, j int) bool {
-		return fromYAML.Functions[i].FunCode < fromYAML.Functions[j].FunCode
-	})
-	if !isSorted {
-		return nil, fmt.Errorf("function descriptions in the .YAML file must be sorted ascending by 'funCode'")
-	}
 	ret := &Library{
-		funByName:        make(map[string]*funDescriptor),
-		funByFunCode:     make(map[uint16]*funDescriptor),
-		numEmbeddedShort: fromYAML.NumEmbeddedShort,
-		numEmbeddedLong:  fromYAML.NumEmbeddedLong,
-		numExtended:      fromYAML.NumExtended,
+		funByName:    make(map[string]*funDescriptor),
+		funByFunCode: make(map[uint16]*funDescriptor),
 	}
+
+	numEmbeddedShort := 0
+	numEmbeddedLong := 0
+	numExtended := 0
+
+	for _, dscr := range fromYAML.Functions {
+		if _, already := ret.funByName[dscr.Sym]; already {
+			return nil, fmt.Errorf("duplicate function name '%s', code: %d", dscr.Sym, dscr.FunCode)
+		}
+		fd := &funDescriptor{
+			sym:               dscr.Sym,
+			funCode:           dscr.FunCode,
+			bytecode:          nil,
+			requiredNumParams: dscr.NumArgs,
+			embeddedFun:       nil,
+			source:            dscr.Source,
+		}
+		fd.bytecode, err = hex.DecodeString(dscr.Bytecode)
+		if err != nil {
+			return nil, fmt.Errorf("error while decoding bytecode fun name: '%s': %v", dscr.Sym, err)
+		}
+
+		ret.funByName[dscr.Sym] = fd
+
+		if _, already := ret.funByFunCode[dscr.FunCode]; already {
+			return nil, fmt.Errorf("duplicate function code %d, name: %s", dscr.FunCode, dscr.Sym)
+		}
+		ret.funByFunCode[dscr.FunCode] = fd
+		isEmbedded, isShort := fd.isEmbeddedOrShort()
+		if isEmbedded {
+			if isShort {
+				numEmbeddedShort++
+			} else {
+				numEmbeddedLong++
+			}
+		} else {
+			numExtended++
+		}
+	}
+	ret.numEmbeddedShort = uint16(numEmbeddedShort) + FirstEmbeddedShort
+	ret.numEmbeddedLong = uint16(numEmbeddedLong)
+	ret.numExtended = uint16(numExtended)
 	return ret, nil
+}
+
+func (lib *Library) Embed(m map[string]*EmbeddedFunctionData) error {
+	for _, fd := range lib.funByFunCode {
+		if isEmbedded, _ := fd.isEmbeddedOrShort(); isEmbedded {
+			e, ok := m[fd.sym]
+			if !ok {
+				return fmt.Errorf("embedded fun '%s' not found", fd.sym)
+			}
+			if fd.requiredNumParams != e.RequiredNumPar {
+				return fmt.Errorf("embedded fun '%s': inconsistent number of params", fd.sym)
+			}
+			fd.embeddedFun = e.EmbeddedFun
+		}
+	}
+	return nil
+}
+
+func (lib *Library) ValidateExtended() error {
+	extended := make([]*funDescriptor, 0)
+	for _, fd := range lib.funByFunCode {
+		if isEmbedded, _ := fd.isEmbeddedOrShort(); !isEmbedded {
+			extended = append(extended, fd)
+		}
+	}
+	sort.Slice(extended, func(i, j int) bool {
+		return extended[i].funCode < extended[j].funCode
+	})
+	for _, fd := range extended {
+		_, numArgs, bytecode, err := lib.CompileExpression(fd.source)
+		if err != nil {
+			return fmt.Errorf("error while compiling function name: '%s', source: `%s`: %v", fd.sym, fd.source, err)
+		}
+		if numArgs != fd.requiredNumParams {
+			return fmt.Errorf("error while compiling function. Inconsistent number of args. name: '%s', source: `%s`", fd.sym, fd.source)
+		}
+		if !bytes.Equal(fd.bytecode, bytecode) {
+			return fmt.Errorf("error while compiling function. Compiled bytecode != provided one. name: '%s', source: `%s`", fd.sym, fd.source)
+		}
+	}
+	return nil
 }
