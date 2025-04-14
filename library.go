@@ -246,6 +246,7 @@ func (lib *Library) ExtendErr(sym string, source string) (uint16, error) {
 		bytecode:          bytecode,
 		requiredNumParams: numParam,
 		embeddedFun:       embeddedFun,
+		source:            source,
 	}
 	lib.addDescriptor(dscr)
 

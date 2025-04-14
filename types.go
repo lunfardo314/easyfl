@@ -60,6 +60,8 @@ type (
 		// for embedded functions it is hardcoded function, for extended functions is
 		// interpreter closure of the bytecode
 		embeddedFun EmbeddedFunction
+		// only needed for generating YAML
+		source string
 	}
 
 	funInfo struct {

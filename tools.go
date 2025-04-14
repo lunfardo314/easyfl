@@ -7,21 +7,30 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 type (
-	LibraryYAMLAble struct {
-		Hash string `yaml:"hash"`
+	LibraryFromYAML struct {
+		Name             string                   `yaml:"name"`
+		Hash             string                   `yaml:"hash"`
+		NumEmbeddedShort uint16                   `yaml:"num_embedded_short"`
+		NumEmbeddedLong  uint16                   `yaml:"num_embedded_long"`
+		NumExtended      uint16                   `yaml:"num_extended"`
+		Functions        []FuncDescriptorYAMLable `yaml:"functions"`
 	}
 
-	FuncDescriptor struct {
+	FuncDescriptorYAMLable struct {
+		Digest   string `yaml:"digest,omitempty"`
 		Sym      string `yaml:"sym"`
 		FunCode  uint16 `yaml:"funCode"`
-		Embedded bool   `yaml:"embedded"`
-		Short    bool   `yaml:"short"`
+		Embedded bool   `yaml:"embedded,omitempty"`
+		Short    bool   `yaml:"short,omitempty"`
 		NumArgs  int    `yaml:"numArgs"`
-		Source   string `yaml:"source"`
-		Bytecode string `yaml:"bytecode"`
+		Source   string `yaml:"source,omitempty"`
+		Bytecode string `yaml:"bytecode,omitempty"`
 	}
 )
 
@@ -36,7 +45,7 @@ func (lib *Library) ToYAML() []byte {
 	prn(&buf, "num_embedded_long: %d\n", lib.numEmbeddedLong)
 	prn(&buf, "num_extended: %d\n", lib.numExtended)
 
-	embedded := make([]*FuncDescriptor, 0)
+	embedded := make([]*FuncDescriptorYAMLable, 0)
 	for sym := range lib.funByName {
 		dscr := lib.findByName(sym)
 		if !dscr.Embedded {
@@ -55,7 +64,7 @@ func (lib *Library) ToYAML() []byte {
 		prnFuncDescription(&buf, dscr)
 	}
 
-	extended := make([]*FuncDescriptor, 0)
+	extended := make([]*FuncDescriptorYAMLable, 0)
 	for sym := range lib.funByName {
 		dscr := lib.findByName(sym)
 		if dscr.Embedded {
@@ -78,6 +87,7 @@ func (lib *Library) ToYAML() []byte {
 const (
 	ident  = "   "
 	ident2 = ident + ident
+	ident3 = ident + ident + ident
 )
 
 func prn(w io.Writer, format string, a ...any) {
@@ -85,23 +95,9 @@ func prn(w io.Writer, format string, a ...any) {
 	AssertNoError(err)
 }
 
-func prnFuncDescription(w io.Writer, f *FuncDescriptor) {
-	var b2 [2]byte
-	binary.BigEndian.PutUint16(b2[:], f.FunCode)
-	inShort := "extended"
-	if f.Embedded {
-		if f.Short {
-			inShort = "embedded short"
-		} else {
-			inShort = "embedded long"
-		}
-	}
-	argsStr := fmt.Sprintf("args: %d", f.NumArgs)
-	if f.NumArgs < 0 {
-		argsStr = "varargs"
-	}
-	prn(w, "# func '%s', funCode: %d (hex 0x%s), %s, %s)\n", f.Sym, f.FunCode, hex.EncodeToString(b2[:]), inShort, argsStr)
+func prnFuncDescription(w io.Writer, f *FuncDescriptorYAMLable) {
 	prn(w, ident+"-\n")
+	prn(w, ident2+"digest: \"%s\"\n", f.Digest)
 	prn(w, ident2+"funCode: %d\n", f.FunCode)
 	prn(w, ident2+"sym: %s\n", f.Sym)
 	prn(w, ident2+"numArgs: %d\n", f.NumArgs)
@@ -113,22 +109,60 @@ func prnFuncDescription(w io.Writer, f *FuncDescriptor) {
 	}
 	if !f.Embedded {
 		prn(w, ident2+"bytecode: %s\n", f.Bytecode)
+		prn(w, ident2+"source: >\n%s\n", ident3+strings.Replace(f.Source, "\n", ident3+"\n", -1))
 	}
 }
 
-func (lib *Library) findByName(sym string) *FuncDescriptor {
+func (lib *Library) findByName(sym string) *FuncDescriptorYAMLable {
 	fi, err := lib.functionByName(sym)
 	AssertNoError(err)
 	dscr := lib.funByFunCode[fi.FunCode]
 
-	return &FuncDescriptor{
+	var b2 [2]byte
+	binary.BigEndian.PutUint16(b2[:], fi.FunCode)
+	inShort := "extended"
+	if fi.IsEmbedded {
+		if fi.IsShort {
+			inShort = "embedded short"
+		} else {
+			inShort = "embedded long"
+		}
+	}
+	argsStr := fmt.Sprintf("args: %d", fi.NumParams)
+	if fi.NumParams < 0 {
+		argsStr = "varargs"
+	}
+
+	return &FuncDescriptorYAMLable{
+		Digest:   fmt.Sprintf("name: '%s', funCode: %d (hex 0x%s), %s, %s", fi.Sym, fi.FunCode, hex.EncodeToString(b2[:]), inShort, argsStr),
 		Sym:      dscr.sym,
 		FunCode:  dscr.funCode,
 		Embedded: fi.IsEmbedded,
 		Short:    fi.IsShort,
 		NumArgs:  dscr.requiredNumParams,
-		Source:   "",
+		Source:   dscr.source,
 		Bytecode: hex.EncodeToString(dscr.bytecode),
 	}
+}
 
+func ReadLibraryFromYAML(data []byte) (*Library, error) {
+	fromYAML := &LibraryFromYAML{}
+	err := yaml.Unmarshal(data, &fromYAML)
+	if err != nil {
+		return nil, err
+	}
+	isSorted := sort.SliceIsSorted(fromYAML.Functions, func(i, j int) bool {
+		return fromYAML.Functions[i].FunCode < fromYAML.Functions[j].FunCode
+	})
+	if !isSorted {
+		return nil, fmt.Errorf("function descriptions in the .YAML file must be sorted ascending by 'funCode'")
+	}
+	ret := &Library{
+		funByName:        make(map[string]*funDescriptor),
+		funByFunCode:     make(map[uint16]*funDescriptor),
+		numEmbeddedShort: fromYAML.NumEmbeddedShort,
+		numEmbeddedLong:  fromYAML.NumEmbeddedLong,
+		numExtended:      fromYAML.NumExtended,
+	}
+	return ret, nil
 }
