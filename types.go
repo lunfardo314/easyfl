@@ -49,13 +49,13 @@ type (
 	}
 
 	funDescriptor struct {
-		// source name of the functions
+		// source name of the function
 		sym string
 		// code of the function
 		funCode uint16
 		// nil for embedded functions
 		bytecode []byte
-		// number of parameters (up to 15) or -1 for vararg
+		// number of parameters (from 0 up to 15) or -1 for vararg
 		requiredNumParams int
 		// for embedded functions it is hardcoded function, for extended functions is
 		// interpreter closure of the bytecode
