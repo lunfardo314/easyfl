@@ -29,7 +29,44 @@ func TestAux(t *testing.T) {
 }
 
 func TestInit(t *testing.T) {
-	NewBase().PrintLibraryStats()
+	lib := NewBase()
+	lib.PrintLibraryStats()
+}
+
+func TestLiterals(t *testing.T) {
+	lib := NewBase()
+
+	lib.MustEqual("0", "0x00")
+	lib.MustEqual("255", "0xff")
+	lib.MustError("500", "integer constant value must be uint8")
+
+	lib.MustEqual("u16/0", "0x0000")
+	lib.MustEqual("u16/1024", "0x0400")
+	lib.MustError("u16/100000", "wrong u16 constant")
+
+	lib.MustEqual("u32/0", "0x00000000")
+	lib.MustEqual("u32/100000", "0x000186a0")
+	lib.MustError("u32/5000000000", "wrong u32 constant")
+
+	lib.MustEqual("u64/0", "0x0000000000000000")
+	lib.MustEqual("u64/100000000000", "0x000000174876e800")
+	lib.MustError("u64/999999999999999999999999999", "value out of range")
+
+	lib.MustEqual("z16/0", "0x")
+	lib.MustEqual("z16/1024", "0x0400")
+	lib.MustEqual("z16/255", "0xff")
+	lib.MustError("z16/100000", "wrong z16 constant")
+
+	lib.MustEqual("z32/0", "0x")
+	lib.MustEqual("z32/255", "0xff")
+	lib.MustEqual("z32/100000", "0x0186a0")
+	lib.MustError("z32/5000000000", "wrong z32 constant")
+
+	lib.MustEqual("z64/0", "0x")
+	lib.MustEqual("z64/1024", "0x0400")
+	lib.MustEqual("z64/1024", "u16/1024")
+	lib.MustEqual("z64/100000000000", "0x174876e800")
+	lib.MustError("u64/999999999999999999999999999", "value out of range")
 }
 
 func TestCompile(t *testing.T) {

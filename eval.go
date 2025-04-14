@@ -360,6 +360,6 @@ func (lib *Library) MustError(source string, mustContain ...string) {
 	_, err := lib.EvalFromSource(nil, source)
 	Assertf(err != nil, "expression '%s' is expected to return an error", source)
 	if len(mustContain) > 0 {
-		Assertf(strings.Contains(err.Error(), mustContain[0]), fmt.Sprintf("error must contain '%s' (instead got %s)", mustContain[0], err.Error()))
+		Assertf(strings.Contains(err.Error(), mustContain[0]), fmt.Sprintf("error must contain '%s' (instead got '%s')", mustContain[0], err.Error()))
 	}
 }

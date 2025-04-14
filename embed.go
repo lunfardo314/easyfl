@@ -618,7 +618,7 @@ func evalRShift64(par *CallParams) []byte {
 }
 
 // evalParseArgumentBytecode takes bytecode of the argument as is.
-// Note: data prefix is not stripped. To get data it muts be evaluated
+// Note: data prefix is not stripped. To get data it must be evaluated
 func (lib *Library) evalParseArgumentBytecode(par *CallParams) []byte {
 	a0 := par.Arg(0)
 	_, prefix, args, err := lib.ParseBytecodeOneLevel(a0)

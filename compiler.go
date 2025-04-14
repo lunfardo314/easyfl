@@ -261,7 +261,7 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 	switch {
 	case itIsANumber:
 		if n < 0 || n >= 256 {
-			return false, 0, fmt.Errorf("integer constant value not uint8: %s", sym)
+			return false, 0, fmt.Errorf("integer constant value must be uint8: %s", sym)
 		}
 		// it is a 1 byte value
 		if err = writeDataWithPrefix(w, []byte{byte(n)}); err != nil {
@@ -359,6 +359,47 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 		var b [8]byte
 		binary.BigEndian.PutUint64(b[:], un)
 		if err = writeDataWithPrefix(w, b[:]); err != nil {
+			return false, 0, err
+		}
+		return true, 0, nil
+	case strings.HasPrefix(sym, "z16/"):
+		// it is u16 constant big endian
+		n, err = strconv.Atoi(strings.TrimPrefix(sym, "z16/"))
+		if err != nil {
+			return false, 0, fmt.Errorf("%v: '%s'", err, sym)
+		}
+		if n < 0 || n > math.MaxUint16 {
+			return false, 0, fmt.Errorf("wrong z16 constant: '%s'", sym)
+		}
+		var b [2]byte
+		binary.BigEndian.PutUint16(b[:], uint16(n))
+		if err = writeDataWithPrefix(w, TrimLeadingZeroBytes(b[:])); err != nil {
+			return false, 0, err
+		}
+		return true, 0, nil
+	case strings.HasPrefix(sym, "z32/"):
+		// it is u16 constant big endian
+		n, err = strconv.Atoi(strings.TrimPrefix(sym, "z32/"))
+		if err != nil {
+			return false, 0, fmt.Errorf("%v: '%s'", err, sym)
+		}
+		if n < 0 || n > math.MaxUint32 {
+			return false, 0, fmt.Errorf("wrong z32 constant: '%s'", sym)
+		}
+		var b [4]byte
+		binary.BigEndian.PutUint32(b[:], uint32(n))
+		if err = writeDataWithPrefix(w, TrimLeadingZeroBytes(b[:])); err != nil {
+			return false, 0, err
+		}
+		return true, 0, nil
+	case strings.HasPrefix(sym, "z64/"):
+		// it is u16 constant big endian
+		if un, err = strconv.ParseUint(strings.TrimPrefix(sym, "z64/"), 10, 64); err != nil {
+			return false, 0, fmt.Errorf("%v: '%s'", err, sym)
+		}
+		var b [8]byte
+		binary.BigEndian.PutUint64(b[:], un)
+		if err = writeDataWithPrefix(w, TrimLeadingZeroBytes(b[:])); err != nil {
 			return false, 0, err
 		}
 		return true, 0, nil
