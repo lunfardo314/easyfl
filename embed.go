@@ -81,7 +81,7 @@ func mustAddToEmbeddingMap(m map[string]*EmbeddedFunctionData, embeddedFunData .
 	}
 }
 
-func (lib *Library) BaseEmbeddingMap() map[string]*EmbeddedFunctionData {
+func BaseEmbeddingMap(targetLib *Library) map[string]*EmbeddedFunctionData {
 	ret := make(map[string]*EmbeddedFunctionData)
 	mustAddToEmbeddingMap(ret, embedShortBase...)
 	mustAddToEmbeddingMap(ret, embedLongBase...)
@@ -89,7 +89,7 @@ func (lib *Library) BaseEmbeddingMap() map[string]*EmbeddedFunctionData {
 	mustAddToEmbeddingMap(ret, embedBitwiseAndCmpShort...)
 	mustAddToEmbeddingMap(ret, embedBitwiseAndCmpLong...)
 	mustAddToEmbeddingMap(ret, embedBaseCrypto...)
-	mustAddToEmbeddingMap(ret, embedBytecodeManipulation(lib)...)
+	mustAddToEmbeddingMap(ret, embedBytecodeManipulation(targetLib)...)
 	return ret
 }
 

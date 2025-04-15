@@ -14,56 +14,39 @@ import (
 
 type (
 	LibraryFromYAML struct {
-		Name      string                   `yaml:"name"`
-		Hash      string                   `yaml:"hash"`
-		Functions []FuncDescriptorYAMLable `yaml:"functions"`
+		Description string                   `yaml:"description"`
+		Compiled    bool                     `yaml:"compiled"`
+		Hash        string                   `yaml:"hash"`
+		Functions   []FuncDescriptorYAMLAble `yaml:"functions"`
 	}
 
-	FuncDescriptorYAMLable struct {
-		Digest   string `yaml:"digest,omitempty"`
-		Sym      string `yaml:"sym"`
-		FunCode  uint16 `yaml:"funCode"`
-		Embedded bool   `yaml:"embedded,omitempty"`
-		Short    bool   `yaml:"short,omitempty"`
-		NumArgs  int    `yaml:"numArgs"`
-		Source   string `yaml:"source,omitempty"`
-		Bytecode string `yaml:"bytecode,omitempty"`
+	FuncDescriptorYAMLAble struct {
+		Description string `yaml:"description,omitempty"`
+		Sym         string `yaml:"sym"`
+		NumArgs     int    `yaml:"numArgs"`
+		Embedded    bool   `yaml:"embedded,omitempty"`
+		Short       bool   `yaml:"short,omitempty"`
+		FunCode     uint16 `yaml:"funCode,omitempty"`
+		Source      string `yaml:"source,omitempty"`
+		Bytecode    string `yaml:"bytecode,omitempty"`
 	}
 )
 
-func (lib *Library) ToYAML() []byte {
+func (lib *Library) ToYAML(description string, compiled bool) []byte {
 	var buf bytes.Buffer
 
 	prn(&buf, "# EasyFL library\n")
-	prn(&buf, "name: base\n")
-	h := lib.LibraryHash()
-	prn(&buf, "hash: %s\n", hex.EncodeToString(h[:]))
-	prn(&buf, "num_embedded_short: %d\n", lib.numEmbeddedShort)
-	prn(&buf, "num_embedded_long: %d\n", lib.numEmbeddedLong)
-	prn(&buf, "num_extended: %d\n", lib.numExtended)
-
-	numEmbeddedShort := 0
-	numEmbeddedLong := 0
-	numExtended := 0
-
-	functions := make([]*FuncDescriptorYAMLable, 0)
-	for sym, fd := range lib.funByName {
-		functions = append(functions, lib.funYAMLAbleByName(sym))
-		isEmbedded, isShort := fd.isEmbeddedOrShort()
-		if isEmbedded {
-			if isShort {
-				numEmbeddedShort++
-			} else {
-				numEmbeddedLong++
-			}
-		} else {
-			numExtended++
-		}
+	prn(&buf, "compiled: %v\n", compiled)
+	prn(&buf, "description: \"%s\"\n", description)
+	if compiled {
+		h := lib.LibraryHash()
+		prn(&buf, "hash: %s\n", hex.EncodeToString(h[:]))
 	}
-	Assertf(numEmbeddedLong+numEmbeddedShort+numExtended == len(lib.funByName), "numEmbeddedLong+numEmbeddedShort+numExtended==len(lib.funByName)")
-	Assertf(int(lib.numEmbeddedShort)-FirstEmbeddedShort == numEmbeddedShort, "int(lib.numEmbeddedShort)==numEmbeddedShort")
-	Assertf(int(lib.numEmbeddedLong) == numEmbeddedLong, "int(lib.numEmbeddedLong)==numEmbeddedLong")
-	Assertf(int(lib.numExtended) == numExtended, "int(lib.numExtended)==numExtended")
+
+	functions := make([]*FuncDescriptorYAMLAble, 0)
+	for sym := range lib.funByName {
+		functions = append(functions, lib.funYAMLAbleByName(sym))
+	}
 
 	sort.Slice(functions, func(i, j int) bool {
 		return functions[i].FunCode < functions[j].FunCode
@@ -72,7 +55,7 @@ func (lib *Library) ToYAML() []byte {
 	prn(&buf, "functions:\n")
 
 	for _, dscr := range functions {
-		prnFuncDescription(&buf, dscr)
+		prnFuncDescription(&buf, dscr, compiled)
 	}
 
 	return buf.Bytes()
@@ -89,11 +72,13 @@ func prn(w io.Writer, format string, a ...any) {
 	AssertNoError(err)
 }
 
-func prnFuncDescription(w io.Writer, f *FuncDescriptorYAMLable) {
+func prnFuncDescription(w io.Writer, f *FuncDescriptorYAMLAble, compiled bool) {
 	prn(w, ident+"-\n")
-	prn(w, ident2+"digest: \"%s\"\n", f.Digest)
-	prn(w, ident2+"funCode: %d\n", f.FunCode)
 	prn(w, ident2+"sym: %s\n", f.Sym)
+	if compiled {
+		prn(w, ident2+"description: \"%s\"\n", f.Description)
+		prn(w, ident2+"funCode: %d\n", f.FunCode)
+	}
 	prn(w, ident2+"numArgs: %d\n", f.NumArgs)
 	if f.Embedded {
 		prn(w, ident2+"embedded: true\n")
@@ -102,15 +87,17 @@ func prnFuncDescription(w io.Writer, f *FuncDescriptorYAMLable) {
 		prn(w, ident2+"short: true\n")
 	}
 	if !f.Embedded {
-		prn(w, ident2+"bytecode: %s\n", f.Bytecode)
+		if compiled {
+			prn(w, ident2+"bytecode: %s\n", f.Bytecode)
+		}
 		prn(w, ident2+"source: >\n%s\n", ident3+strings.Replace(f.Source, "\n", ident3+"\n", -1))
 	}
 }
 
-func (lib *Library) funYAMLAbleByName(sym string) *FuncDescriptorYAMLable {
+func (lib *Library) funYAMLAbleByName(sym string) *FuncDescriptorYAMLAble {
 	fi, err := lib.functionByName(sym)
 	AssertNoError(err)
-	dscr := lib.funByFunCode[fi.FunCode]
+	d := lib.funByFunCode[fi.FunCode]
 
 	var b2 [2]byte
 	binary.BigEndian.PutUint16(b2[:], fi.FunCode)
@@ -126,71 +113,62 @@ func (lib *Library) funYAMLAbleByName(sym string) *FuncDescriptorYAMLable {
 	if fi.NumParams < 0 {
 		argsStr = "varargs"
 	}
-
-	return &FuncDescriptorYAMLable{
-		Digest:   fmt.Sprintf("name: '%s', funCode: %d (hex 0x%s), %s, %s", fi.Sym, fi.FunCode, hex.EncodeToString(b2[:]), inShort, argsStr),
-		Sym:      dscr.sym,
-		FunCode:  dscr.funCode,
-		Embedded: fi.IsEmbedded,
-		Short:    fi.IsShort,
-		NumArgs:  dscr.requiredNumParams,
-		Source:   dscr.source,
-		Bytecode: hex.EncodeToString(dscr.bytecode),
+	return &FuncDescriptorYAMLAble{
+		Description: fmt.Sprintf("name: '%s', funCode: %d (hex 0x%s), %s, %s", fi.Sym, fi.FunCode, hex.EncodeToString(b2[:]), inShort, argsStr),
+		Sym:         d.sym,
+		FunCode:     d.funCode,
+		Embedded:    fi.IsEmbedded,
+		Short:       fi.IsShort,
+		NumArgs:     d.requiredNumParams,
+		Source:      d.source,
+		Bytecode:    hex.EncodeToString(d.bytecode),
 	}
 }
 
-func ReadLibraryFromYAML(data []byte) (*Library, error) {
+// ReadLibraryFromYAML parses YAML
+func ReadLibraryFromYAML(data []byte) (*LibraryFromYAML, error) {
 	fromYAML := &LibraryFromYAML{}
 	err := yaml.Unmarshal(data, &fromYAML)
 	if err != nil {
 		return nil, err
 	}
-	ret := &Library{
-		funByName:    make(map[string]*funDescriptor),
-		funByFunCode: make(map[uint16]*funDescriptor),
+	return fromYAML, nil
+}
+
+// CompileToYAML compiles, assigns funcodes and converts to compiled YAML
+func (libYAML *LibraryFromYAML) CompileToYAML(dscr string) ([]byte, error) {
+	if libYAML.Compiled {
+		return nil, fmt.Errorf("CompileToYAML: already finalized")
 	}
+	lib, err := libYAML.Compile()
+	if err != nil {
+		return nil, err
+	}
+	return lib.ToYAML(dscr, true), nil
+}
 
-	numEmbeddedShort := 0
-	numEmbeddedLong := 0
-	numExtended := 0
+// Compile makes library, ignores compiled part, compiles and assigns funcodes but does not embed hardcoded functions
+func (libYAML *LibraryFromYAML) Compile() (*Library, error) {
+	ret := newLibrary()
+	var err error
 
-	for _, dscr := range fromYAML.Functions {
-		if _, already := ret.funByName[dscr.Sym]; already {
-			return nil, fmt.Errorf("duplicate function name '%s', code: %d", dscr.Sym, dscr.FunCode)
-		}
-		fd := &funDescriptor{
-			sym:               dscr.Sym,
-			funCode:           dscr.FunCode,
-			bytecode:          nil,
-			requiredNumParams: dscr.NumArgs,
-			embeddedFun:       nil,
-			source:            dscr.Source,
-		}
-		fd.bytecode, err = hex.DecodeString(dscr.Bytecode)
-		if err != nil {
-			return nil, fmt.Errorf("error while decoding bytecode fun name: '%s': %v", dscr.Sym, err)
-		}
-
-		ret.funByName[dscr.Sym] = fd
-
-		if _, already := ret.funByFunCode[dscr.FunCode]; already {
-			return nil, fmt.Errorf("duplicate function code %d, name: %s", dscr.FunCode, dscr.Sym)
-		}
-		ret.funByFunCode[dscr.FunCode] = fd
-		isEmbedded, isShort := fd.isEmbeddedOrShort()
-		if isEmbedded {
-			if isShort {
-				numEmbeddedShort++
+	for _, d := range libYAML.Functions {
+		if d.Embedded {
+			if d.Short {
+				if _, err = ret.embedShortErr(d.Sym, d.NumArgs, nil); err != nil {
+					return nil, err
+				}
 			} else {
-				numEmbeddedLong++
+				if _, err = ret.embedLongErr(d.Sym, d.NumArgs, nil); err != nil {
+					return nil, err
+				}
 			}
 		} else {
-			numExtended++
+			if _, err = ret.ExtendErr(d.Sym, d.Source); err != nil {
+				return nil, err
+			}
 		}
 	}
-	ret.numEmbeddedShort = uint16(numEmbeddedShort) + FirstEmbeddedShort
-	ret.numEmbeddedLong = uint16(numEmbeddedLong)
-	ret.numExtended = uint16(numExtended)
 	return ret, nil
 }
 
@@ -210,27 +188,36 @@ func (lib *Library) Embed(m map[string]*EmbeddedFunctionData) error {
 	return nil
 }
 
-func (lib *Library) ValidateExtended() error {
-	extended := make([]*funDescriptor, 0)
-	for _, fd := range lib.funByFunCode {
-		if isEmbedded, _ := fd.isEmbeddedOrShort(); !isEmbedded {
-			extended = append(extended, fd)
+func (libYAML *LibraryFromYAML) ValidateCompiled() error {
+	if !libYAML.Compiled {
+		return fmt.Errorf("ValidateCompiled: not compiled")
+	}
+	lib, err := libYAML.Compile()
+	if err != nil {
+		return err
+	}
+
+	for _, d := range libYAML.Functions {
+		if !d.Embedded {
+			fd, found := lib.funByFunCode[d.FunCode]
+			if !found {
+				return fmt.Errorf("ValidateCompiled: func code %d (name: '%s') not found", d.FunCode, d.Sym)
+			}
+			if fd.sym != d.Sym {
+				return fmt.Errorf("ValidateCompiled: func code %d is wrong (conflicting function names '%s' and '%s')", d.FunCode, d.Sym, fd.sym)
+			}
+			compiledBytecode := hex.EncodeToString(fd.bytecode)
+			if d.Bytecode != compiledBytecode {
+				return fmt.Errorf("ValidateCompiled: func code %d, function name '%s'. Conflicting bytecodes: compiled: '%s' != provided '%s'",
+					d.FunCode, d.Sym, compiledBytecode, d.Bytecode)
+			}
 		}
 	}
-	sort.Slice(extended, func(i, j int) bool {
-		return extended[i].funCode < extended[j].funCode
-	})
-	for _, fd := range extended {
-		_, numArgs, bytecode, err := lib.CompileExpression(fd.source)
-		if err != nil {
-			return fmt.Errorf("error while compiling function name: '%s', source: `%s`: %v", fd.sym, fd.source, err)
-		}
-		if numArgs != fd.requiredNumParams {
-			return fmt.Errorf("error while compiling function. Inconsistent number of args. name: '%s', source: `%s`", fd.sym, fd.source)
-		}
-		if !bytes.Equal(fd.bytecode, bytecode) {
-			return fmt.Errorf("error while compiling function. Compiled bytecode != provided one. name: '%s', source: `%s`", fd.sym, fd.source)
-		}
+
+	hashCompiled := lib.LibraryHash()
+	if hex.EncodeToString(hashCompiled[:]) != libYAML.Hash {
+		return fmt.Errorf("ValidateCompiled: library hash does not match: compiled %s != provided %s", hex.EncodeToString(hashCompiled[:]), libYAML.Hash)
 	}
+
 	return nil
 }
