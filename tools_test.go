@@ -58,3 +58,28 @@ func TestLibrary_ToYAML_embed(t *testing.T) {
 	err = lib1.Embed(BaseEmbeddingMap(lib1))
 	require.NoError(t, err)
 }
+
+func TestLibrary_ToYAML_upgrade(t *testing.T) {
+	lib := NewBase()
+	lib.PrintLibraryStats()
+
+	yamlData := `
+functions:
+   -
+     sym: newfun
+     source: concat(0x, 0x111111, 2)
+   -
+     sym: newfun2
+     source: add(5,7)
+`
+	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
+	require.NoError(t, err)
+
+	err = lib.Upgrade(fromYaml)
+	require.NoError(t, err)
+
+	lib.MustEqual("newfun", "0x11111102")
+	lib.MustEqual("newfun2", "uint8Bytes(12)")
+	back := lib.ToYAML("upgraded library", true)
+	t.Logf("------------- UPGRADED (%d bytes)\n%s", len(back), string(back))
+}

@@ -53,10 +53,29 @@ func (lib *Library) ToYAML(description string, compiled bool) []byte {
 	})
 
 	prn(&buf, "functions:\n")
-
+	if compiled {
+		prn(&buf, "# BEGIN EMBEDDED function definitions\n")
+		prn(&buf, "#    function codes (opcodes) from %d to %d are reserved for predefined inline functions\n", FirstEmbeddedReserved, LastEmbeddedReserved)
+		prn(&buf, "# BEGIN SHORT EMBEDDED function definitions\n")
+		prn(&buf, "#    function codes (opcodes) from %d to %d are reserved for 'SHORT EMBEDDED function codes'\n", FirstEmbeddedShort, LastEmbeddedShort)
+	}
 	for _, dscr := range functions {
+		if compiled {
+			if dscr.FunCode == FirstEmbeddedLong {
+				prn(&buf, "# END SHORT EMBEDDED function definitions\n")
+				prn(&buf, "# BEGIN LONG EMBEDDED function definitions\n")
+				prn(&buf, "#    function codes (opcodes) from %d to %d are reserved for 'LONG EMBEDDED function codes'\n", FirstEmbeddedLong, LastEmbeddedLong)
+			}
+			if dscr.FunCode == FirstExtended {
+				prn(&buf, "# END LONG embedded function definitions\n")
+				prn(&buf, "# BEGIN EXTENDED function definitions (defined by EasyFL formulas)\n")
+				prn(&buf, "#    function codes (opcodes) from %d and up to maximum %d are reserved for 'EXTENDED function codes'\n", FirstExtended, LastGlobalFunCode)
+			}
+		}
 		prnFuncDescription(&buf, dscr, compiled)
 	}
+	prn(&buf, "# END EXTENDED function definitions\n")
+	prn(&buf, "# END all function definitions\n")
 
 	return buf.Bytes()
 }
@@ -150,39 +169,32 @@ func (libYAML *LibraryFromYAML) CompileToYAML(dscr string) ([]byte, error) {
 // Compile makes library, ignores compiled part, compiles and assigns funcodes but does not embed hardcoded functions
 func (libYAML *LibraryFromYAML) Compile() (*Library, error) {
 	ret := newLibrary()
-	var err error
 
-	for _, d := range libYAML.Functions {
-		if d.Embedded {
-			if d.Short {
-				if _, err = ret.embedShortErr(d.Sym, d.NumArgs, nil); err != nil {
-					return nil, err
-				}
-			} else {
-				if _, err = ret.embedLongErr(d.Sym, d.NumArgs, nil); err != nil {
-					return nil, err
-				}
-			}
-		} else {
-			if _, err = ret.ExtendErr(d.Sym, d.Source); err != nil {
-				return nil, err
-			}
-		}
+	err := ret.Upgrade(libYAML)
+	if err != nil {
+		return nil, err
 	}
 	return ret, nil
 }
 
-func (lib *Library) Embed(m map[string]*EmbeddedFunctionData) error {
-	for _, fd := range lib.funByFunCode {
-		if isEmbedded, _ := fd.isEmbeddedOrShort(); isEmbedded {
-			e, ok := m[fd.sym]
-			if !ok {
-				return fmt.Errorf("embedded fun '%s' not found", fd.sym)
+func (lib *Library) Upgrade(fromYAML *LibraryFromYAML) error {
+	var err error
+
+	for _, d := range fromYAML.Functions {
+		if d.Embedded {
+			if d.Short {
+				if _, err = lib.embedShortErr(d.Sym, d.NumArgs, nil); err != nil {
+					return err
+				}
+			} else {
+				if _, err = lib.embedLongErr(d.Sym, d.NumArgs, nil); err != nil {
+					return err
+				}
 			}
-			if fd.requiredNumParams != e.RequiredNumPar {
-				return fmt.Errorf("embedded fun '%s': inconsistent number of params", fd.sym)
+		} else {
+			if _, err = lib.ExtendErr(d.Sym, d.Source); err != nil {
+				return err
 			}
-			fd.embeddedFun = e.EmbeddedFun
 		}
 	}
 	return nil
@@ -219,5 +231,21 @@ func (libYAML *LibraryFromYAML) ValidateCompiled() error {
 		return fmt.Errorf("ValidateCompiled: library hash does not match: compiled %s != provided %s", hex.EncodeToString(hashCompiled[:]), libYAML.Hash)
 	}
 
+	return nil
+}
+
+func (lib *Library) Embed(m map[string]*EmbeddedFunctionData) error {
+	for _, fd := range lib.funByFunCode {
+		if isEmbedded, _ := fd.isEmbeddedOrShort(); isEmbedded {
+			e, ok := m[fd.sym]
+			if !ok {
+				return fmt.Errorf("embedded fun '%s' not found", fd.sym)
+			}
+			if fd.requiredNumParams != e.RequiredNumPar {
+				return fmt.Errorf("embedded fun '%s': inconsistent number of params", fd.sym)
+			}
+			fd.embeddedFun = e.EmbeddedFun
+		}
+	}
 	return nil
 }

@@ -8,7 +8,7 @@ import (
 type (
 	LocalLibrary struct {
 		funByName    map[string]*funDescriptor
-		funByFunCode []*funDescriptor // code of the function respective to the baseline of numExtended+FirstExtendedFun+1
+		funByFunCode []*funDescriptor // code of the function respective to the baseline of numExtended+FirstExtended+1
 	}
 )
 

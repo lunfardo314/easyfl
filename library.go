@@ -158,7 +158,7 @@ func (lib *Library) embedLongErr(sym string, requiredNumPar int, embeddedFun Emb
 	}
 	dscr := &funDescriptor{
 		sym:               sym,
-		funCode:           lib.numEmbeddedLong + FirstEmbeddedLongFun,
+		funCode:           lib.numEmbeddedLong + FirstEmbeddedLong,
 		requiredNumParams: requiredNumPar,
 		embeddedFun:       embeddedFun,
 	}
@@ -251,7 +251,7 @@ func (lib *Library) ExtendErr(sym string, source string) (uint16, error) {
 	}
 	dscr := &funDescriptor{
 		sym:               sym,
-		funCode:           lib.numExtended + FirstExtendedFun,
+		funCode:           lib.numExtended + FirstExtended,
 		bytecode:          bytecode,
 		requiredNumParams: numParam,
 		embeddedFun:       embeddedFun,
@@ -343,10 +343,10 @@ func (lib *Library) functionByName(sym string, localLib ...*LocalLibrary) (*funI
 
 func (fd *funDescriptor) isEmbeddedOrShort() (isEmbedded bool, isShort bool) {
 	switch {
-	case fd.funCode < FirstEmbeddedLongFun:
+	case fd.funCode < FirstEmbeddedLong:
 		isEmbedded = true
 		isShort = true
-	case fd.funCode < FirstExtendedFun:
+	case fd.funCode < FirstExtended:
 		isEmbedded = true
 		isShort = false
 	}

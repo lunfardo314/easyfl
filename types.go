@@ -20,15 +20,15 @@ const (
 
 	// ---- embedded long codes
 
-	FirstEmbeddedLongFun = LastEmbeddedShort + 1 // 64
-	MaxNumEmbeddedLong   = 0xff
-	LastEmbeddedLongFun  = FirstEmbeddedLongFun + MaxNumEmbeddedLong - 1
+	FirstEmbeddedLong  = LastEmbeddedShort + 1 // 64
+	MaxNumEmbeddedLong = 0xff
+	LastEmbeddedLong   = FirstEmbeddedLong + MaxNumEmbeddedLong - 1
 
 	// ---- extended codes
 
-	FirstExtendedFun     = LastEmbeddedLongFun + 1
+	FirstExtended        = LastEmbeddedLong + 1
 	LastGlobalFunCode    = 1022 // biggest global function code. All the rest are local
-	MaxNumExtendedGlobal = LastGlobalFunCode - FirstExtendedFun
+	MaxNumExtendedGlobal = LastGlobalFunCode - FirstExtended
 	FirstLocalFunCode    = LastGlobalFunCode + 1 // functions in local libraries uses extra byte for local function codes
 )
 
