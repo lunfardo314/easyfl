@@ -30,9 +30,16 @@ func New() *Library {
 }
 
 func NewBase() *Library {
-	ret := newLibrary()
-	ret.initBase()
-	return ret
+	libFromYAML, err := ReadLibraryFromYAML([]byte(baseLibraryDefinitions))
+	AssertNoError(err)
+	lib, err := libFromYAML.Compile()
+	AssertNoError(err)
+	m := BaseEmbeddingMap(lib)
+	err = lib.Embed(m)
+
+	//lib := New()
+	//lib.initBase()
+	return lib
 }
 
 func (lib *Library) initBase() {

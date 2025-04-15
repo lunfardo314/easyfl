@@ -6,10 +6,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLibrary_ToYAML_no_compiled(t *testing.T) {
+func TestLibrary_ToYAML_not_compiled(t *testing.T) {
 	lib := NewBase()
 	lib.PrintLibraryStats()
-	yamlData := lib.ToYAML("base library", false)
+	yamlData := lib.ToYAML("base library", true)
+	t.Logf("----------------------------\n%s", string(yamlData))
+
+	_, err := ReadLibraryFromYAML(yamlData)
+	require.NoError(t, err)
+
+	//os.WriteFile("base.yaml", yamlData, 0644)
+}
+
+func TestLibrary_base_compiled(t *testing.T) {
+	lib := NewBase()
+	lib.PrintLibraryStats()
+	yamlData := lib.ToYAML("base library", true)
 	t.Logf("----------------------------\n%s", string(yamlData))
 
 	_, err := ReadLibraryFromYAML(yamlData)
@@ -82,4 +94,17 @@ functions:
 	lib.MustEqual("newfun2", "uint8Bytes(12)")
 	back := lib.ToYAML("upgraded library", true)
 	t.Logf("------------- UPGRADED (%d bytes)\n%s", len(back), string(back))
+}
+
+func TestLibrary_base_compiled_const(t *testing.T) {
+	libFromYAML, err := ReadLibraryFromYAML([]byte(baseLibraryDefinitions))
+	require.NoError(t, err)
+	err = libFromYAML.ValidateCompiled()
+	require.NoError(t, err)
+	lib, err := libFromYAML.Compile()
+	require.NoError(t, err)
+	err = lib.Embed(BaseEmbeddingMap(lib))
+	require.NoError(t, err)
+	lib.MustEqual("concat(1,2)", "0x0102")
+
 }

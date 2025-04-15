@@ -384,7 +384,7 @@ func num(n any) []byte {
 func TestComparison(t *testing.T) {
 	lib := NewBase()
 	runTest := func(s string, a0, a1 []byte) bool {
-		fmt.Printf("---- runTest: '%s'\n", s)
+		t.Logf("---- runTest: '%s'\n", s)
 		ret, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), s, a0, a1)
 		require.NoError(t, err)
 		if len(ret) == 0 {

@@ -163,6 +163,8 @@ func (libYAML *LibraryFromYAML) Compile() (*Library, error) {
 	return ret, nil
 }
 
+// TODO provide embedded functions at the moment of compilation
+
 func (lib *Library) Upgrade(fromYAML *LibraryFromYAML) error {
 	var err error
 
