@@ -55,5 +55,6 @@ func TestLibrary_ToYAML_embed(t *testing.T) {
 	require.NoError(t, err)
 	lib1, err := compiled.Compile()
 	require.NoError(t, err)
-	lib1.Embed(BaseEmbeddingMap(lib1))
+	err = lib1.Embed(BaseEmbeddingMap(lib1))
+	require.NoError(t, err)
 }
