@@ -19,56 +19,56 @@ import (
 
 var (
 	embedShortBase = []*EmbeddedFunctionData{
-		{"fail", 1, evalFail},
-		{"slice", 3, evalSlice},
-		{"byte", 2, evalByte},
-		{"tail", 2, evalTail},
-		{"equal", 2, evalEqual},
-		{"hasPrefix", 2, evalHasPrefix},
-		{"len", 1, evalLen},
-		{"not", 1, evalNot},
-		{"if", 3, evalIf},
-		{"isZero", 1, evalIsZero},
+		{"fail", 1, evalFail, "fails with parameter as panic message, where '_' is replaced with space"},
+		{"slice", 3, evalSlice, "slice($0,$1,$2) takes a slice of $0, from $1 to $2 inclusive. $1 and $2 must be 1-byte long"},
+		{"byte", 2, evalByte, "byte($0,$1) takes byte $1 of $0, returns 1-byte long slice. $1 must be 1-byte long"},
+		{"tail", 2, evalTail, "tail($0,$1) returns slice of $0 from $1 to the end"},
+		{"equal", 2, evalEqual, "equal($0,$1) returns non-empty value if $0 and $1 are equal slices"},
+		{"hasPrefix", 2, evalHasPrefix, "hasPrefix($0,$1) returns non-empty value if $0 has $1 as prefix"},
+		{"len", 1, evalLen, "len($0)returns uint64 big-endian 8 bytes of the length of $0"},
+		{"not", 1, evalNot, "not($0) returns 0x if $0 is not empty, and non-empty value if $0 is empty"},
+		{"if", 3, evalIf, "if($0,$1,$2) returns eval value of $1 if $0 is non-empty and eval value of $1 otherwise"},
+		{"isZero", 1, evalIsZero, "isZero($0) returns 0x if $0 contains at least one non-zero byte"},
 	}
 	embedLongBase = []*EmbeddedFunctionData{
-		{"concat", -1, evalConcat},
-		{"and", -1, evalAnd},
-		{"or", -1, evalOr},
-		{"repeat", 2, evalRepeat},
-		{"firstCaseIndex", -1, evalFirstCaseIndex},
-		{"firstEqualIndex", -1, evalFirstEqualIndex},
-		{"selectCaseByIndex", -1, evalSelectCaseByIndex},
+		{"concat", -1, evalConcat, "concatenates variable number of arguments"},
+		{"and", -1, evalAnd, "returns non-empty value if all arguments are not empty, otherwise returns 0x"},
+		{"or", -1, evalOr, "returns empty value 0x if all arguments are 0x (empty), otherwise returns non-empty value"},
+		{"repeat", 2, evalRepeat, "repeat($0,$1) repeats $0 number of times $1. $1 must be 1-byte long"},
+		{"firstCaseIndex", -1, evalFirstCaseIndex, "evaluates one-by-one and returns first argument with non-empty value"},
+		{"firstEqualIndex", -1, evalFirstEqualIndex, "firstEqualIndex($0,$1,..$n) evaluates $0 and returns (i-1) of the parameter $i which is equal to $0"},
+		{"selectCaseByIndex", -1, evalSelectCaseByIndex, "selectCaseByIndex($0,$1, ..$n) return value if the parameter based on the value of $0+1"},
 	}
 	embedArithmeticsShort = []*EmbeddedFunctionData{
-		{"add", 2, evalAddUint},
-		{"sub", 2, evalSubUint},
-		{"mul", 2, evalMulUint},
-		{"div", 2, evalDivUint},
-		{"mod", 2, evalModuloUint},
+		{"add", 2, evalAddUint, "add($0,$1) returns $0 + $1 as big-endian uint64. $0 and $1 is expanded to 8 bytes by adding leading 0-s"},
+		{"sub", 2, evalSubUint, "sub($0,$1) returns $0 - $1 as big-endian uint64 or panics with 'underflow' if $0<$1. $0 and $1 is expanded to 8 bytes by adding leading 0-s"},
+		{"mul", 2, evalMulUint, "mul($0,$1) returns $0 x $1 as big-endian uint64. $0 and $1 is expanded to 8 bytes by adding leading 0-s"},
+		{"div", 2, evalDivUint, "div($0,$1) returns $0 / $1 (integer division) as big-endian uint64 or panics if $1 is 0. $0 and $1 is expanded to 8 bytes by adding leading 0-s"},
+		{"mod", 2, evalModuloUint, "mod($0,$1) returns $0 mod $1 as big-endian uint64 or panics if $1 is 0. $0 and $1 is expanded to 8 bytes by adding leading 0-s"},
 		// pads with 0 prefix up to 8 bytes
 		// nil, 0x becomes u64/0
-		{"uint8Bytes", 1, evalUint8Bytes},
+		{"uint8Bytes", 1, evalUint8Bytes, " expands $0 with leading 0-s up to 8 bytes"},
 	}
 	embedBitwiseAndCmpShort = []*EmbeddedFunctionData{
-		{"lessThan", 2, evalLessThan},
-		{"bitwiseOR", 2, evalBitwiseOR},
-		{"bitwiseAND", 2, evalBitwiseAND},
-		{"bitwiseNOT", 1, evalBitwiseNOT},
-		{"bitwiseXOR", 2, evalBitwiseXOR},
+		{"lessThan", 2, evalLessThan, "returns non-empty value of $0 < $1 lexicographically, otherwise returns 0x. Operands must be of equal length"},
+		{"bitwiseOR", 2, evalBitwiseOR, "bitwise OR operation on $0 and $1, which must have equal length"},
+		{"bitwiseAND", 2, evalBitwiseAND, "bitwise AND operation on $0 and $1, which must have equal length"},
+		{"bitwiseNOT", 1, evalBitwiseNOT, "bitwise inversion of $0"},
+		{"bitwiseXOR", 2, evalBitwiseXOR, "bitwise XOR operation on $0 and $1, which must have equal length"},
 	}
 	embedBitwiseAndCmpLong = []*EmbeddedFunctionData{
-		{"lshift64", 2, evalLShift64},
-		{"rshift64", 2, evalRShift64},
+		{"lshift64", 2, evalLShift64, "lshift64($0,$1) returns $0<<$1, where both arguments ar expanded to big-endian uint64 bytes by adding leading 0-s"},
+		{"rshift64", 2, evalRShift64, "lshift64($0,$1) returns $0>>$1, where both arguments ar expanded to big-endian uint64 bytes by adding leading 0-s"},
 	}
 	embedBaseCrypto = []*EmbeddedFunctionData{
-		{"validSignatureED25519", 3, evalValidSigED25519},
-		{"blake2b", -1, evalBlake2b},
+		{"validSignatureED25519", 3, evalValidSigED25519, "validSignatureED25519($0,$1,$2) returns non-empty value if $1 represents valid ED25519 signature of message $0 and  public key $2"},
+		{"blake2b", -1, evalBlake2b, "returns 32 bytes of the blake2b hash of the argument"},
 	}
 	embedBytecodeManipulation = func(lib *Library) []*EmbeddedFunctionData {
 		return []*EmbeddedFunctionData{
-			{"parseArgumentBytecode", 3, lib.evalParseArgumentBytecode},
-			{"parsePrefixBytecode", 1, lib.evalParsePrefixBytecode},
-			{"eval", 1, lib.evalBytecode}, // evaluates closed formula
+			{"parseArgumentBytecode", 3, lib.evalParseArgumentBytecode, "parseArgumentBytecode($0,$1,$2) treats $0 as bytecode. It check if its call prefix is equal to $1 and takes bytecode argument with index $2"},
+			{"parsePrefixBytecode", 1, lib.evalParsePrefixBytecode, "treats $0 as bytecode. Returns its call prefix"},
+			{"eval", 1, lib.evalBytecode, "evaluates $0 as bytecode without open parameters (as closed formula)"},
 		}
 	}
 )
@@ -311,7 +311,6 @@ func evalHasPrefix(par *CallParams) []byte {
 	prefix := par.Arg(1)
 	if bytes.HasPrefix(data, prefix) {
 		ret = par.AllocData(0xff)
-		//ret = []byte{0xff}
 	}
 	par.Trace("hasPrefix:: %s, %s -> %s", FmtLazy(data), FmtLazy(prefix), FmtLazy(ret))
 	return ret

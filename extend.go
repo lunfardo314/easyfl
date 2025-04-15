@@ -1,18 +1,18 @@
 package easyfl
 
 var extendWithUtilityFunctions = []*ExtendedFunctionData{
-	{"false", "0x"},
-	{"true", "0xff"},
-	{"require", "or($0,$1)"},
-	{"lessOrEqualThan", "or(lessThan($0,$1),equal($0,$1))"},
-	{"greaterThan", "not(lessOrEqualThan($0,$1))"},
-	{"greaterOrEqualThan", "not(lessThan($0,$1))"},
-	{"bytecode", "$$0"},
-	{"evalArgumentBytecode", "eval(parseArgumentBytecode($0,$1,$2))"},
-	{"lessThanUint", "lessThan(uint8Bytes($0), uint8Bytes($1))"},
-	{"equalUint", "equal(uint8Bytes($0), uint8Bytes($1))"},
-	{"max", "if(lessThan($0,$1),$1,$0)"},
-	{"min", "if(lessThan($0,$1),$0,$1)"},
+	{"false", "0x", "TBD"},
+	{"true", "0xff", "TBD"},
+	{"require", "or($0,$1)", "TBD"},
+	{"lessOrEqualThan", "or(lessThan($0,$1),equal($0,$1))", "TBD"},
+	{"greaterThan", "not(lessOrEqualThan($0,$1))", "TBD"},
+	{"greaterOrEqualThan", "not(lessThan($0,$1))", "TBD"},
+	{"bytecode", "$$0", "TBD"},
+	{"evalArgumentBytecode", "eval(parseArgumentBytecode($0,$1,$2))", "TBD"},
+	{"lessThanUint", "lessThan(uint8Bytes($0), uint8Bytes($1))", "TBD"},
+	{"equalUint", "equal(uint8Bytes($0), uint8Bytes($1))", "TBD"},
+	{"max", "if(lessThan($0,$1),$1,$0)", "TBD"},
+	{"min", "if(lessThan($0,$1),$0,$1)", "TBD"},
 }
 
 func (lib *Library) extendBase() {

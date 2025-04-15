@@ -2,7 +2,6 @@ package easyfl
 
 import (
 	"bytes"
-	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -94,8 +93,10 @@ func prn(w io.Writer, format string, a ...any) {
 func prnFuncDescription(w io.Writer, f *FuncDescriptorYAMLAble, compiled bool) {
 	prn(w, ident+"-\n")
 	prn(w, ident2+"sym: %s\n", f.Sym)
-	if compiled {
+	if f.Description != "" {
 		prn(w, ident2+"description: \"%s\"\n", f.Description)
+	}
+	if compiled {
 		prn(w, ident2+"funCode: %d\n", f.FunCode)
 	}
 	prn(w, ident2+"numArgs: %d\n", f.NumArgs)
@@ -117,23 +118,8 @@ func (lib *Library) funYAMLAbleByName(sym string) *FuncDescriptorYAMLAble {
 	fi, err := lib.functionByName(sym)
 	AssertNoError(err)
 	d := lib.funByFunCode[fi.FunCode]
-
-	var b2 [2]byte
-	binary.BigEndian.PutUint16(b2[:], fi.FunCode)
-	inShort := "extended"
-	if fi.IsEmbedded {
-		if fi.IsShort {
-			inShort = "embedded short"
-		} else {
-			inShort = "embedded long"
-		}
-	}
-	argsStr := fmt.Sprintf("args: %d", fi.NumParams)
-	if fi.NumParams < 0 {
-		argsStr = "varargs"
-	}
 	return &FuncDescriptorYAMLAble{
-		Description: fmt.Sprintf("name: '%s', funCode: %d (hex 0x%s), %s, %s", fi.Sym, fi.FunCode, hex.EncodeToString(b2[:]), inShort, argsStr),
+		Description: d.description,
 		Sym:         d.sym,
 		FunCode:     d.funCode,
 		Embedded:    fi.IsEmbedded,
@@ -183,16 +169,16 @@ func (lib *Library) Upgrade(fromYAML *LibraryFromYAML) error {
 	for _, d := range fromYAML.Functions {
 		if d.Embedded {
 			if d.Short {
-				if _, err = lib.embedShortErr(d.Sym, d.NumArgs, nil); err != nil {
+				if _, err = lib.embedShortErr(d.Sym, d.NumArgs, nil, d.Description); err != nil {
 					return err
 				}
 			} else {
-				if _, err = lib.embedLongErr(d.Sym, d.NumArgs, nil); err != nil {
+				if _, err = lib.embedLongErr(d.Sym, d.NumArgs, nil, d.Description); err != nil {
 					return err
 				}
 			}
 		} else {
-			if _, err = lib.ExtendErr(d.Sym, d.Source); err != nil {
+			if _, err = lib.ExtendErr(d.Sym, d.Source, d.Description); err != nil {
 				return err
 			}
 		}

@@ -62,6 +62,8 @@ type (
 		embeddedFun EmbeddedFunction
 		// only needed for generating YAML
 		source string
+		// any text
+		description string
 	}
 
 	funInfo struct {
@@ -85,11 +87,13 @@ type (
 		Sym            string
 		RequiredNumPar int
 		EmbeddedFun    EmbeddedFunction
+		Description    string
 	}
 
 	ExtendedFunctionData struct {
-		Sym    string
-		Source string
+		Sym         string
+		Source      string
+		Description string
 	}
 )
 
