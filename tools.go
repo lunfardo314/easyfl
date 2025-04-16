@@ -2,6 +2,7 @@ package easyfl
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -13,10 +14,8 @@ import (
 
 type (
 	LibraryFromYAML struct {
-		Description string                   `yaml:"description"`
-		Compiled    bool                     `yaml:"compiled"`
-		Hash        string                   `yaml:"hash"`
-		Functions   []FuncDescriptorYAMLAble `yaml:"functions"`
+		Hash      string                   `yaml:"hash"` // if Hash != "", library is compiled
+		Functions []FuncDescriptorYAMLAble `yaml:"functions"`
 	}
 
 	FuncDescriptorYAMLAble struct {
@@ -31,12 +30,14 @@ type (
 	}
 )
 
-func (lib *Library) ToYAML(description string, compiled bool) []byte {
+// ToYAML generates YAML data. Prefix is added at the beginning, usually it is a comment
+// If compiled = true, it also adds hash of the library and each function descriptor contain funCode and compiled bytecode (whenever relevant)
+func (lib *Library) ToYAML(compiled bool, prefix ...string) []byte {
 	var buf bytes.Buffer
 
-	prn(&buf, "# EasyFL library\n")
-	prn(&buf, "compiled: %v\n", compiled)
-	prn(&buf, "description: \"%s\"\n", description)
+	if len(prefix) > 0 {
+		prn(&buf, "%s\n", prefix[0])
+	}
 	if compiled {
 		h := lib.LibraryHash()
 		prn(&buf, "hash: %s\n", hex.EncodeToString(h[:]))
@@ -44,36 +45,59 @@ func (lib *Library) ToYAML(description string, compiled bool) []byte {
 
 	functions := make([]*FuncDescriptorYAMLAble, 0)
 	for sym := range lib.funByName {
-		functions = append(functions, lib.funYAMLAbleByName(sym))
+		functions = append(functions, lib.mustFunYAMLAbleByName(sym))
 	}
 
-	sort.Slice(functions, func(i, j int) bool {
-		return functions[i].FunCode < functions[j].FunCode
-	})
+	if compiled {
+		// sort by funCodes
+		sort.Slice(functions, func(i, j int) bool {
+			return functions[i].FunCode < functions[j].FunCode
+		})
+	} else {
+		// sort by name
+		sort.Slice(functions, func(i, j int) bool {
+			return functions[i].Sym < functions[j].Sym
+		})
+	}
 
 	prn(&buf, "functions:\n")
+
+	prn(&buf, "# BEGIN EMBEDDED function definitions\n")
 	if compiled {
-		prn(&buf, "# BEGIN EMBEDDED function definitions\n")
-		prn(&buf, "#    function codes (opcodes) from %d to %d are reserved for predefined inline functions\n", FirstEmbeddedReserved, LastEmbeddedReserved)
-		prn(&buf, "# BEGIN SHORT EMBEDDED function definitions\n")
+		prn(&buf, "#    function codes (opcodes) from %d to %d are reserved for predefined parameter access functions $i and $$i\n", FirstEmbeddedReserved, LastEmbeddedReserved)
+	}
+	prn(&buf, "# BEGIN SHORT EMBEDDED function definitions\n")
+	if compiled {
 		prn(&buf, "#    function codes (opcodes) from %d to %d are reserved for 'SHORT EMBEDDED function codes'\n", FirstEmbeddedShort, LastEmbeddedShort)
 	}
 	for _, dscr := range functions {
-		if compiled {
-			if dscr.FunCode == FirstEmbeddedLong {
-				prn(&buf, "# END SHORT EMBEDDED function definitions\n")
-				prn(&buf, "# BEGIN LONG EMBEDDED function definitions\n")
-				prn(&buf, "#    function codes (opcodes) from %d to %d are reserved for 'LONG EMBEDDED function codes'\n", FirstEmbeddedLong, LastEmbeddedLong)
-			}
-			if dscr.FunCode == FirstExtended {
-				prn(&buf, "# END LONG embedded function definitions\n")
-				prn(&buf, "# BEGIN EXTENDED function definitions (defined by EasyFL formulas)\n")
-				prn(&buf, "#    function codes (opcodes) from %d and up to maximum %d are reserved for 'EXTENDED function codes'\n", FirstExtended, LastGlobalFunCode)
-			}
+		if dscr.Embedded && dscr.Short {
+			prnFuncDescription(&buf, dscr, compiled)
 		}
-		prnFuncDescription(&buf, dscr, compiled)
 	}
-	prn(&buf, "# END EXTENDED function definitions\n")
+	prn(&buf, "# END SHORT EMBEDDED function definitions\n")
+
+	prn(&buf, "# BEGIN LONG EMBEDDED function definitions\n")
+	if compiled {
+		prn(&buf, "#    function codes (opcodes) from %d to %d are reserved for 'LONG EMBEDDED function codes'\n", FirstEmbeddedLong, LastEmbeddedLong)
+	}
+	for _, dscr := range functions {
+		if dscr.Embedded && !dscr.Short {
+			prnFuncDescription(&buf, dscr, compiled)
+		}
+	}
+	prn(&buf, "# END LONG EMBEDDED function definitions\n")
+
+	prn(&buf, "# BEGIN EXTENDED function definitions (defined by EasyFL formulas)\n")
+	if compiled {
+		prn(&buf, "#    function codes (opcodes) from %d and up to maximum %d are reserved for 'EXTENDED function codes'\n", FirstExtended, LastGlobalFunCode)
+	}
+	for _, dscr := range functions {
+		if !dscr.Embedded {
+			prnFuncDescription(&buf, dscr, compiled)
+		}
+	}
+	prn(&buf, "# END EXTENDED function definitions (defined by EasyFL formulas)\n")
 	prn(&buf, "# END all function definitions\n")
 
 	return buf.Bytes()
@@ -114,7 +138,7 @@ func prnFuncDescription(w io.Writer, f *FuncDescriptorYAMLAble, compiled bool) {
 	}
 }
 
-func (lib *Library) funYAMLAbleByName(sym string) *FuncDescriptorYAMLAble {
+func (lib *Library) mustFunYAMLAbleByName(sym string) *FuncDescriptorYAMLAble {
 	fi, err := lib.functionByName(sym)
 	AssertNoError(err)
 	d := lib.funByFunCode[fi.FunCode]
@@ -140,42 +164,33 @@ func ReadLibraryFromYAML(data []byte) (*LibraryFromYAML, error) {
 	return fromYAML, nil
 }
 
-// CompileToYAML compiles, assigns funcodes and converts to compiled YAML
-func (libYAML *LibraryFromYAML) CompileToYAML(dscr string) ([]byte, error) {
-	if libYAML.Compiled {
-		return nil, fmt.Errorf("CompileToYAML: already finalized")
-	}
-	lib, err := libYAML.Compile()
-	if err != nil {
-		return nil, err
-	}
-	return lib.ToYAML(dscr, true), nil
-}
-
-// Compile makes library, ignores compiled part, compiles and assigns funcodes but does not embed hardcoded functions
-func (libYAML *LibraryFromYAML) Compile() (*Library, error) {
-	ret := newLibrary()
-
-	err := ret.Upgrade(libYAML)
-	if err != nil {
-		return nil, err
-	}
-	return ret, nil
-}
-
-// TODO provide embedded functions at the moment of compilation
-
-func (lib *Library) Upgrade(fromYAML *LibraryFromYAML) error {
+// Upgrade add functions to the library from YAMLAble. It ignores compiled part, compiles and assigns fun codes
+// If embedding functions are available, embeds them and enforces consistency
+// NOTE: if embedded functions are not provided, library is not ready for use, however its consistency
+// has been checked, and it can be serialized to YAML
+func (lib *Library) Upgrade(fromYAML *LibraryFromYAML, embed ...func() map[string]EmbeddedFunction) error {
 	var err error
+
+	var em map[string]EmbeddedFunction
+	if len(embed) > 0 {
+		em = embed[0]()
+	}
+	var ef EmbeddedFunction
+	var found bool
 
 	for _, d := range fromYAML.Functions {
 		if d.Embedded {
+			if em != nil {
+				if ef, found = em[d.Sym]; !found {
+					return fmt.Errorf("missing embedded function: '%s'", d.Sym)
+				}
+			}
 			if d.Short {
-				if _, err = lib.embedShortErr(d.Sym, d.NumArgs, nil, d.Description); err != nil {
+				if _, err = lib.embedShortErr(d.Sym, d.NumArgs, ef, d.Description); err != nil {
 					return err
 				}
 			} else {
-				if _, err = lib.embedLongErr(d.Sym, d.NumArgs, nil, d.Description); err != nil {
+				if _, err = lib.embedLongErr(d.Sym, d.NumArgs, ef, d.Description); err != nil {
 					return err
 				}
 			}
@@ -189,23 +204,21 @@ func (lib *Library) Upgrade(fromYAML *LibraryFromYAML) error {
 }
 
 func (libYAML *LibraryFromYAML) ValidateCompiled() error {
-	if !libYAML.Compiled {
-		return fmt.Errorf("ValidateCompiled: not compiled")
+	hashProvidedBin, err := hex.DecodeString(libYAML.Hash)
+	if err != nil || len(hashProvidedBin) != sha256.Size {
+		return fmt.Errorf("ValidateCompiled: not compiled or wrong hash string")
 	}
-	lib, err := libYAML.Compile()
-	if err != nil {
+	lib := New()
+	if err = lib.Upgrade(libYAML); err != nil {
 		return err
 	}
 
 	for _, d := range libYAML.Functions {
 		if !d.Embedded {
 			fd, found := lib.funByFunCode[d.FunCode]
-			if !found {
-				return fmt.Errorf("ValidateCompiled: func code %d (name: '%s') not found", d.FunCode, d.Sym)
-			}
-			if fd.sym != d.Sym {
-				return fmt.Errorf("ValidateCompiled: func code %d is wrong (conflicting function names '%s' and '%s')", d.FunCode, d.Sym, fd.sym)
-			}
+			Assertf(found, "ValidateCompiled: func code %d (name: '%s') not found", d.FunCode, d.Sym)
+			Assertf(fd.sym == d.Sym, "ValidateCompiled: func code %d is wrong (conflicting function names '%s' and '%s')", d.FunCode, d.Sym, fd.sym)
+
 			compiledBytecode := hex.EncodeToString(fd.bytecode)
 			if d.Bytecode != compiledBytecode {
 				return fmt.Errorf("ValidateCompiled: func code %d, function name '%s'. Conflicting bytecodes: compiled: '%s' != provided '%s'",
@@ -217,23 +230,6 @@ func (libYAML *LibraryFromYAML) ValidateCompiled() error {
 	hashCompiled := lib.LibraryHash()
 	if hex.EncodeToString(hashCompiled[:]) != libYAML.Hash {
 		return fmt.Errorf("ValidateCompiled: library hash does not match: compiled %s != provided %s", hex.EncodeToString(hashCompiled[:]), libYAML.Hash)
-	}
-
-	return nil
-}
-
-func (lib *Library) Embed(m map[string]*EmbeddedFunctionData) error {
-	for _, fd := range lib.funByFunCode {
-		if isEmbedded, _ := fd.isEmbeddedOrShort(); isEmbedded {
-			e, ok := m[fd.sym]
-			if !ok {
-				return fmt.Errorf("embedded fun '%s' not found", fd.sym)
-			}
-			if fd.requiredNumParams != e.RequiredNumPar {
-				return fmt.Errorf("embedded fun '%s': inconsistent number of params", fd.sym)
-			}
-			fd.embeddedFun = e.EmbeddedFun
-		}
 	}
 	return nil
 }

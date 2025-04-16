@@ -73,16 +73,16 @@ var (
 	}
 )
 
-func mustAddToEmbeddingMap(m map[string]*EmbeddedFunctionData, embeddedFunData ...*EmbeddedFunctionData) {
+func mustAddToEmbeddingMap(m map[string]EmbeddedFunction, embeddedFunData ...*EmbeddedFunctionData) {
 	for _, e := range embeddedFunData {
 		_, already := m[e.Sym]
-		Assertf(!already, "addToEmbeddingMap: duplicate embedded function: '%s'", e.Sym)
-		m[e.Sym] = e
+		Assertf(!already, "mustAddToEmbeddingMap: duplicate embedded function: '%s'", e.Sym)
+		m[e.Sym] = e.EmbeddedFun
 	}
 }
 
-func BaseEmbeddingMap(targetLib *Library) map[string]*EmbeddedFunctionData {
-	ret := make(map[string]*EmbeddedFunctionData)
+func BaseEmbeddingMap(targetLib *Library) map[string]EmbeddedFunction {
+	ret := make(map[string]EmbeddedFunction)
 	mustAddToEmbeddingMap(ret, embedShortBase...)
 	mustAddToEmbeddingMap(ret, embedLongBase...)
 	mustAddToEmbeddingMap(ret, embedArithmeticsShort...)

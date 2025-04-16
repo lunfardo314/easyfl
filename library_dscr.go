@@ -249,7 +249,7 @@ functions:
 #    function codes (opcodes) from 319 and up to maximum 1022 are reserved for 'EXTENDED function codes'
    -
       sym: false
-      description: "TBD"
+      description: "returns 0x"
       funCode: 319
       numArgs: 0
       bytecode: 80
@@ -257,7 +257,7 @@ functions:
          0x
    -
       sym: true
-      description: "TBD"
+      description: "returns non-empty value"
       funCode: 320
       numArgs: 0
       bytecode: 81ff
@@ -265,7 +265,7 @@ functions:
          0xff
    -
       sym: require
-      description: "TBD"
+      description: "equivalent to or($0,$1). Useful in context like require(<cond>, !!!fail_condition_not_satisfied)"
       funCode: 321
       numArgs: 2
       bytecode: 48420001
@@ -273,7 +273,7 @@ functions:
          or($0,$1)
    -
       sym: lessOrEqualThan
-      description: "TBD"
+      description: "returns $0<=$1. Requires operands must be equal length"
       funCode: 322
       numArgs: 2
       bytecode: 4842200001140001
@@ -281,7 +281,7 @@ functions:
          or(lessThan($0,$1),equal($0,$1))
    -
       sym: greaterThan
-      description: "TBD"
+      description: "returns $0>$1. Requires operands must be equal length"
       funCode: 323
       numArgs: 2
       bytecode: 1749420001
@@ -289,7 +289,7 @@ functions:
          not(lessOrEqualThan($0,$1))
    -
       sym: greaterOrEqualThan
-      description: "TBD"
+      description: "returns $0>=$1. Requires operands must be equal length"
       funCode: 324
       numArgs: 2
       bytecode: 17200001
@@ -297,7 +297,7 @@ functions:
          not(lessThan($0,$1))
    -
       sym: bytecode
-      description: "TBD"
+      description: "returns bytecode of the operand, i.e. arguments is compiled instead of evaluated"
       funCode: 325
       numArgs: 1
       bytecode: 08
@@ -305,7 +305,7 @@ functions:
          $$0
    -
       sym: evalArgumentBytecode
-      description: "TBD"
+      description: "in bytecode $0, parses argument with index $2, enforces call prefix is equal to $1"
       funCode: 326
       numArgs: 3
       bytecode: 444d4c4b000102
@@ -313,7 +313,7 @@ functions:
          eval(parseArgumentBytecode($0,$1,$2))
    -
       sym: lessThanUint
-      description: "TBD"
+      description: "returns $0<$1 for arguments of any size <= 8. Each of arguments ar expanded fit leading 0-s up to 8 bytes and compare lexicographically"
       funCode: 327
       numArgs: 2
       bytecode: 201f001f01
@@ -321,7 +321,7 @@ functions:
          lessThan(uint8Bytes($0), uint8Bytes($1))
    -
       sym: equalUint
-      description: "TBD"
+      description: "returns $0==$1 preliminary expanding each operand with leading 0-s to 8 bytes"
       funCode: 328
       numArgs: 2
       bytecode: 141f001f01
@@ -329,7 +329,7 @@ functions:
          equal(uint8Bytes($0), uint8Bytes($1))
    -
       sym: max
-      description: "TBD"
+      description: "returns bigger one out of 2 operands of equal size"
       funCode: 329
       numArgs: 2
       bytecode: 182000010100
@@ -337,7 +337,7 @@ functions:
          if(lessThan($0,$1),$1,$0)
    -
       sym: min
-      description: "TBD"
+      description: "returns smaller one out of 2 operands of equal size"
       funCode: 330
       numArgs: 2
       bytecode: 182000010001
@@ -345,5 +345,4 @@ functions:
          if(lessThan($0,$1),$0,$1)
 # END EXTENDED function definitions
 # END all function definitions
-
 `
