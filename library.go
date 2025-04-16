@@ -43,19 +43,19 @@ func NewBase() *Library {
 	return lib
 }
 
-func (lib *Library) initBase() {
-	// basic
-	lib.embedBase()
-	lib.extendBase()
-}
-
-func (lib *Library) embedBase() {
-	lib.embedMain()
-	lib.embedArithmetics()
-	lib.embedBitwiseAndCmp()
-	lib.embedBaseCrypto()
-	lib.embedBytecodeManipulation()
-}
+//func (lib *Library) initBase() {
+//	// basic
+//	lib.embedBase()
+//	lib.extendBase()
+//}
+//
+//func (lib *Library) embedBase() {
+//	lib.embedMain()
+//	lib.embedArithmetics()
+//	lib.embedBitwiseAndCmp()
+//	lib.embedBaseCrypto()
+//	lib.embedBytecodeManipulation()
+//}
 
 func newLibrary() *Library {
 	return &Library{

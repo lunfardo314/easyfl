@@ -1287,3 +1287,131 @@ func TestCases(t *testing.T) {
 		require.True(t, len(res) == 0)
 	})
 }
+
+func TestEmbed(t *testing.T) {
+	lib := NewBase()
+	t.Run("main", func(t *testing.T) {
+		lib.MustEqual("concat", "0x")
+		lib.MustEqual("concat(1,2)", "0x0102")
+		lib.MustEqual("concat(1,2,3,4)", "concat(concat(1,2),concat(3,4))")
+
+		lib.MustError("fail(100)", "SCRIPT FAIL: error #100")
+		lib.MustError("!!!hello,_world!", "hello, world!")
+		lib.MustError("!!!fail_error_message_31415", "31415")
+
+		lib.MustEqual("slice(0x010203,1,2)", "0x0203")
+
+		lib.MustEqual("byte(0x010203, 2)", "3")
+
+		lib.MustEqual("tail(0x010203, 2)", "3")
+
+		lib.MustTrue("hasPrefix(0xf10203,0xf1)")
+
+		lib.MustEqual("repeat(1,5)", "0x0101010101")
+
+		lib.MustTrue("equal(len(nil), u64/0)")
+
+		lib.MustEqual("not(1)", "0x")
+
+		lib.MustTrue("and")
+		lib.MustTrue("not(and(concat))")
+
+		lib.MustTrue("not(or)")
+		lib.MustTrue("not(or(concat))")
+		lib.MustTrue("or(1)")
+
+		lib.MustTrue("isZero(0)")
+		lib.MustTrue("isZero(repeat(0,100))")
+		lib.MustTrue("not(isZero(0x0000000003))")
+	})
+	t.Run("arithmetics", func(t *testing.T) {
+		lib.MustTrue("isZero(uint8Bytes(0x))")
+		lib.MustTrue("equal(uint8Bytes(0x), u64/0)")
+		lib.MustEqual("uint8Bytes(1)", "u64/1")
+		lib.MustEqual("uint8Bytes(u16/1)", "u64/1")
+
+		lib.MustEqual("add(5,6)", "add(10,1)")
+		lib.MustEqual("add(5,6)", "u64/11")
+		lib.MustEqual("add(0, 0)", "u64/0")
+		lib.MustEqual("add(u16/1337, 0)", "u64/1337")
+		lib.MustEqual("add(nil, 0)", "u64/0")
+		lib.MustEqual("add(0, 0)", "u64/0")
+		lib.MustEqual("add(0x, 0x)", "u64/0")
+
+		lib.MustEqual("sub(6,6)", "u64/0")
+		lib.MustEqual("sub(6,5)", "u64/1")
+		lib.MustEqual("sub(0, 0)", "u64/0")
+		lib.MustEqual("sub(u16/1337, 0)", "u64/1337")
+		lib.MustEqual("sub(nil, 0)", "u64/0")
+		lib.MustError("sub(10, 100)", "underflow in subtraction")
+
+		lib.MustEqual("mul(5,6)", "mul(15,2)")
+		lib.MustEqual("mul(5,6)", "u64/30")
+		lib.MustEqual("mul(u16/1337, 0)", "u64/0")
+		lib.MustEqual("mul(0, u32/1337133700)", "u64/0")
+		lib.MustEqual("mul(nil, 5)", "u64/0")
+
+		lib.MustEqual("div(100,100)", "u64/1")
+		lib.MustEqual("div(100,110)", "u64/0")
+		lib.MustEqual("div(u32/10000,u16/10000)", "u64/1")
+		lib.MustEqual("div(0, u32/1337133700)", "u64/0")
+		lib.MustError("div(u32/1337133700, 0)", "integer divide by zero")
+		lib.MustEqual("div(nil, 5)", "u64/0")
+
+		lib.MustEqual("mod(100,100)", "u64/0")
+		lib.MustEqual("mod(107,100)", "u64/7")
+		lib.MustEqual("mod(u32/10100,u16/10000)", "u64/100")
+		lib.MustEqual("mod(0, u32/1337133700)", "u64/0")
+		lib.MustError("mod(u32/1337133700, 0)", "integer divide by zero")
+		lib.MustEqual("mod(nil, 5)", "u64/0")
+		lib.MustEqual("add(mul(div(u32/27, u16/4), 4), mod(u32/27, 4))", "u64/27")
+	})
+	t.Run("bitwiseAndCmp", func(t *testing.T) {
+		// comparison lexicographical (equivalent to bigendian for binary integers)
+		lib.MustTrue("lessThan(1,2)")
+		lib.MustTrue("not(lessThan(2,1))")
+		lib.MustTrue("not(lessThan(2,2))")
+		// bitwise
+		//lib.embedShort("bitwiseOR", 2, evalBitwiseOR)
+		lib.MustEqual("bitwiseOR(0x01, 0x80)", "0x81")
+		//lib.embedShort("bitwiseAND", 2, evalBitwiseAND)
+		lib.MustEqual("bitwiseAND(0x03, 0xf2)", "0x02")
+		lib.MustEqual("bitwiseAND(0x0102, 0xff00)", "0x0100")
+		//lib.embedShort("bitwiseNOT", 1, evalBitwiseNOT)
+		lib.MustEqual("bitwiseNOT(0x00ff)", "0xff00")
+		//lib.embedShort("bitwiseXOR", 2, evalBitwiseXOR)
+		lib.MustEqual("bitwiseXOR(0x1234, 0x1234)", "0x0000")
+		lib.MustEqual("bitwiseXOR(0x1234, 0xffff)", "bitwiseNOT(0x1234)")
+		// other
+
+		//lib.embedLong("lshift64", 2, evalLShift64)
+		lib.MustEqual("lshift64(u64/3, u64/2)", "u64/12")
+		lib.MustTrue("isZero(lshift64(u64/2001, u64/64))")
+		lib.MustTrue("equal(lshift64(u64/2001, u64/4), mul(u64/2001, u16/16))")
+		lib.MustEqual("lshift64(u64/2001, nil)", "u64/2001")
+
+		//lib.embedLong("rshift64", 2, evalRShift64)
+		lib.MustEqual("rshift64(u64/15, u64/2)", "u64/3")
+		lib.MustTrue("isZero(rshift64(0xffffffffffffffff, u64/64))")
+		lib.MustTrue("equal(rshift64(u64/2001, u64/3), div(u64/2001, 8))")
+		lib.MustEqual("rshift64(u64/2001, nil)", "u64/2001")
+
+	})
+	t.Run("base crypto", func(t *testing.T) {
+		h := blake2b.Sum256([]byte{1})
+		lib.MustEqual("len(blake2b(1))", "u64/32")
+		lib.MustEqual("blake2b(1)", fmt.Sprintf("0x%s", hex.EncodeToString(h[:])))
+	})
+	t.Run("bytecode manipulation", func(t *testing.T) {
+		_, _, binCode, err := lib.CompileExpression("slice(0x01020304,1,2)")
+		AssertNoError(err)
+		src := fmt.Sprintf("eval(parseArgumentBytecode(0x%s, #slice, %d))", hex.EncodeToString(binCode), 0)
+		lib.MustEqual(src, "0x01020304")
+		src = fmt.Sprintf("eval(parseArgumentBytecode(0x%s, #slice, %d))", hex.EncodeToString(binCode), 1)
+		lib.MustEqual(src, "1")
+		src = fmt.Sprintf("eval(parseArgumentBytecode(0x%s, #slice, %d))", hex.EncodeToString(binCode), 2)
+		lib.MustEqual(src, "2")
+		src = fmt.Sprintf("parsePrefixBytecode(0x%s)", hex.EncodeToString(binCode))
+		lib.MustEqual(src, "#slice")
+	})
+}
