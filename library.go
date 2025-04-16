@@ -30,32 +30,12 @@ func New() *Library {
 }
 
 func NewBase() *Library {
-	libFromYAML, err := ReadLibraryFromYAML([]byte(baseLibraryDefinitions))
-	AssertNoError(err)
 	lib := New()
-	err = lib.Upgrade(libFromYAML, func() map[string]EmbeddedFunction {
-		return BaseEmbeddingMap(lib)
-	})
+	err := lib.UpgradeFromYAML([]byte(baseLibraryDefinitions), BaseEmbeddingMap(lib))
 	AssertNoError(err)
 
-	//lib := New()
-	//lib.initBase()
 	return lib
 }
-
-//func (lib *Library) initBase() {
-//	// basic
-//	lib.embedBase()
-//	lib.extendBase()
-//}
-//
-//func (lib *Library) embedBase() {
-//	lib.embedMain()
-//	lib.embedArithmetics()
-//	lib.embedBitwiseAndCmp()
-//	lib.embedBaseCrypto()
-//	lib.embedBytecodeManipulation()
-//}
 
 func newLibrary() *Library {
 	return &Library{

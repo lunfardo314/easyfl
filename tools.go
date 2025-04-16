@@ -164,7 +164,7 @@ func ReadLibraryFromYAML(data []byte) (*LibraryFromYAML, error) {
 	return fromYAML, nil
 }
 
-func (lib *Library) UpgradeFromYAML(yamlData []byte, embed ...func() map[string]EmbeddedFunction) error {
+func (lib *Library) UpgradeFromYAML(yamlData []byte, embed ...map[string]EmbeddedFunction) error {
 	libFromYAML, err := ReadLibraryFromYAML(yamlData)
 	if err != nil {
 		return err
@@ -176,12 +176,12 @@ func (lib *Library) UpgradeFromYAML(yamlData []byte, embed ...func() map[string]
 // If embedding functions are available, embeds them and enforces consistency
 // NOTE: if embedded functions are not provided, library is not ready for use, however its consistency
 // has been checked, and it can be serialized to YAML
-func (lib *Library) Upgrade(fromYAML *LibraryFromYAML, embed ...func() map[string]EmbeddedFunction) error {
+func (lib *Library) Upgrade(fromYAML *LibraryFromYAML, embed ...map[string]EmbeddedFunction) error {
 	var err error
 
 	var em map[string]EmbeddedFunction
 	if len(embed) > 0 {
-		em = embed[0]()
+		em = embed[0]
 	}
 	var ef EmbeddedFunction
 	var found bool
