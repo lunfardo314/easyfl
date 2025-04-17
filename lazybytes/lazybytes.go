@@ -17,7 +17,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/lunfardo314/easyfl"
+	"github.com/lunfardo314/easyfl/util"
 )
 
 // Array can be interpreted two ways:
@@ -96,7 +96,7 @@ func ArrayFromBytesReadOnly(data []byte, maxNumElements ...int) *Array {
 
 func ParseArrayFromBytesReadOnly(data []byte, maxNumElements ...int) (*Array, error) {
 	var ret *Array
-	err := easyfl.CatchPanicOrError(func() error {
+	err := util.CatchPanicOrError(func() error {
 		ret = ArrayFromBytesReadOnly(data, maxNumElements...)
 		ret.NumElements()
 		return nil
@@ -261,7 +261,7 @@ func (a *Array) ParsedString() string {
 	p := a.Parsed()
 	ret := make([]string, len(p))
 	for i := range p {
-		ret[i] = easyfl.Fmt(p[i])
+		ret[i] = util.Fmt(p[i])
 	}
 	return fmt.Sprintf("[%s]", strings.Join(ret, ","))
 }
@@ -423,7 +423,7 @@ func TreeFromBytesReadOnly(data []byte) *Tree {
 }
 
 func TreeFromTreesReadOnly(trees ...*Tree) *Tree {
-	easyfl.Assertf(len(trees) <= MaxElementsLazyTree, "can't be more than %d tree node elements", MaxElementsLazyTree)
+	util.Assertf(len(trees) <= MaxElementsLazyTree, "can't be more than %d tree node elements", MaxElementsLazyTree)
 
 	sa := EmptyArray(MaxElementsLazyTree)
 	m := make(map[byte]*Tree)
@@ -443,7 +443,7 @@ func TreeEmpty() *Tree {
 }
 
 func Path(p ...any) TreePath {
-	return easyfl.Concat(p...)
+	return util.Concat(p...)
 }
 
 func (p TreePath) Bytes() []byte {

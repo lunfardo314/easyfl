@@ -3,6 +3,9 @@ package easyfl
 import (
 	"errors"
 	"fmt"
+
+	"github.com/lunfardo314/easyfl/lazybytes"
+	"github.com/lunfardo314/easyfl/util"
 )
 
 type (
@@ -32,7 +35,7 @@ func (lib *Library) CompileLocalLibrary(source string) ([][]byte, error) {
 			return nil, fmt.Errorf("error while compiling '%s': %v", pf.Sym, err)
 		}
 
-		Assertf(len(lib.funByName) <= 255, "a local library can contain up to 255 functions")
+		util.Assertf(len(lib.funByName) <= 255, "a local library can contain up to 255 functions")
 
 		if lib.existsFunction(pf.Sym, libLoc) {
 			return nil, errors.New("repeating symbol '" + pf.Sym + "'")
@@ -58,6 +61,16 @@ func (lib *Library) CompileLocalLibrary(source string) ([][]byte, error) {
 	return ret, nil
 }
 
+// CompileLocalLibraryToLazyArray compiles local library and serializes it as lazy array
+func (lib *Library) CompileLocalLibraryToLazyArray(source string) ([]byte, error) {
+	libBin, err := lib.CompileLocalLibrary(source)
+	if err != nil {
+		return nil, err
+	}
+	ret := lazybytes.MakeArrayFromDataReadOnly(libBin...)
+	return ret.Bytes(), nil
+}
+
 func (lib *Library) LocalLibraryFromBytes(bin [][]byte) (*LocalLibrary, error) {
 	if len(bin) > 255 {
 		return nil, fmt.Errorf("local library can contain up to 255 elements")
@@ -77,7 +90,7 @@ func (lib *Library) LocalLibraryFromBytes(bin [][]byte) (*LocalLibrary, error) {
 		if maxParam != 0xff {
 			numParams = int(maxParam) + 1
 		}
-		Assertf(numParams <= 15, "numParams <= 15")
+		util.Assertf(numParams <= 15, "numParams <= 15")
 		dscr := &funDescriptor{
 			sym:               sym,
 			funCode:           uint16(FirstLocalFunCode + i),

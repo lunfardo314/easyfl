@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/lunfardo314/easyfl/util"
 	"golang.org/x/crypto/blake2b"
 	"gopkg.in/yaml.v3"
 )
@@ -84,10 +85,10 @@ func (fd *funDescriptor) write(w io.Writer) {
 	_ = binary.Write(w, binary.BigEndian, np)
 
 	// function name
-	Assertf(len(fd.sym) < 256, "EasyFL: len(fd.sym)<256")
+	util.Assertf(len(fd.sym) < 256, "EasyFL: len(fd.sym)<256")
 	_, _ = w.Write([]byte{byte(len(fd.sym))})
 	_, _ = w.Write([]byte(fd.sym))
-	Assertf(len(fd.bytecode) < 256*256, "EasyFL: len(fd.bytecode)<256*256")
+	util.Assertf(len(fd.bytecode) < 256*256, "EasyFL: len(fd.bytecode)<256*256")
 	// bytecode (will be nil for embedded)
 	_ = binary.Write(w, binary.BigEndian, uint16(len(fd.bytecode)))
 	_, _ = w.Write(fd.bytecode)
@@ -174,7 +175,7 @@ const (
 
 func prn(w io.Writer, format string, a ...any) {
 	_, err := fmt.Fprintf(w, format, a...)
-	AssertNoError(err)
+	util.AssertNoError(err)
 }
 
 func prnFuncDescription(w io.Writer, f *FuncDescriptorYAMLAble, compiled bool) {
@@ -203,7 +204,7 @@ func prnFuncDescription(w io.Writer, f *FuncDescriptorYAMLAble, compiled bool) {
 
 func (lib *Library) mustFunYAMLAbleByName(sym string) *FuncDescriptorYAMLAble {
 	fi, err := lib.functionByName(sym)
-	AssertNoError(err)
+	util.AssertNoError(err)
 	d := lib.funByFunCode[fi.FunCode]
 	return &FuncDescriptorYAMLAble{
 		Description: d.description,
@@ -281,8 +282,8 @@ func (libYAML *LibraryFromYAML) ValidateCompiled() error {
 	for _, d := range libYAML.Functions {
 		if !d.Embedded {
 			fd, found := lib.funByFunCode[d.FunCode]
-			Assertf(found, "ValidateCompiled: func code %d (name: '%s') not found", d.FunCode, d.Sym)
-			Assertf(fd.sym == d.Sym, "ValidateCompiled: func code %d is wrong (conflicting function names '%s' and '%s')", d.FunCode, d.Sym, fd.sym)
+			util.Assertf(found, "ValidateCompiled: func code %d (name: '%s') not found", d.FunCode, d.Sym)
+			util.Assertf(fd.sym == d.Sym, "ValidateCompiled: func code %d is wrong (conflicting function names '%s' and '%s')", d.FunCode, d.Sym, fd.sym)
 
 			compiledBytecode := hex.EncodeToString(fd.bytecode)
 			if d.Bytecode != compiledBytecode {

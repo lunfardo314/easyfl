@@ -14,6 +14,7 @@ import (
 	"unicode"
 
 	"github.com/lunfardo314/easyfl/slicepool"
+	"github.com/lunfardo314/easyfl/util"
 )
 
 // funParsed is an interim representation of the source code
@@ -245,7 +246,7 @@ func writeDataWithPrefix(w io.Writer, data []byte) error {
 func mustDataWithPrefix(data []byte) []byte {
 	var buf bytes.Buffer
 	err := writeDataWithPrefix(&buf, data)
-	AssertNoError(err)
+	util.AssertNoError(err)
 	return buf.Bytes()
 }
 
@@ -373,7 +374,7 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 		}
 		var b [2]byte
 		binary.BigEndian.PutUint16(b[:], uint16(n))
-		if err = writeDataWithPrefix(w, TrimLeadingZeroBytes(b[:])); err != nil {
+		if err = writeDataWithPrefix(w, util.TrimLeadingZeroBytes(b[:])); err != nil {
 			return false, 0, err
 		}
 		return true, 0, nil
@@ -388,7 +389,7 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 		}
 		var b [4]byte
 		binary.BigEndian.PutUint32(b[:], uint32(n))
-		if err = writeDataWithPrefix(w, TrimLeadingZeroBytes(b[:])); err != nil {
+		if err = writeDataWithPrefix(w, util.TrimLeadingZeroBytes(b[:])); err != nil {
 			return false, 0, err
 		}
 		return true, 0, nil
@@ -399,7 +400,7 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 		}
 		var b [8]byte
 		binary.BigEndian.PutUint64(b[:], un)
-		if err = writeDataWithPrefix(w, TrimLeadingZeroBytes(b[:])); err != nil {
+		if err = writeDataWithPrefix(w, util.TrimLeadingZeroBytes(b[:])); err != nil {
 			return false, 0, err
 		}
 		return true, 0, nil
@@ -431,9 +432,9 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 			return false, 0, fmt.Errorf("fail message can't be longer than 127 bytes: '%s'", sym)
 		}
 		fi, err = lib.functionByName("fail")
-		AssertNoError(err)
+		util.AssertNoError(err)
 		funCallPrefix, err = fi.callPrefix(1)
-		AssertNoError(err)
+		util.AssertNoError(err)
 		if _, err = w.Write(funCallPrefix); err != nil {
 			return false, 0, err
 		}
@@ -471,7 +472,7 @@ func (lib *Library) ExpressionFromBytecode(code []byte, localLib ...*LocalLibrar
 	}
 	if len(remaining) != 0 {
 		return nil, fmt.Errorf("ExpressionFromBytecode: not all bytes have been consumed in %s. Remaining: %s",
-			Fmt(code), Fmt(remaining))
+			util.Fmt(code), util.Fmt(remaining))
 	}
 	return ret, nil
 }
@@ -479,14 +480,14 @@ func (lib *Library) ExpressionFromBytecode(code []byte, localLib ...*LocalLibrar
 // ExpressionToBytecode converts evaluation form of the expression into the canonical bytecode form
 func ExpressionToBytecode(f *Expression) []byte {
 	var buf bytes.Buffer
-	AssertNoError(writeExpressionBytecode(&buf, f))
+	util.AssertNoError(writeExpressionBytecode(&buf, f))
 	return buf.Bytes()
 }
 
 // ExpressionToSource converts evaluation form of the expression into the source form (decompiles)
 func ExpressionToSource(f *Expression) string {
 	var buf bytes.Buffer
-	AssertNoError(writeExpressionSource(&buf, f))
+	util.AssertNoError(writeExpressionSource(&buf, f))
 	return string(buf.Bytes())
 }
 
@@ -569,7 +570,7 @@ func (lib *Library) expressionFromBytecode(bytecode []byte, localLib ...*LocalLi
 	if len(callPrefix) == 1 && arity < 0 {
 		return nil, nil, 0xff, fmt.Errorf("EasyFL: short embedded with vararg is not allowed")
 	}
-	Assertf(arity >= 0, "EasyFL: arity >= 0")
+	util.Assertf(arity >= 0, "EasyFL: arity >= 0")
 
 	ret := newExpression(sym, callPrefix, arity)
 
@@ -620,7 +621,7 @@ func dataFunction(data []byte) EvalFunction {
 	d := data
 	return EvalFunction{
 		EmbeddedFunction: func(par *CallParams) []byte {
-			par.Trace("-> %s", Fmt(d))
+			par.Trace("-> %s", util.Fmt(d))
 			return data
 		},
 		bytecode: mustDataWithPrefix(data),
@@ -843,7 +844,7 @@ func makeEmbeddedFunForExpression(sym string, expr *Expression) EmbeddedFunction
 		copy(ret, retp)
 		spool.Dispose()
 
-		par.Trace("'%s':: %d params -> %s", sym, par.Arity(), Fmt(ret))
+		par.Trace("'%s':: %d params -> %s", sym, par.Arity(), util.Fmt(ret))
 		return ret
 	}
 }

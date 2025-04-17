@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+
+	"github.com/lunfardo314/easyfl/util"
 )
 
 /*
@@ -32,7 +34,7 @@ func New() *Library {
 func NewBase() *Library {
 	lib := New()
 	err := lib.UpgradeFromYAML([]byte(baseLibraryDefinitions), EmbeddedFunctions(lib))
-	AssertNoError(err)
+	util.AssertNoError(err)
 
 	return lib
 }
@@ -77,7 +79,7 @@ func (lib *Library) addDescriptor(fd *funDescriptor) {
 // embedShort embeds short-callable function into the library
 func (lib *Library) embedShort(sym string, requiredNumPar int, embeddedFun EmbeddedFunction, description ...string) byte {
 	ret, err := lib.embedShortErr(sym, requiredNumPar, embeddedFun, description...)
-	AssertNoError(err)
+	util.AssertNoError(err)
 	return ret
 }
 
@@ -109,15 +111,15 @@ func (lib *Library) embedShortErr(sym string, requiredNumPar int, embeddedFun Em
 	lib.addDescriptor(dscr)
 	{
 		codeBytes, err := lib.FunctionCallPrefixByName(sym, byte(requiredNumPar))
-		AssertNoError(err)
-		Assertf(len(codeBytes) == 1, "expected short code")
+		util.AssertNoError(err)
+		util.Assertf(len(codeBytes) == 1, "expected short code")
 	}
 	return byte(dscr.funCode), nil
 }
 
 func (lib *Library) embedLong(sym string, requiredNumPar int, embeddedFun EmbeddedFunction, description ...string) uint16 {
 	ret, err := lib.embedLongErr(sym, requiredNumPar, embeddedFun, description...)
-	AssertNoError(err)
+	util.AssertNoError(err)
 	return ret
 }
 
@@ -152,15 +154,15 @@ func (lib *Library) embedLongErr(sym string, requiredNumPar int, embeddedFun Emb
 			requiredNumPar = 1
 		}
 		codeBytes, err := lib.FunctionCallPrefixByName(sym, byte(requiredNumPar))
-		AssertNoError(err)
-		Assertf(len(codeBytes) == 2, "expected long code")
+		util.AssertNoError(err)
+		util.Assertf(len(codeBytes) == 2, "expected long code")
 	}
 	return dscr.funCode, nil
 }
 
 func (lib *Library) UpgradeWithEmbeddedShort(funList ...*EmbeddedFunctionData) {
 	err := lib.UpgradeWithEmbeddedShortErr(funList...)
-	AssertNoError(err)
+	util.AssertNoError(err)
 }
 
 func (lib *Library) UpgradeWithEmbeddedShortErr(funList ...*EmbeddedFunctionData) (err error) {
@@ -174,7 +176,7 @@ func (lib *Library) UpgradeWithEmbeddedShortErr(funList ...*EmbeddedFunctionData
 
 func (lib *Library) UpgradeWthEmbeddedLong(funList ...*EmbeddedFunctionData) {
 	err := lib.UpgradeWithEmbedLongErr(funList...)
-	AssertNoError(err)
+	util.AssertNoError(err)
 }
 
 func (lib *Library) UpgradeWithEmbedLongErr(funList ...*EmbeddedFunctionData) (err error) {
@@ -219,7 +221,7 @@ func (lib *Library) ExtendErr(sym string, source string, description ...string) 
 		return 0, fmt.Errorf("error while compiling '%s': %v", sym, err)
 	}
 
-	Assertf(lib.numExtended < MaxNumExtendedGlobal, "too many extended functions")
+	util.Assertf(lib.numExtended < MaxNumExtendedGlobal, "too many extended functions")
 
 	if lib.existsFunction(sym) {
 		return 0, errors.New("repeating symbol '" + sym + "'")
@@ -247,8 +249,8 @@ func (lib *Library) ExtendErr(sym string, source string, description ...string) 
 	{
 		// sanity check
 		codeBytes, err := lib.FunctionCallPrefixByName(sym, byte(numParam))
-		AssertNoError(err)
-		Assertf(len(codeBytes) == 2, "expected long code")
+		util.AssertNoError(err)
+		util.Assertf(len(codeBytes) == 2, "expected long code")
 	}
 
 	return dscr.funCode, nil
@@ -361,7 +363,7 @@ func (lib *Library) functionByCode(funCode uint16, localLib ...*LocalLibrary) (E
 func (fi *funInfo) callPrefix(numArgs byte) ([]byte, error) {
 	var ret []byte
 	if fi.IsShort {
-		Assertf(fi.FunCode > LastEmbeddedReserved, "internal inconsistency: fi.FunCode must be > %d", LastEmbeddedReserved)
+		util.Assertf(fi.FunCode > LastEmbeddedReserved, "internal inconsistency: fi.FunCode must be > %d", LastEmbeddedReserved)
 		ret = []byte{byte(fi.FunCode)}
 	} else {
 		if fi.NumParams < 0 {
@@ -382,7 +384,7 @@ func (fi *funInfo) callPrefix(numArgs byte) ([]byte, error) {
 			ret = makeSmallByteArray(2)
 			binary.BigEndian.PutUint16(ret, u16)
 		} else {
-			Assertf(fi.FunCode <= FirstLocalFunCode+255 && FirstLocalFunCode <= fi.FunCode, "fi.FunCode <= FirstLocalFunCode+255 && FirstLocalFunCode <= fi.FunCode")
+			util.Assertf(fi.FunCode <= FirstLocalFunCode+255 && FirstLocalFunCode <= fi.FunCode, "fi.FunCode <= FirstLocalFunCode+255 && FirstLocalFunCode <= fi.FunCode")
 			// local function call 3 bytes
 			u16 := (uint16(firstByte) << 8) | FirstLocalFunCode
 			//ret = make([]byte, 3)

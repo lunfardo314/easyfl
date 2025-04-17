@@ -1,6 +1,10 @@
 package easyfl
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/lunfardo314/easyfl/util"
+)
 
 const (
 
@@ -105,7 +109,7 @@ var (
 )
 
 func newArgArray(argNum int) (ret []*Expression) {
-	Assertf(argNum <= MaxParameters, "size<=MaxParameters")
+	util.Assertf(argNum <= MaxParameters, "size<=MaxParameters")
 	if argNum > 0 {
 		if retAny := expressionArrayPool[argNum].Get(); retAny != nil {
 			ret = retAny.([]*Expression)

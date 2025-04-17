@@ -1,4 +1,4 @@
-package easyfl
+package util
 
 import (
 	"bytes"
@@ -57,11 +57,11 @@ func RequireErrorWith(t *testing.T, err error, s string) {
 
 func Assertf(cond bool, format string, args ...interface{}) {
 	if !cond {
-		panic(fmt.Errorf("assertion failed:: "+format, evalLazyArgs(args...)...))
+		panic(fmt.Errorf("assertion failed:: "+format, EvalLazyArgs(args...)...))
 	}
 }
 
-func evalLazyArgs(args ...any) []any {
+func EvalLazyArgs(args ...any) []any {
 	ret := make([]any, len(args))
 	for i, arg := range args {
 		switch funArg := arg.(type) {
