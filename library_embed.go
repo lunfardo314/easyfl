@@ -15,50 +15,62 @@ import (
 //  - certain function could be optimized.
 //  - do we need short end long embedding?
 
-func BaseEmbeddingMap(targetLib *Library) map[string]EmbeddedFunction {
-	return map[string]EmbeddedFunction{
-		// short base
-		"fail":      evalFail,
-		"slice":     evalSlice,
-		"byte":      evalByte,
-		"tail":      evalTail,
-		"equal":     evalEqual,
-		"hasPrefix": evalHasPrefix,
-		"len":       evalLen,
-		"not":       evalNot,
-		"if":        evalIf,
-		"isZero":    evalIsZero,
-		// long base
-		"concat":            evalConcat,
-		"and":               evalAnd,
-		"or":                evalOr,
-		"repeat":            evalRepeat,
-		"firstCaseIndex":    evalFirstCaseIndex,
-		"firstEqualIndex":   evalFirstEqualIndex,
-		"selectCaseByIndex": evalSelectCaseByIndex,
-		// arithmetics short
-		"add":        evalAddUint,
-		"sub":        evalSubUint,
-		"mul":        evalMulUint,
-		"div":        evalDivUint,
-		"mod":        evalModuloUint,
-		"uint8Bytes": evalUint8Bytes,
-		// bitwise and compare short
-		"lessThan":   evalLessThan,
-		"bitwiseOR":  evalBitwiseOR,
-		"bitwiseAND": evalBitwiseAND,
-		"bitwiseNOT": evalBitwiseNOT,
-		"bitwiseXOR": evalBitwiseXOR,
-		// bitwise long
-		"lshift64": evalLShift64,
-		"rshift64": evalRShift64,
-		// base crypto
-		"validSignatureED25519": evalValidSigED25519,
-		"blake2b":               evalBlake2b,
-		// bytecode manipulation. Are linked with the particular target library
-		"parseArgumentBytecode": targetLib.evalParseArgumentBytecode,
-		"parsePrefixBytecode":   targetLib.evalParsePrefixBytecode,
-		"eval":                  targetLib.evalBytecode,
+var unboundEmbeddedFunctions = map[string]EmbeddedFunction{
+	// short base
+	"fail":      evalFail,
+	"slice":     evalSlice,
+	"byte":      evalByte,
+	"tail":      evalTail,
+	"equal":     evalEqual,
+	"hasPrefix": evalHasPrefix,
+	"len":       evalLen,
+	"not":       evalNot,
+	"if":        evalIf,
+	"isZero":    evalIsZero,
+	// long base
+	"concat":            evalConcat,
+	"and":               evalAnd,
+	"or":                evalOr,
+	"repeat":            evalRepeat,
+	"firstCaseIndex":    evalFirstCaseIndex,
+	"firstEqualIndex":   evalFirstEqualIndex,
+	"selectCaseByIndex": evalSelectCaseByIndex,
+	// arithmetics short
+	"add":        evalAddUint,
+	"sub":        evalSubUint,
+	"mul":        evalMulUint,
+	"div":        evalDivUint,
+	"mod":        evalModuloUint,
+	"uint8Bytes": evalUint8Bytes,
+	// bitwise and compare short
+	"lessThan":   evalLessThan,
+	"bitwiseOR":  evalBitwiseOR,
+	"bitwiseAND": evalBitwiseAND,
+	"bitwiseNOT": evalBitwiseNOT,
+	"bitwiseXOR": evalBitwiseXOR,
+	// bitwise long
+	"lshift64": evalLShift64,
+	"rshift64": evalRShift64,
+	// base crypto
+	"validSignatureED25519": evalValidSigED25519,
+	"blake2b":               evalBlake2b,
+}
+
+func EmbeddedFunctions(targetLib *Library) func(syn string) EmbeddedFunction {
+	return func(syn string) EmbeddedFunction {
+		if ret, found := unboundEmbeddedFunctions[syn]; found {
+			return ret
+		}
+		// function bound to particular target library
+		switch syn {
+		case "parseArgumentBytecode":
+			return targetLib.evalParseArgumentBytecode
+		case "parsePrefixBytecode":
+			return targetLib.evalParsePrefixBytecode
+		case "eval":
+			return targetLib.evalBytecode
+		}
+		return nil
 	}
 }
 

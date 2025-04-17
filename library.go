@@ -31,7 +31,7 @@ func New() *Library {
 
 func NewBase() *Library {
 	lib := New()
-	err := lib.UpgradeFromYAML([]byte(baseLibraryDefinitions), BaseEmbeddingMap(lib))
+	err := lib.UpgradeFromYAML([]byte(baseLibraryDefinitions), EmbeddedFunctions(lib))
 	AssertNoError(err)
 
 	return lib
@@ -72,14 +72,6 @@ func (lib *Library) addDescriptor(fd *funDescriptor) {
 	} else {
 		lib.numExtended++
 	}
-	//switch {
-	//case isEmbedded && isShort:
-	//	lib.numEmbeddedShort++
-	//case isEmbedded && !isShort:
-	//	lib.numEmbeddedLong++
-	//default:
-	//	lib.numExtended++
-	//}
 }
 
 // embedShort embeds short-callable function into the library

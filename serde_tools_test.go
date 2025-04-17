@@ -55,6 +55,17 @@ functions:
     description: none
     sym: newfun2
     source: add(5,7)
+  -
+   sym: long-source
+   source: > 
+     if(
+       equal($0,$1),
+       blake2b($0),
+       blake2b(concat($0,$1))
+     )
+  -
+    sym: dummy
+    source: add(5,7)
 `
 	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
 	require.NoError(t, err)
