@@ -296,32 +296,32 @@ func ensure8Bytes(spool *slicepool.SlicePool, data []byte) ([]byte, bool) {
 	return ret, true
 }
 
-// mustArithmeticArgs makes uint64 from both params (bigendian)
-// Parameters must be not nil with size <= 8. They are padded with 0 in upper bytes, if necessary
-func mustArithmeticArgs(par *CallParams, name string) (uint64, uint64) {
-	a0Bin := par.Arg(0)
-	a0, ok := ensure8Bytes(par.ctx.spool, a0Bin)
-	if !ok {
-		par.TracePanic("%s:: wrong size of parameter 0", name)
+// Must2ArithmeticOperands makes uint64 from both params (big-endian)
+// Parameters must have with size <= 8. They are padded with 0 in upper bytes, if necessary
+func Must2ArithmeticOperands(par *CallParams, name string) (op0 uint64, op1 uint64) {
+	var err error
+	a0 := par.Arg(0)
+	if op0, err = Uint64FromBytes(a0); err != nil {
+		par.TracePanic("%s::Must2ArithmeticOperands op0=%s", name, Fmt(a0))
+		return
 	}
-
-	a1Bin := par.Arg(1)
-	a1, ok := ensure8Bytes(par.ctx.spool, a1Bin)
-	if !ok {
-		par.TracePanic("%s:: wrong size of parameter 1", name)
+	a1 := par.Arg(1)
+	if op1, err = Uint64FromBytes(a1); err != nil {
+		par.TracePanic("%s::Must2ArithmeticOperands op0=%s", name, Fmt(a1))
+		return
 	}
-	return binary.BigEndian.Uint64(a0), binary.BigEndian.Uint64(a1)
+	return
 }
 
 func evalAddUint(par *CallParams) []byte {
-	a0, a1 := mustArithmeticArgs(par, "addUint")
+	a0, a1 := Must2ArithmeticOperands(par, "addUint")
 	ret := par.Alloc(8)
 	binary.BigEndian.PutUint64(ret, a0+a1)
 	return ret
 }
 
 func evalSubUint(par *CallParams) []byte {
-	a0, a1 := mustArithmeticArgs(par, "subUint")
+	a0, a1 := Must2ArithmeticOperands(par, "subUint")
 	if a0 < a1 {
 		par.TracePanic("evalSubUint:: %d - %d -> underflow in subtraction", a0, a1)
 	}
@@ -331,21 +331,21 @@ func evalSubUint(par *CallParams) []byte {
 }
 
 func evalMulUint(par *CallParams) []byte {
-	a0, a1 := mustArithmeticArgs(par, "mulUint")
+	a0, a1 := Must2ArithmeticOperands(par, "mulUint")
 	ret := par.Alloc(8)
 	binary.BigEndian.PutUint64(ret, a0*a1)
 	return ret
 }
 
 func evalDivUint(par *CallParams) []byte {
-	a0, a1 := mustArithmeticArgs(par, "divUint")
+	a0, a1 := Must2ArithmeticOperands(par, "divUint")
 	ret := par.Alloc(8)
 	binary.BigEndian.PutUint64(ret, a0/a1)
 	return ret
 }
 
 func evalModuloUint(par *CallParams) []byte {
-	a0, a1 := mustArithmeticArgs(par, "moduloUint")
+	a0, a1 := Must2ArithmeticOperands(par, "moduloUint")
 	ret := par.Alloc(8)
 	binary.BigEndian.PutUint64(ret, a0%a1)
 	return ret
@@ -460,14 +460,14 @@ func evalBitwiseNOT(par *CallParams) []byte {
 }
 
 func evalLShift64(par *CallParams) []byte {
-	a0, a1 := mustArithmeticArgs(par, "lshift64")
+	a0, a1 := Must2ArithmeticOperands(par, "lshift64")
 	ret := par.Alloc(8) // true
 	binary.BigEndian.PutUint64(ret, a0<<a1)
 	return ret
 }
 
 func evalRShift64(par *CallParams) []byte {
-	a0, a1 := mustArithmeticArgs(par, "lshift64")
+	a0, a1 := Must2ArithmeticOperands(par, "lshift64")
 	ret := par.Alloc(8) // true
 	binary.BigEndian.PutUint64(ret, a0>>a1)
 	return ret
