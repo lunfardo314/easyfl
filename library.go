@@ -13,14 +13,20 @@ func NewLibrary() *Library {
 	return newLibrary()
 }
 
-func NewLibraryFromYAML(yamlData []byte, embedFun func(lib *Library) func(sym string) EmbeddedFunction) (*Library, error) {
+func NewLibraryFromYAML(yamlData []byte, embedFun ...func(lib *Library) func(sym string) EmbeddedFunction) (*Library, error) {
 	lib := NewLibrary()
 	fromYAML, err := ReadLibraryFromYAML(yamlData)
 	if err != nil {
 		return nil, err
 	}
-	if err = lib.Upgrade(fromYAML, embedFun(lib)); err != nil {
-		return nil, err
+	if len(embedFun) > 0 {
+		if err = lib.Upgrade(fromYAML, embedFun[0](lib)); err != nil {
+			return nil, err
+		}
+	} else {
+		if err = lib.Upgrade(fromYAML); err != nil {
+			return nil, err
+		}
 	}
 	// if library is compiled, check consistency
 	hashCalculated := lib.LibraryHash()
