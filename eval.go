@@ -6,8 +6,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lunfardo314/easyfl/easyfl_util"
 	"github.com/lunfardo314/easyfl/slicepool"
-	"github.com/lunfardo314/easyfl/util"
 )
 
 // GlobalData represents the data to be evaluated. It is wrapped into the interface
@@ -77,7 +77,7 @@ func newVarScope(sz int) []*call {
 	if sz == 0 {
 		return nil
 	}
-	util.Assertf(sz <= MaxParameters, "sz <= MaxParameters")
+	easyfl_util.Assertf(sz <= MaxParameters, "sz <= MaxParameters")
 	if retAny := varScopePool[sz-1].Get(); retAny != nil {
 		return retAny.([]*call)
 	}
@@ -147,12 +147,12 @@ func (p *CallParams) Trace(format string, args ...any) {
 	if isNil(p.ctx.glb) || !p.ctx.glb.Trace() {
 		return
 	}
-	p.ctx.glb.PutTrace(fmt.Sprintf(format, util.EvalLazyArgs(args...)...))
+	p.ctx.glb.PutTrace(fmt.Sprintf(format, easyfl_util.EvalLazyArgs(args...)...))
 }
 
 func (p *CallParams) TracePanic(format string, args ...any) {
 	p.Trace("panic: "+format, args...)
-	panic(fmt.Sprintf("panic: "+format, util.EvalLazyArgs(args...)...))
+	panic(fmt.Sprintf("panic: "+format, easyfl_util.EvalLazyArgs(args...)...))
 }
 
 func (p *CallParams) Alloc(size uint16) []byte {
@@ -212,7 +212,7 @@ func EvalExpressionWithSlicePool(glb GlobalData, spool *slicepool.SlicePool, f *
 // Never panics
 func (lib *Library) EvalFromSource(glb GlobalData, source string, args ...[]byte) ([]byte, error) {
 	var ret []byte
-	err := util.CatchPanicOrError(func() error {
+	err := easyfl_util.CatchPanicOrError(func() error {
 		f, requiredNumArgs, _, err := lib.CompileExpression(source)
 		if err != nil {
 			return err
@@ -262,7 +262,7 @@ func (lib *Library) MustEvalFromBytecodeWithSlicePool(glb GlobalData, spool *sli
 // EvalFromBytecode evaluates expression, never panics but return an error
 func (lib *Library) EvalFromBytecode(glb GlobalData, code []byte, args ...[]byte) ([]byte, error) {
 	var ret []byte
-	err := util.CatchPanicOrError(func() error {
+	err := easyfl_util.CatchPanicOrError(func() error {
 		ret = lib.MustEvalFromBytecode(glb, code, args...)
 		return nil
 	})
@@ -272,7 +272,7 @@ func (lib *Library) EvalFromBytecode(glb GlobalData, code []byte, args ...[]byte
 // EvalFromBytecodeWithSlicePool evaluates expression, never panics but return an error
 func (lib *Library) EvalFromBytecodeWithSlicePool(glb GlobalData, spool *slicepool.SlicePool, code []byte, args ...[]byte) ([]byte, error) {
 	var ret []byte
-	err := util.CatchPanicOrError(func() error {
+	err := easyfl_util.CatchPanicOrError(func() error {
 		ret = lib.MustEvalFromBytecodeWithSlicePool(glb, spool, code, args...)
 		return nil
 	})
@@ -309,7 +309,7 @@ func (lib *Library) MustEvalFromLibrary(glb GlobalData, libraryBin [][]byte, fun
 
 func (lib *Library) EvalFromLibrary(glb GlobalData, libraryBin [][]byte, funIndex int, args ...[]byte) ([]byte, error) {
 	var ret []byte
-	err := util.CatchPanicOrError(func() error {
+	err := easyfl_util.CatchPanicOrError(func() error {
 		ret = lib.MustEvalFromLibrary(glb, libraryBin, funIndex, args...)
 		return nil
 	})
@@ -336,31 +336,31 @@ func (lib *Library) CallLocalLibrary(ctx *CallParams, libBin [][]byte, idx int) 
 	copy(ret, retp)
 	spool.Dispose()
 
-	ctx.Trace("'lib#%d':: %d params -> %s", idx, ctx.Arity(), util.Fmt(ret))
+	ctx.Trace("'lib#%d':: %d params -> %s", idx, ctx.Arity(), easyfl_util.Fmt(ret))
 	return ret
 }
 
 func (lib *Library) MustEqual(source1, source2 string) {
 	res1, err := lib.EvalFromSource(nil, source1)
-	util.Assertf(err == nil, "expression '%s' resulted in error: '%v'", source1, err)
+	easyfl_util.Assertf(err == nil, "expression '%s' resulted in error: '%v'", source1, err)
 	res2, err := lib.EvalFromSource(nil, source2)
-	util.Assertf(err == nil, "expression '%s' resulted in error: '%v'", source2, err)
-	util.Assertf(bytes.Equal(res1, res2), "must be equal %s and %s: %s != %s", source1, source2, util.Fmt(res1), util.Fmt(res2))
-	util.Assertf(err == nil, "expression '%s' resulted in error: '%v'", source2, err)
-	util.Assertf(bytes.Equal(res1, res2), "must be equal %s and %s: %s != %s", source1, source2,
-		func() string { return util.Fmt(res1) }, func() string { return util.Fmt(res2) })
+	easyfl_util.Assertf(err == nil, "expression '%s' resulted in error: '%v'", source2, err)
+	easyfl_util.Assertf(bytes.Equal(res1, res2), "must be equal %s and %s: %s != %s", source1, source2, easyfl_util.Fmt(res1), easyfl_util.Fmt(res2))
+	easyfl_util.Assertf(err == nil, "expression '%s' resulted in error: '%v'", source2, err)
+	easyfl_util.Assertf(bytes.Equal(res1, res2), "must be equal %s and %s: %s != %s", source1, source2,
+		func() string { return easyfl_util.Fmt(res1) }, func() string { return easyfl_util.Fmt(res2) })
 }
 
 func (lib *Library) MustTrue(source string) {
 	res, err := lib.EvalFromSource(nil, source)
-	util.Assertf(err == nil, "expression '%s' resulted in error: '%v'", source, err)
-	util.Assertf(len(res) > 0, "expression '%s' must be true", res)
+	easyfl_util.Assertf(err == nil, "expression '%s' resulted in error: '%v'", source, err)
+	easyfl_util.Assertf(len(res) > 0, "expression '%s' must be true", res)
 }
 
 func (lib *Library) MustError(source string, mustContain ...string) {
 	_, err := lib.EvalFromSource(nil, source)
-	util.Assertf(err != nil, "expression '%s' is expected to return an error", source)
+	easyfl_util.Assertf(err != nil, "expression '%s' is expected to return an error", source)
 	if len(mustContain) > 0 {
-		util.Assertf(strings.Contains(err.Error(), mustContain[0]), fmt.Sprintf("error must contain '%s' (instead got '%s')", mustContain[0], err.Error()))
+		easyfl_util.Assertf(strings.Contains(err.Error(), mustContain[0]), fmt.Sprintf("error must contain '%s' (instead got '%s')", mustContain[0], err.Error()))
 	}
 }

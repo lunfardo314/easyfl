@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/lunfardo314/easyfl/easyfl_util"
 	"github.com/lunfardo314/easyfl/lazybytes"
-	"github.com/lunfardo314/easyfl/util"
 )
 
 type (
@@ -35,7 +35,7 @@ func (lib *Library) CompileLocalLibrary(source string) ([][]byte, error) {
 			return nil, fmt.Errorf("error while compiling '%s': %v", pf.Sym, err)
 		}
 
-		util.Assertf(len(lib.funByName) <= 255, "a local library can contain up to 255 functions")
+		easyfl_util.Assertf(len(lib.funByName) <= 255, "a local library can contain up to 255 functions")
 
 		if lib.existsFunction(pf.Sym, libLoc) {
 			return nil, errors.New("repeating symbol '" + pf.Sym + "'")
@@ -90,7 +90,7 @@ func (lib *Library) LocalLibraryFromBytes(bin [][]byte) (*LocalLibrary, error) {
 		if maxParam != 0xff {
 			numParams = int(maxParam) + 1
 		}
-		util.Assertf(numParams <= 15, "numParams <= 15")
+		easyfl_util.Assertf(numParams <= 15, "numParams <= 15")
 		dscr := &funDescriptor{
 			sym:               sym,
 			funCode:           uint16(FirstLocalFunCode + i),

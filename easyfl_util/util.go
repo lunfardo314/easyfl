@@ -1,4 +1,4 @@
-package util
+package easyfl_util
 
 import (
 	"bytes"

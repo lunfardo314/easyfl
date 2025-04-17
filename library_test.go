@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lunfardo314/easyfl/easyfl_util"
 	"github.com/lunfardo314/easyfl/slicepool"
-	"github.com/lunfardo314/easyfl/util"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/blake2b"
 )
@@ -125,13 +125,13 @@ func TestCompile(t *testing.T) {
 		lib := NewBase()
 		_, _, code, err := lib.CompileExpression("!!!ciao!")
 		require.NoError(t, err)
-		t.Logf("!!!ciao! code = %s", util.Fmt(code))
+		t.Logf("!!!ciao! code = %s", easyfl_util.Fmt(code))
 		_, err = lib.EvalFromBytecode(nil, code)
-		util.RequireErrorWith(t, err, "SCRIPT FAIL: 'ciao!'")
+		easyfl_util.RequireErrorWith(t, err, "SCRIPT FAIL: 'ciao!'")
 
 		src := fmt.Sprintf("x/%s", hex.EncodeToString(code))
 		_, err = lib.EvalFromSource(nil, src)
-		util.RequireErrorWith(t, err, "SCRIPT FAIL: 'ciao!'")
+		easyfl_util.RequireErrorWith(t, err, "SCRIPT FAIL: 'ciao!'")
 	})
 }
 
@@ -322,9 +322,9 @@ func TestExtendLib(t *testing.T) {
 
 	d := func(i byte) []byte { return []byte{i} }
 	compl := func(d0, d1, d2 []byte) []byte {
-		c0 := util.Concat(d0, d1)
-		c1 := util.Concat(d0, d2)
-		c3 := util.Concat(c0, c1)
+		c0 := easyfl_util.Concat(d0, d1)
+		c1 := easyfl_util.Concat(d0, d2)
+		c3 := easyfl_util.Concat(c0, c1)
 		return c3
 	}
 	t.Run("ext-4", func(t *testing.T) {
@@ -460,7 +460,7 @@ func TestSigED25519(t *testing.T) {
 	})
 	t.Run("validSignatureED25519-wrong-pubkey", func(t *testing.T) {
 		signature := ed25519.Sign(privKey, []byte(msg))
-		pk := util.Concat([]byte(pubKey))
+		pk := easyfl_util.Concat([]byte(pubKey))
 		pk[3]++
 		res, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "validSignatureED25519($0,$1,$2)", []byte(msg), signature, pk)
 		require.NoError(t, err)
@@ -469,7 +469,7 @@ func TestSigED25519(t *testing.T) {
 	})
 	t.Run("validSignatureED25519-wrong-pubkey", func(t *testing.T) {
 		_, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "validSignatureED25519($0,$1,$2)", nil, nil, nil)
-		util.RequireErrorWith(t, err, "bad public key length")
+		easyfl_util.RequireErrorWith(t, err, "bad public key length")
 	})
 }
 
@@ -571,51 +571,51 @@ func TestParseBin(t *testing.T) {
 	t.Run("1", func(t *testing.T) {
 		_, _, bin, err := lib.CompileExpression("fun1par(0x00)")
 		require.NoError(t, err)
-		t.Logf("code: %s", util.Fmt(bin))
+		t.Logf("code: %s", easyfl_util.Fmt(bin))
 		res, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin)
 		require.NoError(t, err)
-		t.Logf("result: %s", util.Fmt(res))
+		t.Logf("result: %s", easyfl_util.Fmt(res))
 	})
 	t.Run("call 2 param", func(t *testing.T) {
 		_, _, bin, err := lib.CompileExpression("fun2par(0x01, 0x02)")
 		require.NoError(t, err)
-		t.Logf("code: %s", util.Fmt(bin))
+		t.Logf("code: %s", easyfl_util.Fmt(bin))
 		res, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin)
 		require.NoError(t, err)
-		t.Logf("result: %s", util.Fmt(res))
+		t.Logf("result: %s", easyfl_util.Fmt(res))
 	})
 	t.Run("fun 2 param", func(t *testing.T) {
 		_, _, bin, err := lib.CompileExpression("fun2par($0, $1)")
 		require.NoError(t, err)
-		t.Logf("code: %s", util.Fmt(bin))
+		t.Logf("code: %s", easyfl_util.Fmt(bin))
 		res, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin, []byte{1}, []byte{2})
 		require.NoError(t, err)
-		t.Logf("result: %s", util.Fmt(res))
+		t.Logf("result: %s", easyfl_util.Fmt(res))
 	})
 	t.Run("2", func(t *testing.T) {
 		addrStr := fmt.Sprintf("fun1par(0x%s)", strings.Repeat("00", 32))
 		_, _, bin, err := lib.CompileExpression(addrStr)
 		require.NoError(t, err)
-		t.Logf("code: %s", util.Fmt(bin))
+		t.Logf("code: %s", easyfl_util.Fmt(bin))
 		res, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin)
 		require.NoError(t, err)
-		t.Logf("result: %s", util.Fmt(res))
+		t.Logf("result: %s", easyfl_util.Fmt(res))
 	})
 	t.Run("3", func(t *testing.T) {
 		_, _, bin, err := lib.CompileExpression("slice(0,0,0)")
 		require.NoError(t, err)
-		t.Logf("code: %s", util.Fmt(bin))
+		t.Logf("code: %s", easyfl_util.Fmt(bin))
 		res, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin)
 		require.NoError(t, err)
-		t.Logf("result: %s", util.Fmt(res))
+		t.Logf("result: %s", easyfl_util.Fmt(res))
 	})
 	t.Run("4", func(t *testing.T) {
 		_, _, bin, err := lib.CompileExpression("0")
 		require.NoError(t, err)
-		t.Logf("code: %s", util.Fmt(bin))
+		t.Logf("code: %s", easyfl_util.Fmt(bin))
 		res, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin)
 		require.NoError(t, err)
-		t.Logf("result: %s", util.Fmt(res))
+		t.Logf("result: %s", easyfl_util.Fmt(res))
 	})
 	t.Run("bin code cannot be nil", func(t *testing.T) {
 		_, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), nil)
@@ -623,67 +623,67 @@ func TestParseBin(t *testing.T) {
 	})
 	t.Run("0-parameter bin code never starts from 0", func(t *testing.T) {
 		bin := []byte{0}
-		t.Logf("code: %s", util.Fmt(bin))
+		t.Logf("code: %s", easyfl_util.Fmt(bin))
 		_, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin)
 		require.Error(t, err)
 
 		bin = []byte{0, 0}
-		t.Logf("code: %s", util.Fmt(bin))
+		t.Logf("code: %s", easyfl_util.Fmt(bin))
 		_, err = lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin)
 		require.Error(t, err)
 	})
 	t.Run("0-started code require 1 parameter", func(t *testing.T) {
 		bin := []byte{0}
-		t.Logf("code: %s", util.Fmt(bin))
+		t.Logf("code: %s", easyfl_util.Fmt(bin))
 		res, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin, []byte{10})
 		require.NoError(t, err)
-		t.Logf("result: %s", util.Fmt(res))
+		t.Logf("result: %s", easyfl_util.Fmt(res))
 		require.EqualValues(t, []byte{10}, res)
 	})
 	t.Run("0-parameter bin code never starts from 1", func(t *testing.T) {
 		bin := []byte{1}
-		t.Logf("code: %s", util.Fmt(bin))
+		t.Logf("code: %s", easyfl_util.Fmt(bin))
 		_, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin)
 		require.Error(t, err)
 
 		bin = []byte{0, 0}
-		t.Logf("code: %s", util.Fmt(bin))
+		t.Logf("code: %s", easyfl_util.Fmt(bin))
 		_, err = lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin)
 		require.Error(t, err)
 	})
 	t.Run("1-started code require 2 parameters", func(t *testing.T) {
 		bin := []byte{1}
-		t.Logf("code: %s", util.Fmt(bin))
+		t.Logf("code: %s", easyfl_util.Fmt(bin))
 		res, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin, []byte{10}, []byte{11})
 		require.NoError(t, err)
-		t.Logf("result: %s", util.Fmt(res))
+		t.Logf("result: %s", easyfl_util.Fmt(res))
 		require.EqualValues(t, []byte{11}, res)
 	})
 	t.Run("nil code is 0x80", func(t *testing.T) {
 		bin := []byte{0x80}
-		t.Logf("code: %s", util.Fmt(bin))
+		t.Logf("code: %s", easyfl_util.Fmt(bin))
 		res, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin)
 		require.NoError(t, err)
 		require.True(t, len(res) == 0)
-		t.Logf("result: %s", util.Fmt(res))
+		t.Logf("result: %s", easyfl_util.Fmt(res))
 	})
 	t.Run("fun prefix1", func(t *testing.T) {
 		prefix, err := lib.FunctionCallPrefixByName("fun1par", 1)
 		require.NoError(t, err)
-		t.Logf("fun1par prefix: %s", util.Fmt(prefix))
+		t.Logf("fun1par prefix: %s", easyfl_util.Fmt(prefix))
 
 		_, _, binCode, err := lib.CompileExpression("fun1par(0xeeff)")
 		require.NoError(t, err)
-		t.Logf("fun1par(0xeeff) code: %s", util.Fmt(binCode))
+		t.Logf("fun1par(0xeeff) code: %s", easyfl_util.Fmt(binCode))
 		require.True(t, bytes.HasPrefix(binCode, prefix))
 
 		prefix, err = lib.FunctionCallPrefixByName("fun2par", 2)
 		require.NoError(t, err)
-		t.Logf("fun2par prefix: %s", util.Fmt(prefix))
+		t.Logf("fun2par prefix: %s", easyfl_util.Fmt(prefix))
 
 		_, _, binCode, err = lib.CompileExpression("fun2par(0xeeff, 0x1122)")
 		require.NoError(t, err)
-		t.Logf("fun2par(0xeeff, 0x1122) code: %s", util.Fmt(binCode))
+		t.Logf("fun2par(0xeeff, 0x1122) code: %s", easyfl_util.Fmt(binCode))
 		require.True(t, bytes.HasPrefix(binCode, prefix))
 	})
 }
@@ -701,10 +701,10 @@ func TestInlineCode(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, bin2, bin3)
 
-		t.Logf("code with inline: %s", util.Fmt(bin3))
+		t.Logf("code with inline: %s", easyfl_util.Fmt(bin3))
 		res, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin3)
 		require.NoError(t, err)
-		t.Logf("result: %s", util.Fmt(res))
+		t.Logf("result: %s", easyfl_util.Fmt(res))
 		require.EqualValues(t, []byte{0, 1, 2}, res)
 	})
 	t.Run("2", func(t *testing.T) {
@@ -716,10 +716,10 @@ func TestInlineCode(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, bin2, bin3)
 
-		t.Logf("code with inline: %s", util.Fmt(bin3))
+		t.Logf("code with inline: %s", easyfl_util.Fmt(bin3))
 		res, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin3, []byte{0, 1})
 		require.NoError(t, err)
-		t.Logf("result: %s", util.Fmt(res))
+		t.Logf("result: %s", easyfl_util.Fmt(res))
 		require.EqualValues(t, []byte{0, 1, 2}, res)
 	})
 	t.Run("3", func(t *testing.T) {
@@ -731,10 +731,10 @@ func TestInlineCode(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, bin2, bin3)
 
-		t.Logf("code with inline: %s", util.Fmt(bin3))
+		t.Logf("code with inline: %s", easyfl_util.Fmt(bin3))
 		res, err := lib.EvalFromBytecode(NewGlobalDataTracePrint(nil), bin3, []byte{2})
 		require.NoError(t, err)
-		t.Logf("result: %s", util.Fmt(res))
+		t.Logf("result: %s", easyfl_util.Fmt(res))
 		require.EqualValues(t, []byte{0, 2}, res)
 	})
 }
@@ -884,7 +884,7 @@ func TestDecompile(t *testing.T) {
 			pieces[i+1] = args[i]
 		}
 		// concatenation of decomposed bytecode is equal to the original
-		require.EqualValues(t, bin, util.Concat(pieces...))
+		require.EqualValues(t, bin, easyfl_util.Concat(pieces...))
 	})
 	t.Run("bin-expr 6", func(t *testing.T) {
 		const formula = "0x010203"
@@ -917,7 +917,7 @@ func TestDecompile(t *testing.T) {
 			pieces[i+1] = args[i]
 		}
 		// concatenation of decomposed bytecode is equal to the original
-		require.EqualValues(t, bin, util.Concat(pieces...))
+		require.EqualValues(t, bin, easyfl_util.Concat(pieces...))
 
 	})
 }
@@ -954,11 +954,11 @@ func TestLocalLibrary(t *testing.T) {
 		lib.MustEvalFromLibrary(nil, libData, 1, []byte{5})
 		lib.MustEvalFromLibrary(nil, libData, 2, []byte{1})
 		lib.MustEvalFromLibrary(nil, libData, 3)
-		err = util.CatchPanicOrError(func() error {
+		err = easyfl_util.CatchPanicOrError(func() error {
 			lib.MustEvalFromLibrary(nil, libData, 4, []byte{1})
 			return nil
 		})
-		util.RequireErrorWith(t, err, "function index is out of library bounds")
+		easyfl_util.RequireErrorWith(t, err, "function index is out of library bounds")
 	})
 	t.Run("3", func(t *testing.T) {
 		res, err := lib.EvalFromLibrary(nil, libData, 0, []byte{1}, []byte{2})
@@ -978,10 +978,10 @@ func TestLocalLibrary(t *testing.T) {
 		require.EqualValues(t, []byte{1, 2, 3}, res)
 
 		res, err = lib.EvalFromLibrary(nil, libData, 2)
-		util.RequireErrorWith(t, err, "index out of range")
+		easyfl_util.RequireErrorWith(t, err, "index out of range")
 
 		_, err = lib.EvalFromLibrary(nil, libData, 4, []byte{5})
-		util.RequireErrorWith(t, err, "function index is out of library bounds")
+		easyfl_util.RequireErrorWith(t, err, "function index is out of library bounds")
 	})
 
 }
@@ -997,10 +997,10 @@ func TestBytecodeParams(t *testing.T) {
 		expr1, nPar, code1, err := lib.CompileExpression(src1)
 		require.NoError(t, err)
 		require.EqualValues(t, 0, nPar)
-		t.Logf("compile '%s' -> %s", src1, util.Fmt(code1))
+		t.Logf("compile '%s' -> %s", src1, easyfl_util.Fmt(code1))
 
 		res := EvalExpression(nil, expr1)
-		t.Logf("Result: '%s'", util.Fmt(res))
+		t.Logf("Result: '%s'", easyfl_util.Fmt(res))
 
 		require.EqualValues(t, code, res)
 
@@ -1021,10 +1021,10 @@ func TestBytecodeParams(t *testing.T) {
 		expr1, nPar, code1, err := lib.CompileExpression(src1)
 		require.NoError(t, err)
 		require.EqualValues(t, 0, nPar)
-		t.Logf("compile '%s' -> %s", src1, util.Fmt(code1))
+		t.Logf("compile '%s' -> %s", src1, easyfl_util.Fmt(code1))
 
 		res := EvalExpression(nil, expr1)
-		t.Logf("Result: '%s'", util.Fmt(res))
+		t.Logf("Result: '%s'", easyfl_util.Fmt(res))
 
 		require.EqualValues(t, code, res)
 
@@ -1042,10 +1042,10 @@ func TestBytecodeParams(t *testing.T) {
 		expr, n, code, err := lib.CompileExpression(src)
 		require.NoError(t, err)
 		require.EqualValues(t, 1, n)
-		t.Logf("code: %s", util.Fmt(code))
+		t.Logf("code: %s", easyfl_util.Fmt(code))
 
 		res := EvalExpression(nil, expr, []byte{0xff})
-		t.Logf("eval: %s", util.Fmt(res))
+		t.Logf("eval: %s", easyfl_util.Fmt(res))
 		require.EqualValues(t, []byte{0xff, 0x81, 0xff}, res)
 	})
 	t.Run("3-1", func(t *testing.T) {
@@ -1054,10 +1054,10 @@ func TestBytecodeParams(t *testing.T) {
 		expr, n, code, err := lib.CompileExpression(src)
 		require.NoError(t, err)
 		require.EqualValues(t, 3, n)
-		t.Logf("code: %s", util.Fmt(code))
+		t.Logf("code: %s", easyfl_util.Fmt(code))
 
 		res := EvalExpression(nil, expr, []byte{0xff}, []byte{0xff}, []byte{0xff})
-		t.Logf("eval: %s", util.Fmt(res))
+		t.Logf("eval: %s", easyfl_util.Fmt(res))
 		require.EqualValues(t, hex.EncodeToString(res), "0181ff81ff81ff")
 	})
 	t.Run("4", func(t *testing.T) {
@@ -1083,7 +1083,7 @@ func TestBytecodeParams(t *testing.T) {
 		srcBytecode := fmt.Sprintf("bytecode(%s)", src)
 		code, err := lib.EvalFromSource(nil, srcBytecode)
 		require.NoError(t, err)
-		t.Logf("code: %s", util.Fmt(code))
+		t.Logf("code: %s", easyfl_util.Fmt(code))
 		decomp, err := lib.DecompileBytecode(code)
 		require.NoError(t, err)
 		t.Logf("decompile: %s", decomp)
@@ -1098,7 +1098,7 @@ func TestBytecodeParams(t *testing.T) {
 		srcBytecode := fmt.Sprintf("bytecode(%s)", src)
 		code, err := lib.EvalFromSource(nil, srcBytecode)
 		require.NoError(t, err)
-		t.Logf("code: %s", util.Fmt(code))
+		t.Logf("code: %s", easyfl_util.Fmt(code))
 		decomp, err := lib.DecompileBytecode(code)
 		require.NoError(t, err)
 		t.Logf("decompile: %s", decomp)
@@ -1110,7 +1110,7 @@ func TestBytecodeParams(t *testing.T) {
 		require.NoError(t, err)
 		arg1, err := lib.EvalFromSource(nil, fmt.Sprintf("parseArgumentBytecode(0x%x, #lessOrEqualThan, 1)", code))
 		require.NoError(t, err)
-		require.EqualValues(t, code, util.Concat(prefix, arg0, arg1))
+		require.EqualValues(t, code, easyfl_util.Concat(prefix, arg0, arg1))
 
 	})
 }
@@ -1128,10 +1128,10 @@ func TestBytecodeParamsWithSlicePool(t *testing.T) {
 		expr1, nPar, code1, err := lib.CompileExpression(src1)
 		require.NoError(t, err)
 		require.EqualValues(t, 0, nPar)
-		t.Logf("compile '%s' -> %s", src1, util.Fmt(code1))
+		t.Logf("compile '%s' -> %s", src1, easyfl_util.Fmt(code1))
 
 		res := EvalExpressionWithSlicePool(nil, spool, expr1)
-		t.Logf("Result: '%s'", util.Fmt(res))
+		t.Logf("Result: '%s'", easyfl_util.Fmt(res))
 
 		require.EqualValues(t, code, res)
 
@@ -1152,10 +1152,10 @@ func TestBytecodeParamsWithSlicePool(t *testing.T) {
 		expr1, nPar, code1, err := lib.CompileExpression(src1)
 		require.NoError(t, err)
 		require.EqualValues(t, 0, nPar)
-		t.Logf("compile '%s' -> %s", src1, util.Fmt(code1))
+		t.Logf("compile '%s' -> %s", src1, easyfl_util.Fmt(code1))
 
 		res := EvalExpressionWithSlicePool(nil, spool, expr1)
-		t.Logf("Result: '%s'", util.Fmt(res))
+		t.Logf("Result: '%s'", easyfl_util.Fmt(res))
 
 		require.EqualValues(t, code, res)
 
@@ -1173,10 +1173,10 @@ func TestBytecodeParamsWithSlicePool(t *testing.T) {
 		expr, n, code, err := lib.CompileExpression(src)
 		require.NoError(t, err)
 		require.EqualValues(t, 1, n)
-		t.Logf("code: %s", util.Fmt(code))
+		t.Logf("code: %s", easyfl_util.Fmt(code))
 
 		res := EvalExpressionWithSlicePool(nil, spool, expr, []byte{0xff})
-		t.Logf("eval: %s", util.Fmt(res))
+		t.Logf("eval: %s", easyfl_util.Fmt(res))
 		require.EqualValues(t, []byte{0xff, 0x81, 0xff}, res)
 	})
 	t.Run("4", func(t *testing.T) {
@@ -1185,10 +1185,10 @@ func TestBytecodeParamsWithSlicePool(t *testing.T) {
 		expr, n, code, err := lib.CompileExpression(src)
 		require.NoError(t, err)
 		require.EqualValues(t, 3, n)
-		t.Logf("code: %s", util.Fmt(code))
+		t.Logf("code: %s", easyfl_util.Fmt(code))
 
 		res := EvalExpressionWithSlicePool(nil, spool, expr, []byte{0xff}, []byte{0xff}, []byte{0xff})
-		t.Logf("eval: %s", util.Fmt(res))
+		t.Logf("eval: %s", easyfl_util.Fmt(res))
 		require.EqualValues(t, hex.EncodeToString(res), "0181ff81ff81ff")
 	})
 	t.Run("5", func(t *testing.T) {
@@ -1200,10 +1200,10 @@ func TestBytecodeParamsWithSlicePool(t *testing.T) {
 				expr, n, code, err := lib.CompileExpression(src)
 				require.NoError(t, err)
 				require.EqualValues(t, 0, n)
-				t.Logf("code: %s", util.Fmt(code))
+				t.Logf("code: %s", easyfl_util.Fmt(code))
 
 				res := EvalExpressionWithSlicePool(nil, spool, expr, []byte{0xff})
-				t.Logf("eval: %s", util.Fmt(res))
+				t.Logf("eval: %s", easyfl_util.Fmt(res))
 			}
 			spool.Dispose()
 		}
@@ -1405,7 +1405,7 @@ func TestEmbed(t *testing.T) {
 	})
 	t.Run("bytecode manipulation", func(t *testing.T) {
 		_, _, binCode, err := lib.CompileExpression("slice(0x01020304,1,2)")
-		util.AssertNoError(err)
+		easyfl_util.AssertNoError(err)
 		src := fmt.Sprintf("eval(parseArgumentBytecode(0x%s, #slice, %d))", hex.EncodeToString(binCode), 0)
 		lib.MustEqual(src, "0x01020304")
 		src = fmt.Sprintf("eval(parseArgumentBytecode(0x%s, #slice, %d))", hex.EncodeToString(binCode), 1)
