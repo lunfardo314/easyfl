@@ -21,7 +21,7 @@ func init() {
 	slicepool.Disable()
 }
 
-const formula1 = "func unlockBlock: Concat(Concat(0x0000, slice(0x01020304050607, 2, 5)))"
+const formula1 = "func unlockBlock: concat(concat(0x0000, slice(0x01020304050607, 2, 5)))"
 
 func TestAux(t *testing.T) {
 	t.Logf("MaxInt: %d", math.MaxInt)
@@ -102,9 +102,9 @@ func TestCompile(t *testing.T) {
 	})
 	t.Run("fun call literal 1", func(t *testing.T) {
 		lib := NewBase()
-		prefix, err := lib.EvalFromSource(nil, "#Concat")
+		prefix, err := lib.EvalFromSource(nil, "#concat")
 		require.NoError(t, err)
-		_, _, code, err := lib.CompileExpression("Concat")
+		_, _, code, err := lib.CompileExpression("concat")
 		require.NoError(t, err)
 		prefix1, err := lib.ParsePrefixBytecode(code)
 		require.NoError(t, err)
@@ -152,18 +152,18 @@ func TestEval(t *testing.T) {
 		require.EqualValues(t, []byte{222}, ret)
 	})
 	t.Run("4", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(nil, "Concat($0,$1)", []byte{222}, []byte{111})
+		ret, err := lib.EvalFromSource(nil, "concat($0,$1)", []byte{222}, []byte{111})
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{222, 111}, ret)
 	})
 	t.Run("5", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(nil, "Concat($0,Concat($1,$0))", []byte{222}, []byte{111})
+		ret, err := lib.EvalFromSource(nil, "concat($0,concat($1,$0))", []byte{222}, []byte{111})
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{222, 111, 222}, ret)
 	})
 	t.Run("6", func(t *testing.T) {
 		ret, err := lib.EvalFromSource(nil,
-			"Concat(Concat(slice($2,1,1), byte($2,0)), slice(Concat(Concat($0,$1),Concat($1,$0)),1,2))",
+			"concat(concat(slice($2,1,1), byte($2,0)), slice(concat(concat($0,$1),concat($1,$0)),1,2))",
 			[]byte{222}, []byte{111}, []byte{123, 234})
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{234, 123, 111, 111}, ret)
@@ -174,12 +174,12 @@ func TestEval(t *testing.T) {
 		require.EqualValues(t, []byte{0, 0, 0, 0, 0, 0, 0, 9}, ret)
 	})
 	t.Run("8", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(nil, "Concat(1,2,3,4,5)")
+		ret, err := lib.EvalFromSource(nil, "concat(1,2,3,4,5)")
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{1, 2, 3, 4, 5}, ret)
 	})
 	t.Run("9", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(nil, "slice(Concat(Concat(1,2),Concat(3,4,5)),2,3)")
+		ret, err := lib.EvalFromSource(nil, "slice(concat(concat(1,2),concat(3,4,5)),2,3)")
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{3, 4}, ret)
 	})
@@ -217,7 +217,7 @@ func TestEval(t *testing.T) {
 		require.True(t, len(ret) == 0)
 	})
 	t.Run("16", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "Concat")
+		ret, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "concat")
 		require.NoError(t, err)
 		require.True(t, len(ret) == 0)
 	})
@@ -301,19 +301,19 @@ func TestEval(t *testing.T) {
 func TestExtendLib(t *testing.T) {
 	lib := NewBase()
 	t.Run("ext-2", func(t *testing.T) {
-		_, err := lib.ExtendErr("nil1", "Concat()")
+		_, err := lib.ExtendErr("nil1", "concat()")
 		require.NoError(t, err)
 	})
 	t.Run("ext-3", func(t *testing.T) {
-		_, err := lib.ExtendErr("cat2", "Concat($0, $1)")
+		_, err := lib.ExtendErr("cat2", "concat($0, $1)")
 		require.NoError(t, err)
 		ret, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "cat2(1,2)")
 		require.EqualValues(t, []byte{1, 2}, ret)
 	})
 	const complicated = `
-		Concat(
-			Concat($0,$1),
-			Concat($0,$2)
+		concat(
+			concat($0,$1),
+			concat($0,$2)
 		)
 	`
 	_, err := lib.ExtendErr("complicated", complicated)
@@ -338,7 +338,7 @@ func TestExtendLib(t *testing.T) {
 		require.EqualValues(t, exp, ret)
 	})
 	t.Run("eval from bytecode", func(t *testing.T) {
-		source := "Concat($2, $1, $0)"
+		source := "concat($2, $1, $0)"
 		_, arity, code, err := lib.CompileExpression(source)
 		require.NoError(t, err)
 		require.EqualValues(t, 3, arity)
@@ -352,7 +352,7 @@ func TestExtendLib(t *testing.T) {
 		require.Error(t, err)
 	})
 	t.Run("never panics", func(t *testing.T) {
-		_, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "if(Concat,byte(0,1),0x01)")
+		_, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "if(concat,byte(0,1),0x01)")
 		require.NoError(t, err)
 	})
 }
@@ -476,7 +476,7 @@ func TestTracing(t *testing.T) {
 	lib := NewBase()
 	t.Run("no panic 0", func(t *testing.T) {
 		tr := NewGlobalDataLog(nil)
-		ret, err := lib.EvalFromSource(tr, "slice(Concat(Concat(1,2),Concat(3,4,5)),2,3)")
+		ret, err := lib.EvalFromSource(tr, "slice(concat(concat(1,2),concat(3,4,5)),2,3)")
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{3, 4}, ret)
 		tr.PrintLog()
@@ -538,16 +538,16 @@ func TestTracing(t *testing.T) {
 		_, err := lib.EvalFromSource(tr, "not(not(not($0)))", []byte{10})
 		require.NoError(t, err)
 	})
-	t.Run("trace Concat", func(t *testing.T) {
+	t.Run("trace concat", func(t *testing.T) {
 		tr := NewGlobalDataTracePrint(nil)
-		_, err := lib.EvalFromSource(tr, "Concat($0,Concat($0,$0))", []byte{10})
+		_, err := lib.EvalFromSource(tr, "concat($0,concat($0,$0))", []byte{10})
 		require.NoError(t, err)
 		tr = NewGlobalDataTracePrint(nil)
-		_, err = lib.EvalFromSource(tr, "Concat(Concat())")
+		_, err = lib.EvalFromSource(tr, "concat(concat())")
 		require.NoError(t, err)
 	})
 	t.Run("trace caching", func(t *testing.T) {
-		lib.extend("c6", "Concat($0, $0, $0, $0, $0, $0)")
+		lib.extend("c6", "concat($0, $0, $0, $0, $0, $0)")
 		var counter int
 		lib.embedShort("prn", 0, func(_ *CallParams) []byte {
 			counter++
@@ -565,7 +565,7 @@ func TestTracing(t *testing.T) {
 func TestParseBin(t *testing.T) {
 	lib := NewBase()
 	lib.extend("fun1par", "$0")
-	lib.extend("fun2par", "Concat($0,$1)")
+	lib.extend("fun2par", "concat($0,$1)")
 
 	t.Run("1", func(t *testing.T) {
 		_, _, bin, err := lib.CompileExpression("fun1par(0x00)")
@@ -690,13 +690,13 @@ func TestParseBin(t *testing.T) {
 func TestInlineCode(t *testing.T) {
 	lib := NewBase()
 	lib.extend("fun1par", "$0")
-	lib.extend("fun2par", "Concat($0,$1)")
+	lib.extend("fun2par", "concat($0,$1)")
 	t.Run("1", func(t *testing.T) {
-		_, _, bin1, err := lib.CompileExpression("Concat(0,1)")
+		_, _, bin1, err := lib.CompileExpression("concat(0,1)")
 		require.NoError(t, err)
-		_, _, bin2, err := lib.CompileExpression("Concat(Concat(0,1),2)")
+		_, _, bin2, err := lib.CompileExpression("concat(concat(0,1),2)")
 		require.NoError(t, err)
-		_, _, bin3, err := lib.CompileExpression(fmt.Sprintf("Concat(x/%s,2)", hex.EncodeToString(bin1)))
+		_, _, bin3, err := lib.CompileExpression(fmt.Sprintf("concat(x/%s,2)", hex.EncodeToString(bin1)))
 		require.NoError(t, err)
 		require.EqualValues(t, bin2, bin3)
 
@@ -709,9 +709,9 @@ func TestInlineCode(t *testing.T) {
 	t.Run("2", func(t *testing.T) {
 		_, _, bin1, err := lib.CompileExpression("$0")
 		require.NoError(t, err)
-		_, _, bin2, err := lib.CompileExpression("Concat($0,2)")
+		_, _, bin2, err := lib.CompileExpression("concat($0,2)")
 		require.NoError(t, err)
-		_, _, bin3, err := lib.CompileExpression(fmt.Sprintf("Concat(x/%s,2)", hex.EncodeToString(bin1)))
+		_, _, bin3, err := lib.CompileExpression(fmt.Sprintf("concat(x/%s,2)", hex.EncodeToString(bin1)))
 		require.NoError(t, err)
 		require.EqualValues(t, bin2, bin3)
 
@@ -741,9 +741,9 @@ func TestInlineCode(t *testing.T) {
 func TestDecompile(t *testing.T) {
 	lib := NewBase()
 	lib.extend("fun1par", "$0")
-	lib.extend("fun2par", "Concat($0,$1)")
+	lib.extend("fun2par", "concat($0,$1)")
 	t.Run("bin-expr 1", func(t *testing.T) {
-		const formula = "Concat(0,1)"
+		const formula = "concat(0,1)"
 		_, _, bin, err := lib.CompileExpression(formula)
 		require.NoError(t, err)
 		f, err := lib.ExpressionFromBytecode(bin)
@@ -770,7 +770,7 @@ func TestDecompile(t *testing.T) {
 		require.EqualValues(t, bin, binBack2)
 	})
 	t.Run("bin-expr 2", func(t *testing.T) {
-		const formula = "slice(Concat($0,1),1,1)"
+		const formula = "slice(concat($0,1),1,1)"
 		_, _, bin, err := lib.CompileExpression(formula)
 		require.NoError(t, err)
 		f, err := lib.ExpressionFromBytecode(bin)
@@ -796,7 +796,7 @@ func TestDecompile(t *testing.T) {
 		require.EqualValues(t, bin, binBack2)
 	})
 	t.Run("bin-expr 3", func(t *testing.T) {
-		const formula = "fun2par(fun1par(0x0102),Concat($0,$1))"
+		const formula = "fun2par(fun1par(0x0102),concat($0,$1))"
 		_, _, bin, err := lib.CompileExpression(formula)
 		require.NoError(t, err)
 		f, err := lib.ExpressionFromBytecode(bin)
@@ -822,7 +822,7 @@ func TestDecompile(t *testing.T) {
 		require.EqualValues(t, bin, binBack2)
 	})
 	t.Run("bin-expr 4", func(t *testing.T) {
-		const formula = "Concat(u64/1337)"
+		const formula = "concat(u64/1337)"
 		_, _, bin, err := lib.CompileExpression(formula)
 		require.NoError(t, err)
 		f, err := lib.ExpressionFromBytecode(bin)
@@ -850,7 +850,7 @@ func TestDecompile(t *testing.T) {
 		require.EqualValues(t, bin, binBack2)
 	})
 	t.Run("bin-expr 5", func(t *testing.T) {
-		const formula = "Concat(u64/1337, 123, Concat(1,2,3), tail(0x00010203, 1))"
+		const formula = "concat(u64/1337, 123, concat(1,2,3), tail(0x00010203, 1))"
 		_, _, bin, err := lib.CompileExpression(formula)
 		require.NoError(t, err)
 		f, err := lib.ExpressionFromBytecode(bin)
@@ -924,8 +924,8 @@ func TestDecompile(t *testing.T) {
 func TestLocalLibrary(t *testing.T) {
 	lib := NewBase()
 	const source = `
- func fun1 : Concat($0, $1)
- func fun2 : Concat(fun1($0,2),fun1(3,4))
+ func fun1 : concat($0, $1)
+ func fun2 : concat(fun1($0,2),fun1(3,4))
  func fun3 : fun2($0)
  func fun4 : 0x010203	
 `
@@ -988,7 +988,7 @@ func TestLocalLibrary(t *testing.T) {
 func TestBytecodeParams(t *testing.T) {
 	lib := NewBase()
 	t.Run("1", func(t *testing.T) {
-		const src = "Concat(1,2)"
+		const src = "concat(1,2)"
 		_, _, code, err := lib.CompileExpression(src)
 		require.NoError(t, err)
 
@@ -1012,7 +1012,7 @@ func TestBytecodeParams(t *testing.T) {
 		t.Logf("decompiled: '%s'", decompiled)
 	})
 	t.Run("2", func(t *testing.T) {
-		const src = "and(Concat(1,2), if(1,2,3))"
+		const src = "and(concat(1,2), if(1,2,3))"
 		_, _, code, err := lib.CompileExpression(src)
 		require.NoError(t, err)
 
@@ -1036,7 +1036,7 @@ func TestBytecodeParams(t *testing.T) {
 		t.Logf("decompiled: '%s'", decompiled)
 	})
 	t.Run("3", func(t *testing.T) {
-		const src = "Concat($0,$$0)"
+		const src = "concat($0,$$0)"
 
 		expr, n, code, err := lib.CompileExpression(src)
 		require.NoError(t, err)
@@ -1048,7 +1048,7 @@ func TestBytecodeParams(t *testing.T) {
 		require.EqualValues(t, []byte{0xff, 0x81, 0xff}, res)
 	})
 	t.Run("3-1", func(t *testing.T) {
-		const src = "Concat(1,$$0, $$1, $$2)"
+		const src = "concat(1,$$0, $$1, $$2)"
 
 		expr, n, code, err := lib.CompileExpression(src)
 		require.NoError(t, err)
@@ -1060,18 +1060,18 @@ func TestBytecodeParams(t *testing.T) {
 		require.EqualValues(t, hex.EncodeToString(res), "0181ff81ff81ff")
 	})
 	t.Run("4", func(t *testing.T) {
-		res, err := lib.EvalFromSource(nil, "Concat(42,41)")
+		res, err := lib.EvalFromSource(nil, "concat(42,41)")
 		require.NoError(t, err)
 
 		require.EqualValues(t, res, []byte{42, 41})
 
-		res1, err := lib.EvalFromSource(nil, "eval(bytecode(Concat(42,41)))")
+		res1, err := lib.EvalFromSource(nil, "eval(bytecode(concat(42,41)))")
 		require.NoError(t, err)
 		require.EqualValues(t, res, res1)
 	})
 	t.Run("5", func(t *testing.T) {
-		sources := []string{"123", "0x", "u64/1234567890", "Concat(1,2,3)", "lessOrEqualThan(1,2)", "lessOrEqualThan(2, 1)",
-			"lessOrEqualThan(0xabcdef123456, 0xabcdef123000)", "Concat(1,Concat(2,3), Concat)", "nil"}
+		sources := []string{"123", "0x", "u64/1234567890", "concat(1,2,3)", "lessOrEqualThan(1,2)", "lessOrEqualThan(2, 1)",
+			"lessOrEqualThan(0xabcdef123456, 0xabcdef123000)", "concat(1,concat(2,3), concat)", "nil"}
 		for _, src := range sources {
 			lib.MustEqual(src, fmt.Sprintf("eval(bytecode(%s))", src))
 		}
@@ -1119,7 +1119,7 @@ func TestBytecodeParamsWithSlicePool(t *testing.T) {
 	spool := slicepool.New()
 
 	t.Run("1", func(t *testing.T) {
-		const src = "Concat(1,2)"
+		const src = "concat(1,2)"
 		_, _, code, err := lib.CompileExpression(src)
 		require.NoError(t, err)
 
@@ -1143,7 +1143,7 @@ func TestBytecodeParamsWithSlicePool(t *testing.T) {
 		t.Logf("decompiled: '%s'", decompiled)
 	})
 	t.Run("2", func(t *testing.T) {
-		const src = "and(Concat(1,2), if(1,2,3))"
+		const src = "and(concat(1,2), if(1,2,3))"
 		_, _, code, err := lib.CompileExpression(src)
 		require.NoError(t, err)
 
@@ -1167,7 +1167,7 @@ func TestBytecodeParamsWithSlicePool(t *testing.T) {
 		t.Logf("decompiled: '%s'", decompiled)
 	})
 	t.Run("3", func(t *testing.T) {
-		const src = "Concat($0,$$0)"
+		const src = "concat($0,$$0)"
 
 		expr, n, code, err := lib.CompileExpression(src)
 		require.NoError(t, err)
@@ -1179,7 +1179,7 @@ func TestBytecodeParamsWithSlicePool(t *testing.T) {
 		require.EqualValues(t, []byte{0xff, 0x81, 0xff}, res)
 	})
 	t.Run("4", func(t *testing.T) {
-		const src = "Concat(1,$$0, $$1, $$2)"
+		const src = "concat(1,$$0, $$1, $$2)"
 
 		expr, n, code, err := lib.CompileExpression(src)
 		require.NoError(t, err)
@@ -1193,8 +1193,8 @@ func TestBytecodeParamsWithSlicePool(t *testing.T) {
 	t.Run("5", func(t *testing.T) {
 		for i := 0; i < 100; i++ {
 			spool := slicepool.New()
-			sources := []string{"123", "0x", "u64/1234567890", "Concat(1,2,3)", "lessOrEqualThan(1,2)", "lessOrEqualThan(2, 1)",
-				"lessOrEqualThan(0xabcdef123456, 0xabcdef123000)", "Concat(1,Concat(2,3), Concat)", "nil"}
+			sources := []string{"123", "0x", "u64/1234567890", "concat(1,2,3)", "lessOrEqualThan(1,2)", "lessOrEqualThan(2, 1)",
+				"lessOrEqualThan(0xabcdef123456, 0xabcdef123000)", "concat(1,concat(2,3), concat)", "nil"}
 			for _, src := range sources {
 				expr, n, code, err := lib.CompileExpression(src)
 				require.NoError(t, err)
@@ -1291,9 +1291,9 @@ func TestCases(t *testing.T) {
 func TestEmbed(t *testing.T) {
 	lib := NewBase()
 	t.Run("main", func(t *testing.T) {
-		lib.MustEqual("Concat", "0x")
-		lib.MustEqual("Concat(1,2)", "0x0102")
-		lib.MustEqual("Concat(1,2,3,4)", "Concat(Concat(1,2),Concat(3,4))")
+		lib.MustEqual("concat", "0x")
+		lib.MustEqual("concat(1,2)", "0x0102")
+		lib.MustEqual("concat(1,2,3,4)", "concat(concat(1,2),concat(3,4))")
 
 		lib.MustError("fail(100)", "SCRIPT FAIL: error #100")
 		lib.MustError("!!!hello,_world!", "hello, world!")
@@ -1314,10 +1314,10 @@ func TestEmbed(t *testing.T) {
 		lib.MustEqual("not(1)", "0x")
 
 		lib.MustTrue("and")
-		lib.MustTrue("not(and(Concat))")
+		lib.MustTrue("not(and(concat))")
 
 		lib.MustTrue("not(or)")
-		lib.MustTrue("not(or(Concat))")
+		lib.MustTrue("not(or(concat))")
 		lib.MustTrue("or(1)")
 
 		lib.MustTrue("isZero(0)")

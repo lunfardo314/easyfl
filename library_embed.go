@@ -28,7 +28,7 @@ var unboundEmbeddedFunctions = map[string]EmbeddedFunction{
 	"if":        evalIf,
 	"isZero":    evalIsZero,
 	// long base
-	"Concat":            evalConcat,
+	"concat":            evalConcat,
 	"and":               evalAnd,
 	"or":                evalOr,
 	"repeat":            evalRepeat,
@@ -258,7 +258,7 @@ func evalConcat(par *CallParams) []byte {
 	for i := range a {
 		ret = append(ret, a[i]...)
 	}
-	par.Trace("Concat:: %d params -> %s", par.Arity(), FmtLazy(ret))
+	par.Trace("concat:: %d params -> %s", par.Arity(), FmtLazy(ret))
 	return ret
 }
 
