@@ -244,6 +244,12 @@ functions:
       funCode: 77
       numArgs: 1
       embedded: true
+   -
+      sym: callLocalLibrary
+      description: "calls local library"
+      numArgs: -1
+      embedded: true
+
 # END LONG embedded function definitions
 # BEGIN EXTENDED function definitions (defined by EasyFL formulas)
 #    function codes (opcodes) from 319 and up to maximum 1022 are reserved for 'EXTENDED function codes'

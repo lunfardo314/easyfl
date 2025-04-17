@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"encoding/binary"
+	"encoding/hex"
 	"reflect"
 
 	"github.com/lunfardo314/easyfl/easyfl_util"
+	"github.com/lunfardo314/easyfl/lazybytes"
 	"github.com/lunfardo314/easyfl/slicepool"
 	"golang.org/x/crypto/blake2b"
 )
@@ -57,22 +59,40 @@ var unboundEmbeddedFunctions = map[string]EmbeddedFunction{
 	"blake2b":               evalBlake2b,
 }
 
-func EmbeddedFunctions(targetLib *Library) func(syn string) EmbeddedFunction {
-	return func(syn string) EmbeddedFunction {
-		if ret, found := unboundEmbeddedFunctions[syn]; found {
+func EmbeddedFunctions(targetLib *Library) func(sym string) EmbeddedFunction {
+	return func(sym string) EmbeddedFunction {
+		if ret, found := unboundEmbeddedFunctions[sym]; found {
 			return ret
 		}
 		// function bound to particular target library
-		switch syn {
+		switch sym {
 		case "parseArgumentBytecode":
 			return targetLib.evalParseArgumentBytecode
 		case "parsePrefixBytecode":
 			return targetLib.evalParsePrefixBytecode
 		case "eval":
 			return targetLib.evalBytecode
+		case "callLocalLibrary":
+			return targetLib.evalCallLocalLibrary
 		}
 		return nil
 	}
+}
+
+// evalCallLocalLibrary not tested here, only in Proxima
+func (lib *Library) evalCallLocalLibrary(ctx *CallParams) []byte {
+	// arg 0 - local library binary (as lazy array)
+	// arg 1 - 1-byte index of then function in the library
+	// arg 2 ... arg 15 optional arguments
+	arr := lazybytes.ArrayFromBytesReadOnly(ctx.Arg(0))
+	libData := arr.Parsed()
+	idx := ctx.Arg(1)
+	if len(idx) != 1 || int(idx[0]) >= len(libData) {
+		ctx.TracePanic("evalCallLocalLibrary: wrong function index")
+	}
+	ret := lib.CallLocalLibrary(ctx.Slice(2, ctx.Arity()), libData, int(idx[0]))
+	ctx.Trace("evalCallLocalLibrary: lib#%d -> 0x%s", idx[0], hex.EncodeToString(ret))
+	return ret
 }
 
 // -----------------------------------------------------------------
