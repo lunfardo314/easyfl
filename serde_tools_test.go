@@ -66,6 +66,9 @@ functions:
   -
     sym: dummy
     source: add(5,7)
+  -
+    sym: "@dummy"
+    source: add(5,7)
 `
 	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
 	require.NoError(t, err)

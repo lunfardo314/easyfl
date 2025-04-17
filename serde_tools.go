@@ -180,7 +180,7 @@ func prn(w io.Writer, format string, a ...any) {
 
 func prnFuncDescription(w io.Writer, f *FuncDescriptorYAMLAble, compiled bool) {
 	prn(w, ident+"-\n")
-	prn(w, ident2+"sym: %s\n", f.Sym)
+	prn(w, ident2+"sym: \"%s\"\n", f.Sym)
 	if f.Description != "" {
 		prn(w, ident2+"description: \"%s\"\n", f.Description)
 	}
