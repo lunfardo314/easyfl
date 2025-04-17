@@ -28,7 +28,7 @@ var unboundEmbeddedFunctions = map[string]EmbeddedFunction{
 	"if":        evalIf,
 	"isZero":    evalIsZero,
 	// long base
-	"concat":            evalConcat,
+	"Concat":            evalConcat,
 	"and":               evalAnd,
 	"or":                evalOr,
 	"repeat":            evalRepeat,

@@ -161,7 +161,7 @@ functions:
 # BEGIN LONG EMBEDDED function definitions
 #    function codes (opcodes) from 64 to 318 are reserved for 'LONG EMBEDDED function codes'
    -
-      sym: concat
+      sym: Concat
       description: "concatenates variable number of arguments"
       funCode: 64
       numArgs: -1

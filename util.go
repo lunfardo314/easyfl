@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func concat(data ...interface{}) []byte {
+func Concat(data ...interface{}) []byte {
 	var buf bytes.Buffer
 	for _, d := range data {
 		switch d := d.(type) {

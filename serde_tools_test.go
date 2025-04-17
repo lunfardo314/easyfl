@@ -50,7 +50,7 @@ functions:
   -
     description: "some description"
     sym: newfun
-    source: concat(0x, 0x111111, 2)
+    source: Concat(0x, 0x111111, 2)
   -
     description: none
     sym: newfun2
@@ -61,7 +61,7 @@ functions:
      if(
        equal($0,$1),
        blake2b($0),
-       blake2b(concat($0,$1))
+       blake2b(Concat($0,$1))
      )
   -
     sym: dummy
