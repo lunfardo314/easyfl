@@ -261,6 +261,14 @@ func (lib *Library) Upgrade(fromYAML *LibraryFromYAML, embed ...func(sym string)
 	return nil
 }
 
+func (lib *Library) UpgradeFromYAML(yamlData []byte, embed ...func(sym string) EmbeddedFunction) error {
+	fromYAML, err := ReadLibraryFromYAML(yamlData)
+	if err != nil {
+		return err
+	}
+	return lib.Upgrade(fromYAML, embed...)
+}
+
 func (libYAML *LibraryFromYAML) ValidateCompiled() error {
 	hashProvidedBin, err := hex.DecodeString(libYAML.Hash)
 	if err != nil || len(hashProvidedBin) != sha256.Size {
