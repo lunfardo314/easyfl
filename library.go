@@ -9,20 +9,29 @@ import (
 	"github.com/lunfardo314/easyfl/easyfl_util"
 )
 
-func New() *Library {
+func NewLibrary() *Library {
 	return newLibrary()
 }
 
-func NewFromYAML(yamlData []byte, embedFun func(lib *Library) func(sym string) EmbeddedFunction) (*Library, error) {
-	lib := New()
-	if err := lib.UpgradeFromYAML(yamlData, embedFun(lib)); err != nil {
+func NewLibraryFromYAML(yamlData []byte, embedFun func(lib *Library) func(sym string) EmbeddedFunction) (*Library, error) {
+	lib := NewLibrary()
+	fromYAML, err := ReadLibraryFromYAML(yamlData)
+	if err != nil {
 		return nil, err
+	}
+	if err = lib.Upgrade(fromYAML, embedFun(lib)); err != nil {
+		return nil, err
+	}
+	// if library is compiled, check consistency
+	hashCalculated := lib.LibraryHash()
+	if len(fromYAML.Hash) > 0 && fromYAML.Hash != hex.EncodeToString(hashCalculated[:]) {
+		return nil, fmt.Errorf("NewLibraryFromYAML: provided and calculated hashes does not match")
 	}
 	return lib, nil
 }
 
-func NewBase() *Library {
-	lib, err := NewFromYAML([]byte(baseLibraryDefinitions), func(lib *Library) func(sym string) EmbeddedFunction {
+func NewBaseLibrary() *Library {
+	lib, err := NewLibraryFromYAML([]byte(baseLibraryDefinitions), func(lib *Library) func(sym string) EmbeddedFunction {
 		return EmbeddedFunctions(lib)
 	})
 	easyfl_util.AssertNoError(err)

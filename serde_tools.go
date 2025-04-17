@@ -228,14 +228,6 @@ func ReadLibraryFromYAML(data []byte) (*LibraryFromYAML, error) {
 	return fromYAML, nil
 }
 
-func (lib *Library) UpgradeFromYAML(yamlData []byte, embed ...func(sym string) EmbeddedFunction) error {
-	libFromYAML, err := ReadLibraryFromYAML(yamlData)
-	if err != nil {
-		return err
-	}
-	return lib.Upgrade(libFromYAML, embed...)
-}
-
 // Upgrade add functions to the library from YAMLAble. It ignores compiled part, compiles and assigns fun codes
 // If embedding functions are available, embeds them and enforces consistency
 // NOTE: if embedded functions are not provided, library is not ready for use, however its consistency
@@ -274,7 +266,7 @@ func (libYAML *LibraryFromYAML) ValidateCompiled() error {
 	if err != nil || len(hashProvidedBin) != sha256.Size {
 		return fmt.Errorf("ValidateCompiled: not compiled or wrong hash string")
 	}
-	lib := New()
+	lib := NewLibrary()
 	if err = lib.Upgrade(libYAML); err != nil {
 		return err
 	}

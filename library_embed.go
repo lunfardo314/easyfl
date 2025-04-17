@@ -57,6 +57,9 @@ var unboundEmbeddedFunctions = map[string]EmbeddedFunction{
 	// base crypto
 	"validSignatureED25519": evalValidSigED25519,
 	"blake2b":               evalBlake2b,
+	// lazy array
+	"atArray8":     evalAtArray8,
+	"arrayLength8": evalNumElementsOfArray,
 }
 
 func EmbeddedFunctions(targetLib *Library) func(sym string) EmbeddedFunction {
@@ -492,6 +495,20 @@ func evalRShift64(par *CallParams) []byte {
 	ret := par.Alloc(8) // true
 	binary.BigEndian.PutUint64(ret, a0>>a1)
 	return ret
+}
+
+func evalAtArray8(par *CallParams) []byte {
+	arr := lazybytes.ArrayFromBytesReadOnly(par.Arg(0))
+	idx := par.Arg(1)
+	if len(idx) != 1 {
+		panic("evalAtArray8: 1-byte value expected")
+	}
+	return arr.At(int(idx[0]))
+}
+
+func evalNumElementsOfArray(par *CallParams) []byte {
+	arr := lazybytes.ArrayFromBytesReadOnly(par.Arg(0))
+	return par.AllocData(byte(arr.NumElements()))
 }
 
 // evalParseArgumentBytecode takes bytecode of the argument as is.

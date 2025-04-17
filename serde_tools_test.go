@@ -6,8 +6,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestLibraryRenewYAML(t *testing.T) {
+	lib := NewLibrary()
+	fromYAML, err := ReadLibraryFromYAML([]byte(baseLibraryDefinitions))
+	require.NoError(t, err)
+	err = lib.Upgrade(fromYAML)
+	require.NoError(t, err)
+	yamlData := lib.ToYAML(true, "# Base EasyFL library")
+	t.Logf("size of the YAML file: %d bytes", len(yamlData))
+	//err = os.WriteFile("library.yaml", yamlData, 0644)
+	require.NoError(t, err)
+}
+
 func TestLibrary_ToYAML_not_compiled(t *testing.T) {
-	lib := NewBase()
+	lib := NewBaseLibrary()
 	lib.PrintLibraryStats()
 	yamlData := lib.ToYAML(false, "# ------------- base library for testing")
 	t.Logf("----------------------------\n%s", string(yamlData))
@@ -19,7 +31,7 @@ func TestLibrary_ToYAML_not_compiled(t *testing.T) {
 }
 
 func TestLibrary_base_compiled(t *testing.T) {
-	lib := NewBase()
+	lib := NewBaseLibrary()
 	lib.PrintLibraryStats()
 	yamlData := lib.ToYAML(true, "# ------------- base library for testing")
 	t.Logf("----------------------------\n%s", string(yamlData))
@@ -29,7 +41,7 @@ func TestLibrary_base_compiled(t *testing.T) {
 }
 
 func TestLibrary_ToYAML_validate(t *testing.T) {
-	lib := NewBase()
+	lib := NewBaseLibrary()
 	lib.PrintLibraryStats()
 	// not compiled
 	yamlData := lib.ToYAML(true, "# ------------- base library for testing")
@@ -42,7 +54,7 @@ func TestLibrary_ToYAML_validate(t *testing.T) {
 }
 
 func TestLibrary_ToYAML_upgrade(t *testing.T) {
-	lib := NewBase()
+	lib := NewBaseLibrary()
 	lib.PrintLibraryStats()
 
 	yamlData := `

@@ -30,12 +30,12 @@ func TestAux(t *testing.T) {
 }
 
 func TestInit(t *testing.T) {
-	lib := NewBase()
+	lib := NewBaseLibrary()
 	lib.PrintLibraryStats()
 }
 
 func TestLiterals(t *testing.T) {
-	lib := NewBase()
+	lib := NewBaseLibrary()
 
 	lib.MustEqual("0", "0x00")
 	lib.MustEqual("255", "0xff")
@@ -81,7 +81,7 @@ func TestCompile(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, 1, len(ret))
 
-		code, numParams, err := NewBase().ExpressionSourceToBytecode(ret[0].SourceCode)
+		code, numParams, err := NewBaseLibrary().ExpressionSourceToBytecode(ret[0].SourceCode)
 		require.NoError(t, err)
 		require.EqualValues(t, 0, numParams)
 		t.Logf("code len: %d", len(code))
@@ -91,7 +91,7 @@ func TestCompile(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, 1, len(parsed))
 
-		lib := NewBase()
+		lib := NewBaseLibrary()
 		code, numParams, err := lib.ExpressionSourceToBytecode(parsed[0].SourceCode)
 		require.NoError(t, err)
 		require.EqualValues(t, 0, numParams)
@@ -102,7 +102,7 @@ func TestCompile(t *testing.T) {
 		require.NotNil(t, f)
 	})
 	t.Run("fun call literal 1", func(t *testing.T) {
-		lib := NewBase()
+		lib := NewBaseLibrary()
 		prefix, err := lib.EvalFromSource(nil, "#concat")
 		require.NoError(t, err)
 		_, _, code, err := lib.CompileExpression("concat")
@@ -112,7 +112,7 @@ func TestCompile(t *testing.T) {
 		require.True(t, bytes.Equal(prefix, prefix1))
 	})
 	t.Run("fun call literal 2", func(t *testing.T) {
-		lib := NewBase()
+		lib := NewBaseLibrary()
 		prefix, err := lib.EvalFromSource(nil, "#tail")
 		require.NoError(t, err)
 		_, _, code, err := lib.CompileExpression("tail(0x010203, 2)")
@@ -122,7 +122,7 @@ func TestCompile(t *testing.T) {
 		require.True(t, bytes.Equal(prefix, prefix1))
 	})
 	t.Run("fail call binary", func(t *testing.T) {
-		lib := NewBase()
+		lib := NewBaseLibrary()
 		_, _, code, err := lib.CompileExpression("!!!ciao!")
 		require.NoError(t, err)
 		t.Logf("!!!ciao! code = %s", easyfl_util.Fmt(code))
@@ -136,7 +136,7 @@ func TestCompile(t *testing.T) {
 }
 
 func TestEval(t *testing.T) {
-	lib := NewBase()
+	lib := NewBaseLibrary()
 	t.Run("1", func(t *testing.T) {
 		ret, err := lib.EvalFromSource(nil, "125")
 		require.NoError(t, err)
@@ -300,7 +300,7 @@ func TestEval(t *testing.T) {
 }
 
 func TestExtendLib(t *testing.T) {
-	lib := NewBase()
+	lib := NewBaseLibrary()
 	t.Run("ext-2", func(t *testing.T) {
 		_, err := lib.ExtendErr("nil1", "concat()")
 		require.NoError(t, err)
@@ -383,7 +383,7 @@ func num(n any) []byte {
 }
 
 func TestComparison(t *testing.T) {
-	lib := NewBase()
+	lib := NewBaseLibrary()
 	runTest := func(s string, a0, a1 []byte) bool {
 		t.Logf("---- runTest: '%s'\n", s)
 		ret, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), s, a0, a1)
@@ -428,7 +428,7 @@ func TestComparison(t *testing.T) {
 }
 
 func TestSigED25519(t *testing.T) {
-	lib := NewBase()
+	lib := NewBaseLibrary()
 	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	pubKey, privKey, err := ed25519.GenerateKey(rnd)
@@ -474,7 +474,7 @@ func TestSigED25519(t *testing.T) {
 }
 
 func TestTracing(t *testing.T) {
-	lib := NewBase()
+	lib := NewBaseLibrary()
 	t.Run("no panic 0", func(t *testing.T) {
 		tr := NewGlobalDataLog(nil)
 		ret, err := lib.EvalFromSource(tr, "slice(concat(concat(1,2),concat(3,4,5)),2,3)")
@@ -564,7 +564,7 @@ func TestTracing(t *testing.T) {
 }
 
 func TestParseBin(t *testing.T) {
-	lib := NewBase()
+	lib := NewBaseLibrary()
 	lib.extend("fun1par", "$0")
 	lib.extend("fun2par", "concat($0,$1)")
 
@@ -689,7 +689,7 @@ func TestParseBin(t *testing.T) {
 }
 
 func TestInlineCode(t *testing.T) {
-	lib := NewBase()
+	lib := NewBaseLibrary()
 	lib.extend("fun1par", "$0")
 	lib.extend("fun2par", "concat($0,$1)")
 	t.Run("1", func(t *testing.T) {
@@ -740,7 +740,7 @@ func TestInlineCode(t *testing.T) {
 }
 
 func TestDecompile(t *testing.T) {
-	lib := NewBase()
+	lib := NewBaseLibrary()
 	lib.extend("fun1par", "$0")
 	lib.extend("fun2par", "concat($0,$1)")
 	t.Run("bin-expr 1", func(t *testing.T) {
@@ -923,7 +923,7 @@ func TestDecompile(t *testing.T) {
 }
 
 func TestLocalLibrary(t *testing.T) {
-	lib := NewBase()
+	lib := NewBaseLibrary()
 	const source = `
  func fun1 : concat($0, $1)
  func fun2 : concat(fun1($0,2),fun1(3,4))
@@ -987,7 +987,7 @@ func TestLocalLibrary(t *testing.T) {
 }
 
 func TestBytecodeParams(t *testing.T) {
-	lib := NewBase()
+	lib := NewBaseLibrary()
 	t.Run("1", func(t *testing.T) {
 		const src = "concat(1,2)"
 		_, _, code, err := lib.CompileExpression(src)
@@ -1116,7 +1116,7 @@ func TestBytecodeParams(t *testing.T) {
 }
 
 func TestBytecodeParamsWithSlicePool(t *testing.T) {
-	lib := NewBase()
+	lib := NewBaseLibrary()
 	spool := slicepool.New()
 
 	t.Run("1", func(t *testing.T) {
@@ -1211,7 +1211,7 @@ func TestBytecodeParamsWithSlicePool(t *testing.T) {
 }
 
 func TestCases(t *testing.T) {
-	lib := NewBase()
+	lib := NewBaseLibrary()
 	t.Run("1", func(t *testing.T) {
 		const src = `firstCaseIndex(
 			equal($0, 1),
@@ -1290,7 +1290,7 @@ func TestCases(t *testing.T) {
 }
 
 func TestEmbed(t *testing.T) {
-	lib := NewBase()
+	lib := NewBaseLibrary()
 	t.Run("main", func(t *testing.T) {
 		lib.MustEqual("concat", "0x")
 		lib.MustEqual("concat(1,2)", "0x0102")
