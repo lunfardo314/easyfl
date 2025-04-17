@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"go/token"
 	"io"
 	"math"
 	"strconv"
@@ -65,6 +66,9 @@ func parseDefs(lines []string) ([]*funParsed, error) {
 			current = &funParsed{
 				Sym:        strings.TrimSpace(sym),
 				SourceCode: body,
+			}
+			if !token.IsIdentifier(current.Sym) {
+				return nil, fmt.Errorf("'%s' is not an identifier", sym)
 			}
 		} else {
 			if len(stripSpaces(line)) == 0 {
