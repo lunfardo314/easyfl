@@ -198,7 +198,7 @@ func prnFuncDescription(w io.Writer, f *FuncDescriptorYAMLAble, compiled bool) {
 		if compiled {
 			prn(w, ident2+"bytecode: %s\n", f.Bytecode)
 		}
-		prn(w, ident2+"source: >\n%s\n", ident3+strings.Replace(f.Source, "\n", ident3+"\n", -1))
+		prn(w, ident2+"source: >\n%s\n", ident3+strings.Replace(f.Source, "\n", "\n"+ident3, -1))
 	}
 }
 
