@@ -9,31 +9,22 @@ import (
 	"github.com/lunfardo314/easyfl/easyfl_util"
 )
 
-/*
-
-EasyFL runtime defines a standard library. It is always compiled at startup, in the `initBase` function.
-The library is constructed by function calls:
-- 'embedShort' adds an embedded function to the library with the short opcode 1-byte long.
-Maximum number of short embedded functions is 64
-- 'embedLong' is the same as 'embedShort', only it embeds function with 2 byte long byte code.
-Maximum number of embedded function is 256
-- 'extend' adds function defined as a EasyFL expression. Maximum number of extended functions is 702
-
-The 'initBase' function also includes inline tests with function call 'MustTrue', 'MustEqual', 'MustError'.
-
-'initBase' panics if library extensions fail or any of inline test fail
-
-The target environment, such as 'EasyUTXO' extends the standard library by using the same function in its 'initBase'
-
-*/
-
 func New() *Library {
 	return newLibrary()
 }
 
-func NewBase() *Library {
+func NewFromYAML(yamlData []byte, embedFun func(lib *Library) func(sym string) EmbeddedFunction) (*Library, error) {
 	lib := New()
-	err := lib.UpgradeFromYAML([]byte(baseLibraryDefinitions), EmbeddedFunctions(lib))
+	if err := lib.UpgradeFromYAML(yamlData, embedFun(lib)); err != nil {
+		return nil, err
+	}
+	return lib, nil
+}
+
+func NewBase() *Library {
+	lib, err := NewFromYAML([]byte(baseLibraryDefinitions), func(lib *Library) func(sym string) EmbeddedFunction {
+		return EmbeddedFunctions(lib)
+	})
 	easyfl_util.AssertNoError(err)
 
 	return lib
