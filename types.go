@@ -86,19 +86,6 @@ type (
 		numEmbeddedLong  uint16
 		numExtended      uint16
 	}
-
-	EmbeddedFunctionData struct {
-		Sym            string
-		RequiredNumPar int
-		EmbeddedFun    EmbeddedFunction
-		Description    string
-	}
-
-	ExtendedFunctionData struct {
-		Sym         string
-		Source      string
-		Description string
-	}
 )
 
 const traceYN = false

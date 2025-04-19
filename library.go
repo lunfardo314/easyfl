@@ -166,40 +166,6 @@ func (lib *Library) embedLongErr(sym string, requiredNumPar int, embeddedFun Emb
 	return dscr.funCode, nil
 }
 
-func (lib *Library) UpgradeWithEmbeddedShort(funList ...*EmbeddedFunctionData) {
-	err := lib.UpgradeWithEmbeddedShortErr(funList...)
-	easyfl_util.AssertNoError(err)
-}
-
-func (lib *Library) UpgradeWithEmbeddedShortErr(funList ...*EmbeddedFunctionData) (err error) {
-	for _, fun := range funList {
-		if _, err = lib.embedShortErr(fun.Sym, fun.RequiredNumPar, fun.EmbeddedFun, fun.Description); err != nil {
-			return
-		}
-	}
-	return
-}
-
-func (lib *Library) UpgradeWthEmbeddedLong(funList ...*EmbeddedFunctionData) {
-	err := lib.UpgradeWithEmbedLongErr(funList...)
-	easyfl_util.AssertNoError(err)
-}
-
-func (lib *Library) UpgradeWithEmbedLongErr(funList ...*EmbeddedFunctionData) (err error) {
-	for _, fun := range funList {
-		if _, err = lib.embedLongErr(fun.Sym, fun.RequiredNumPar, fun.EmbeddedFun, fun.Description); err != nil {
-			return
-		}
-	}
-	return
-}
-
-func (lib *Library) UpgradeWithExtensions(funList ...*ExtendedFunctionData) {
-	for _, fun := range funList {
-		lib.extend(fun.Sym, fun.Source, fun.Description)
-	}
-}
-
 // extend extends library with the compiled bytecode
 func (lib *Library) extend(sym string, source string, description ...string) uint16 {
 	ret, err := lib.ExtendErr(sym, source, description...)
@@ -293,7 +259,6 @@ func (lib *Library) MustExtendMany(source string) {
 
 // LibraryHash returns hash of the library code and locks library against modifications.
 // It is used for consistency checking and compatibility check
-// Should not be invoked from func initBase()
 
 func (lib *Library) existsFunction(sym string, localLib ...*LocalLibrary) bool {
 	if _, found := lib.funByName[sym]; found {
