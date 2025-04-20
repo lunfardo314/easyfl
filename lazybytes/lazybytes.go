@@ -173,6 +173,18 @@ func (a *Array) Push(data []byte) int {
 	return len(a.parsed) - 1
 }
 
+func (a *Array) PushUint32(v uint32) int {
+	var vBin [4]byte
+	binary.BigEndian.PutUint32(vBin[:], v)
+	return a.Push(vBin[:])
+}
+
+func (a *Array) PushUint64(v uint64) int {
+	var vBin [8]byte
+	binary.BigEndian.PutUint64(vBin[:], v)
+	return a.Push(vBin[:])
+}
+
 // PutAtIdx puts data at index, panics if array has no element at that index
 func (a *Array) PutAtIdx(idx byte, data []byte) {
 	a.mustEditable()
