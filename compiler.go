@@ -782,7 +782,7 @@ func (lib *Library) ParseBytecodeOneLevel(code []byte, expectedNumArgs ...int) (
 		return "", nil, nil, err
 	}
 	if len(expectedNumArgs) > 0 && len(f.Args) != expectedNumArgs[0] {
-		return "", nil, nil, fmt.Errorf("unexpected number of 1st level call arguments")
+		return "", nil, nil, fmt.Errorf("unexpected number of 1st level call arguments: expected %d, got %d", expectedNumArgs[0], len(f.Args))
 	}
 	args := make([][]byte, len(f.Args))
 	prefix := f.CallPrefix
