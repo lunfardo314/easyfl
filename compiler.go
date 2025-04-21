@@ -778,16 +778,17 @@ func (lib *Library) ParsePrefixBytecode(code []byte) ([]byte, error) {
 // To have next level, the argument can be parsed one level again
 func (lib *Library) ParseBytecodeOneLevel(code []byte, expectedNumArgs ...int) (string, []byte, [][]byte, error) {
 	f, err := lib.ExpressionFromBytecode(code)
+
 	if err != nil {
 		return "", nil, nil, err
 	}
 	if len(expectedNumArgs) > 0 && len(f.Args) != expectedNumArgs[0] {
-		return "", nil, nil, fmt.Errorf("ParseBytecodeOneLevel: unexpected number of 1st level call arguments: expected %d, got %d",
-			expectedNumArgs[0], len(f.Args))
+		return "", nil, nil, fmt.Errorf("ParseBytecodeOneLevel (sym = %s): unexpected number of 1st level call arguments: expected %d, got %d",
+			f.FunctionName, expectedNumArgs[0], len(f.Args))
 	}
 	args := make([][]byte, len(f.Args))
-	prefix := f.CallPrefix
 
+	prefix := f.CallPrefix
 	for i, arg := range f.Args {
 		var buf bytes.Buffer
 		if err = writeExpressionBytecode(&buf, arg); err != nil {
