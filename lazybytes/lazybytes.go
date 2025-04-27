@@ -20,6 +20,12 @@ import (
 	"github.com/lunfardo314/easyfl/easyfl_util"
 )
 
+// TODO rewrite and optimize package
+//  - []uint16 index instead of [][]byte in 'parsed'
+//  - take into account that almost all lazy arrays are readonly nad with max 256 elements
+//  - get rid of mutex in the readonly mode
+//  - get rid of unnecessary functions
+
 // Array can be interpreted two ways:
 // - as byte slice
 // - as serialized append-only array of up to 255 byte slices
