@@ -2,7 +2,7 @@ package easyfl
 
 const baseLibraryDefinitions = `
 # Base EasyFL library
-hash: d99faae72b4188f121d8859419a2f0b42f6b6f615d8d77779cd5e7ca6f3e69b4
+hash: 0dfa0c138587a03c48dc06a2072143f038f4fc1616914205ee2ec24b78bc7a14
 functions:
 # BEGIN EMBEDDED function definitions
 #    function codes (opcodes) from 0 to 15 are reserved for predefined parameter access functions $i and $$i
@@ -249,16 +249,28 @@ functions:
       numArgs: -1
       embedded: true
    -
+      sym: "forAll"
+      description: "universal quantifier"
+      funCode: 79
+      numArgs: 2
+      embedded: true
+   -
       sym: "atArray8"
       description: "returns element of the serialized lazy array at index $0"
-      funCode: 79
+      funCode: 80
       numArgs: 2
       embedded: true
    -
       sym: "arrayLength8"
       description: "returns number of elements of lazy array as 1-byte long value"
-      funCode: 80
+      funCode: 81
       numArgs: 1
+      embedded: true
+   -
+      sym: "range"
+      description: "returns byte slice with all byte values between $0 and $1 (inclusive). $0 and $1 must be 1-byte long"
+      funCode: 82
+      numArgs: 2
       embedded: true
 # END LONG EMBEDDED function definitions
 # BEGIN EXTENDED function definitions (defined by EasyFL formulas)
@@ -271,7 +283,7 @@ functions:
       bytecode: 80
       source: >
          0x         
-
+         
    -
       sym: "true"
       description: "returns non-empty value"
@@ -280,7 +292,7 @@ functions:
       bytecode: 81ff
       source: >
          0xff         
-
+         
    -
       sym: "require"
       description: "equivalent to or($0,$1). Useful in context like require(<cond>, !!!fail_condition_not_satisfied)"
@@ -289,7 +301,7 @@ functions:
       bytecode: 48420001
       source: >
          or($0,$1)         
-
+         
    -
       sym: "lessOrEqualThan"
       description: "returns $0<=$1. Requires operands must be equal length"
@@ -298,7 +310,7 @@ functions:
       bytecode: 4842200001140001
       source: >
          or(lessThan($0,$1),equal($0,$1))         
-
+         
    -
       sym: "greaterThan"
       description: "returns $0>$1. Requires operands must be equal length"
@@ -307,7 +319,7 @@ functions:
       bytecode: 1749420001
       source: >
          not(lessOrEqualThan($0,$1))         
-
+         
    -
       sym: "greaterOrEqualThan"
       description: "returns $0>=$1. Requires operands must be equal length"
@@ -316,7 +328,7 @@ functions:
       bytecode: 17200001
       source: >
          not(lessThan($0,$1))         
-
+         
    -
       sym: "bytecode"
       description: "returns bytecode of the operand, i.e. arguments is compiled instead of evaluated"
@@ -325,7 +337,7 @@ functions:
       bytecode: 08
       source: >
          $$0         
-
+         
    -
       sym: "evalArgumentBytecode"
       description: "in bytecode $0, parses argument with index $2, enforces call prefix is equal to $1"
@@ -334,7 +346,7 @@ functions:
       bytecode: 444d4c4b000102
       source: >
          eval(parseArgumentBytecode($0,$1,$2))         
-
+         
    -
       sym: "lessThanUint"
       description: "returns $0<$1 for arguments of any size <= 8. Each of arguments ar expanded fit leading 0-s up to 8 bytes and compare lexicographically"
@@ -343,7 +355,7 @@ functions:
       bytecode: 201f001f01
       source: >
          lessThan(uint8Bytes($0), uint8Bytes($1))         
-
+         
    -
       sym: "equalUint"
       description: "returns $0==$1 preliminary expanding each operand with leading 0-s to 8 bytes"
@@ -352,7 +364,7 @@ functions:
       bytecode: 141f001f01
       source: >
          equal(uint8Bytes($0), uint8Bytes($1))         
-
+         
    -
       sym: "max"
       description: "returns bigger one out of 2 operands of equal size"
@@ -361,7 +373,7 @@ functions:
       bytecode: 182000010100
       source: >
          if(lessThan($0,$1),$1,$0)         
-
+         
    -
       sym: "min"
       description: "returns smaller one out of 2 operands of equal size"
@@ -370,7 +382,8 @@ functions:
       bytecode: 182000010001
       source: >
          if(lessThan($0,$1),$0,$1)         
-
+         
 # END EXTENDED function definitions (defined by EasyFL formulas)
 # END all function definitions
+
 `

@@ -60,6 +60,7 @@ var unboundEmbeddedFunctions = map[string]EmbeddedFunction{
 	// lazy array
 	"atArray8":     evalAtArray8,
 	"arrayLength8": evalNumElementsOfArray,
+	"range":        evalRange,
 }
 
 func EmbeddedFunctions(targetLib *Library) func(sym string) EmbeddedFunction {
@@ -67,7 +68,7 @@ func EmbeddedFunctions(targetLib *Library) func(sym string) EmbeddedFunction {
 		if ret, found := unboundEmbeddedFunctions[sym]; found {
 			return ret
 		}
-		// function bound to particular target library
+		// function bound to the particular target library
 		switch sym {
 		case "parseArgumentBytecode":
 			return targetLib.evalParseArgumentBytecode
@@ -77,6 +78,8 @@ func EmbeddedFunctions(targetLib *Library) func(sym string) EmbeddedFunction {
 			return targetLib.evalBytecode
 		case "callLocalLibrary":
 			return targetLib.evalCallLocalLibrary
+		case "forAll":
+			return targetLib.evalForAll
 		}
 		return nil
 	}
@@ -585,4 +588,46 @@ func (lib *Library) evalBytecode(par *CallParams) []byte {
 	ret := lib.MustEvalFromBytecodeWithSlicePool(par.ctx.glb, par.ctx.spool, par.Arg(0))
 	par.Trace("evalBytecode:: %s} -> %s", easyfl_util.FmtLazy(par.Arg(0)), easyfl_util.FmtLazy(ret))
 	return ret
+}
+
+func (lib *Library) evalForAll(par *CallParams) []byte {
+	predicateBytecode := par.Arg(1)
+	expr, err := lib.ExpressionFromBytecode(predicateBytecode)
+	if err != nil {
+		par.TracePanic("evalForAll: wrong predicate bytecode '%s': %v", easyfl_util.FmtLazy(predicateBytecode), err)
+		return nil
+	}
+	defer disposeExpression(expr)
+
+	var arg [1]byte
+	var res []byte
+	for _, idx := range par.Arg(0) {
+		arg[0] = idx
+		res = EvalExpressionWithSlicePool(par.ctx.glb, par.ctx.spool, expr, arg[:])
+		if len(res) == 0 {
+			return nil
+		}
+	}
+	return par.AllocData(0xff)
+}
+
+var byteRange [256]byte
+
+func init() {
+	for i := 0; i < 256; i++ {
+		byteRange[i] = byte(i)
+	}
+}
+
+func evalRange(par *CallParams) []byte {
+	from := par.Arg(0)
+	to := par.Arg(1)
+	if len(from) != 1 || len(to) != 1 {
+		par.TracePanic("evalRange: wrong arguments: %s, %s", easyfl_util.FmtLazy(from), easyfl_util.FmtLazy(to))
+		return nil
+	}
+	if from[0] > to[0] {
+		return nil
+	}
+	return par.AllocData(byteRange[int(from[0]) : int(to[0])+1]...)
 }
