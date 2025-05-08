@@ -39,7 +39,7 @@ var unboundEmbeddedFunctions = map[string]EmbeddedFunction{
 	"firstEqualIndex":   evalFirstEqualIndex,
 	"selectCaseByIndex": evalSelectCaseByIndex,
 	// arithmetics short
-	"add":        evalAddUint,
+	"add":        evalAddUintVararg,
 	"sub":        evalSubUint,
 	"mul":        evalMulUint,
 	"div":        evalDivUint,
@@ -239,6 +239,8 @@ func evalFirstEqualIndex(par *CallParams) []byte {
 	return nil
 }
 
+// evalSelectCaseByIndex $0 is interpreted as index (1-byte), the rest up to 7 parameters as cases
+// indexed n-1 for $n. Returns value of the corresponding arg
 func evalSelectCaseByIndex(par *CallParams) []byte {
 	if par.Arity() == 0 {
 		par.TracePanic("evalSelectCaseByIndex: must be at least 1 argument")
@@ -340,11 +342,22 @@ func Must2ArithmeticOperands(par *CallParams, name string) (op0 uint64, op1 uint
 	return
 }
 
-func evalAddUint(par *CallParams) []byte {
-	a0, a1 := Must2ArithmeticOperands(par, "addUint")
-	ret := par.Alloc(8)
-	binary.BigEndian.PutUint64(ret, a0+a1)
-	return ret
+func evalAddUintVararg(par *CallParams) []byte {
+	var ret, a uint64
+	var aBin []byte
+	var err error
+
+	for i := byte(0); i < par.Arity(); i++ {
+		aBin = par.Arg(i)
+		if a, err = easyfl_util.Uint64FromBytes(aBin); err != nil {
+			par.TracePanic("evalAddUintVararg: arg #%d = %s -> %v", i, easyfl_util.Fmt(aBin), err)
+			return nil
+		}
+		ret += a
+	}
+	retBin := par.Alloc(8)
+	binary.BigEndian.PutUint64(retBin, ret)
+	return retBin
 }
 
 func evalSubUint(par *CallParams) []byte {
@@ -584,6 +597,7 @@ func (lib *Library) evalBytecodeArg(par *CallParams) []byte {
 	return ret
 }
 
+// TODO with varargs
 func (lib *Library) evalBytecode(par *CallParams) []byte {
 	ret := lib.MustEvalFromBytecodeWithSlicePool(par.ctx.glb, par.ctx.spool, par.Arg(0))
 	par.Trace("evalBytecode:: %s} -> %s", easyfl_util.FmtLazy(par.Arg(0)), easyfl_util.FmtLazy(ret))

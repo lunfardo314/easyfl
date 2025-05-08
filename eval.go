@@ -208,9 +208,9 @@ func EvalExpressionWithSlicePool(glb GlobalData, spool *slicepool.SlicePool, f *
 	return ret
 }
 
-// EvalFromSource compiles source of the expression and evaluates it
+// EvalFromSourceWithArgs compiles the source of the expression and evaluates it
 // Never panics
-func (lib *Library) EvalFromSource(glb GlobalData, source string, args ...[]byte) ([]byte, error) {
+func (lib *Library) EvalFromSourceWithArgs(glb GlobalData, source string, args ...[]byte) ([]byte, error) {
 	var ret []byte
 	err := easyfl_util.CatchPanicOrError(func() error {
 		f, requiredNumArgs, _, err := lib.CompileExpression(source)
@@ -229,9 +229,25 @@ func (lib *Library) EvalFromSource(glb GlobalData, source string, args ...[]byte
 	return ret, nil
 }
 
+func (lib *Library) EvalFromSourceNoArgs(glb GlobalData, source string) ([]byte, error) {
+	var ret []byte
+	err := easyfl_util.CatchPanicOrError(func() error {
+		f, _, _, err := lib.CompileExpression(source)
+		if err != nil {
+			return err
+		}
+		ret = EvalExpression(glb, f)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return ret, nil
+}
+
 // MustEvalFromSource evaluates the source of the expression and panics on any error
 func (lib *Library) MustEvalFromSource(glb GlobalData, source string, args ...[]byte) []byte {
-	ret, err := lib.EvalFromSource(glb, source, args...)
+	ret, err := lib.EvalFromSourceWithArgs(glb, source, args...)
 	if err != nil {
 		panic(err)
 	}
@@ -341,9 +357,9 @@ func (lib *Library) CallLocalLibrary(ctx *CallParams, libBin [][]byte, idx int) 
 }
 
 func (lib *Library) MustEqual(source1, source2 string) {
-	res1, err := lib.EvalFromSource(nil, source1)
+	res1, err := lib.EvalFromSourceWithArgs(nil, source1)
 	easyfl_util.Assertf(err == nil, "expression '%s' resulted in error: '%v'", source1, err)
-	res2, err := lib.EvalFromSource(nil, source2)
+	res2, err := lib.EvalFromSourceWithArgs(nil, source2)
 	easyfl_util.Assertf(err == nil, "expression '%s' resulted in error: '%v'", source2, err)
 	easyfl_util.Assertf(bytes.Equal(res1, res2), "must be equal %s and %s: %s != %s", source1, source2, easyfl_util.Fmt(res1), easyfl_util.Fmt(res2))
 	easyfl_util.Assertf(err == nil, "expression '%s' resulted in error: '%v'", source2, err)
@@ -352,13 +368,13 @@ func (lib *Library) MustEqual(source1, source2 string) {
 }
 
 func (lib *Library) MustTrue(source string) {
-	res, err := lib.EvalFromSource(nil, source)
+	res, err := lib.EvalFromSourceWithArgs(nil, source)
 	easyfl_util.Assertf(err == nil, "expression '%s' resulted in error: '%v'", source, err)
 	easyfl_util.Assertf(len(res) > 0, "expression '%s' must be true", res)
 }
 
 func (lib *Library) MustError(source string, mustContain ...string) {
-	_, err := lib.EvalFromSource(nil, source)
+	_, err := lib.EvalFromSourceWithArgs(nil, source)
 	easyfl_util.Assertf(err != nil, "expression '%s' is expected to return an error", source)
 	if len(mustContain) > 0 {
 		easyfl_util.Assertf(strings.Contains(err.Error(), mustContain[0]), fmt.Sprintf("error must contain '%s' (instead got '%s')", mustContain[0], err.Error()))

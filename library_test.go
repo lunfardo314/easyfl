@@ -103,7 +103,7 @@ func TestCompile(t *testing.T) {
 	})
 	t.Run("fun call literal 1", func(t *testing.T) {
 		lib := NewBaseLibrary()
-		prefix, err := lib.EvalFromSource(nil, "#concat")
+		prefix, err := lib.EvalFromSourceWithArgs(nil, "#concat")
 		require.NoError(t, err)
 		_, _, code, err := lib.CompileExpression("concat")
 		require.NoError(t, err)
@@ -113,7 +113,7 @@ func TestCompile(t *testing.T) {
 	})
 	t.Run("fun call literal 2", func(t *testing.T) {
 		lib := NewBaseLibrary()
-		prefix, err := lib.EvalFromSource(nil, "#tail")
+		prefix, err := lib.EvalFromSourceWithArgs(nil, "#tail")
 		require.NoError(t, err)
 		_, _, code, err := lib.CompileExpression("tail(0x010203, 2)")
 		require.NoError(t, err)
@@ -130,7 +130,7 @@ func TestCompile(t *testing.T) {
 		easyfl_util.RequireErrorWith(t, err, "SCRIPT FAIL: 'ciao!'")
 
 		src := fmt.Sprintf("x/%s", hex.EncodeToString(code))
-		_, err = lib.EvalFromSource(nil, src)
+		_, err = lib.EvalFromSourceWithArgs(nil, src)
 		easyfl_util.RequireErrorWith(t, err, "SCRIPT FAIL: 'ciao!'")
 	})
 }
@@ -138,60 +138,60 @@ func TestCompile(t *testing.T) {
 func TestEval(t *testing.T) {
 	lib := NewBaseLibrary()
 	t.Run("1", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(nil, "125")
+		ret, err := lib.EvalFromSourceWithArgs(nil, "125")
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{125}, ret)
 	})
 	t.Run("2", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(nil, "add(125, 6)")
+		ret, err := lib.EvalFromSourceWithArgs(nil, "add(125, 6)")
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{0, 0, 0, 0, 0, 0, 0, 131}, ret)
 	})
 	t.Run("3", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(nil, "$0", []byte{222})
+		ret, err := lib.EvalFromSourceWithArgs(nil, "$0", []byte{222})
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{222}, ret)
 	})
 	t.Run("4", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(nil, "concat($0,$1)", []byte{222}, []byte{111})
+		ret, err := lib.EvalFromSourceWithArgs(nil, "concat($0,$1)", []byte{222}, []byte{111})
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{222, 111}, ret)
 	})
 	t.Run("5", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(nil, "concat($0,concat($1,$0))", []byte{222}, []byte{111})
+		ret, err := lib.EvalFromSourceWithArgs(nil, "concat($0,concat($1,$0))", []byte{222}, []byte{111})
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{222, 111, 222}, ret)
 	})
 	t.Run("6", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(nil,
+		ret, err := lib.EvalFromSourceWithArgs(nil,
 			"concat(concat(slice($2,1,1), byte($2,0)), slice(concat(concat($0,$1),concat($1,$0)),1,2))",
 			[]byte{222}, []byte{111}, []byte{123, 234})
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{234, 123, 111, 111}, ret)
 	})
 	t.Run("7", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(nil, "len($1)", nil, []byte("123456789"))
+		ret, err := lib.EvalFromSourceWithArgs(nil, "len($1)", nil, []byte("123456789"))
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{0, 0, 0, 0, 0, 0, 0, 9}, ret)
 	})
 	t.Run("8", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(nil, "concat(1,2,3,4,5)")
+		ret, err := lib.EvalFromSourceWithArgs(nil, "concat(1,2,3,4,5)")
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{1, 2, 3, 4, 5}, ret)
 	})
 	t.Run("9", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(nil, "slice(concat(concat(1,2),concat(3,4,5)),2,3)")
+		ret, err := lib.EvalFromSourceWithArgs(nil, "slice(concat(concat(1,2),concat(3,4,5)),2,3)")
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{3, 4}, ret)
 	})
 	t.Run("10", func(t *testing.T) {
 		tr := NewGlobalDataTracePrint(nil)
-		ret, err := lib.EvalFromSource(tr, "if(equal(len($0),u64/3), 0x01, 0x05)", []byte("abc"))
+		ret, err := lib.EvalFromSourceWithArgs(tr, "if(equal(len($0),u64/3), 0x01, 0x05)", []byte("abc"))
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{1}, ret)
 	})
 	t.Run("11", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(nil, "if(equal(len($0),u64/3), 0x01, 0x05)", []byte("abcdef"))
+		ret, err := lib.EvalFromSourceWithArgs(nil, "if(equal(len($0),u64/3), 0x01, 0x05)", []byte("abcdef"))
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{5}, ret)
 	})
@@ -203,56 +203,56 @@ func TestEval(t *testing.T) {
 				0x0506     // comment2
 			)`
 	t.Run("12", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), longer, []byte("abcdef"))
+		ret, err := lib.EvalFromSourceWithArgs(NewGlobalDataTracePrint(nil), longer, []byte("abcdef"))
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{1}, ret)
 	})
 	t.Run("14", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), longer, []byte("abcde"))
+		ret, err := lib.EvalFromSourceWithArgs(NewGlobalDataTracePrint(nil), longer, []byte("abcde"))
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{5, 6}, ret)
 	})
 	t.Run("15", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "nil")
+		ret, err := lib.EvalFromSourceWithArgs(NewGlobalDataTracePrint(nil), "nil")
 		require.NoError(t, err)
 		require.True(t, len(ret) == 0)
 	})
 	t.Run("16", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "concat")
+		ret, err := lib.EvalFromSourceWithArgs(NewGlobalDataTracePrint(nil), "concat")
 		require.NoError(t, err)
 		require.True(t, len(ret) == 0)
 	})
 	t.Run("17", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "u16/256")
+		ret, err := lib.EvalFromSourceWithArgs(NewGlobalDataTracePrint(nil), "u16/256")
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{1, 0}, ret)
 	})
 	t.Run("18", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "u32/70000")
+		ret, err := lib.EvalFromSourceWithArgs(NewGlobalDataTracePrint(nil), "u32/70000")
 		require.NoError(t, err)
 		var b [4]byte
 		binary.BigEndian.PutUint32(b[:], 70000)
 		require.EqualValues(t, b[:], ret)
 	})
 	t.Run("19", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "u64/10000000000")
+		ret, err := lib.EvalFromSourceWithArgs(NewGlobalDataTracePrint(nil), "u64/10000000000")
 		require.NoError(t, err)
 		var b [8]byte
 		binary.BigEndian.PutUint64(b[:], 10000000000)
 		require.EqualValues(t, b[:], ret)
 	})
 	t.Run("20", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "isZero(0x000000)")
+		ret, err := lib.EvalFromSourceWithArgs(NewGlobalDataTracePrint(nil), "isZero(0x000000)")
 		require.NoError(t, err)
 		require.True(t, len(ret) != 0)
 	})
 	t.Run("21", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "isZero(0x003000)")
+		ret, err := lib.EvalFromSourceWithArgs(NewGlobalDataTracePrint(nil), "isZero(0x003000)")
 		require.NoError(t, err)
 		require.True(t, len(ret) == 0)
 	})
 	t.Run("21", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "add($0, $1)", []byte{160}, []byte{160})
+		ret, err := lib.EvalFromSourceWithArgs(NewGlobalDataTracePrint(nil), "add($0, $1)", []byte{160}, []byte{160})
 		require.NoError(t, err)
 		var b [8]byte
 		binary.BigEndian.PutUint64(b[:], 320)
@@ -268,13 +268,13 @@ func TestEval(t *testing.T) {
 	})
 	t.Run("23", func(t *testing.T) {
 		blake2bInvokedNum = 0
-		ret, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "blake2b-test($0)", []byte{1, 2, 3})
+		ret, err := lib.EvalFromSourceWithArgs(NewGlobalDataTracePrint(nil), "blake2b-test($0)", []byte{1, 2, 3})
 		require.NoError(t, err)
 		h := blake2b.Sum256([]byte{0x01, 0x02, 0x03})
 		require.EqualValues(t, h[:], ret)
 		require.EqualValues(t, blake2bInvokedNum, 1)
 
-		ret, err = lib.EvalFromSource(NewGlobalDataTracePrint(nil), "blake2b-test($0)", nil)
+		ret, err = lib.EvalFromSourceWithArgs(NewGlobalDataTracePrint(nil), "blake2b-test($0)", nil)
 		require.NoError(t, err)
 		h = blake2b.Sum256(nil)
 		require.EqualValues(t, h[:], ret)
@@ -285,13 +285,13 @@ func TestEval(t *testing.T) {
 		h2 := blake2b.Sum256([]byte{2})
 		h3 := blake2b.Sum256([]byte{3})
 
-		ret, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "if($0,blake2b-test($1),blake2b-test($2))",
+		ret, err := lib.EvalFromSourceWithArgs(NewGlobalDataTracePrint(nil), "if($0,blake2b-test($1),blake2b-test($2))",
 			[]byte{1}, []byte{2}, []byte{3})
 		require.NoError(t, err)
 		require.EqualValues(t, h2[:], ret)
 		require.EqualValues(t, blake2bInvokedNum, 1)
 
-		ret, err = lib.EvalFromSource(NewGlobalDataTracePrint(nil), "if($0,blake2b-test($1),blake2b-test($2))",
+		ret, err = lib.EvalFromSourceWithArgs(NewGlobalDataTracePrint(nil), "if($0,blake2b-test($1),blake2b-test($2))",
 			nil, []byte{2}, []byte{3})
 		require.NoError(t, err)
 		require.EqualValues(t, h3[:], ret)
@@ -308,7 +308,7 @@ func TestExtendLib(t *testing.T) {
 	t.Run("ext-3", func(t *testing.T) {
 		_, err := lib.ExtendErr("cat2", "concat($0, $1)")
 		require.NoError(t, err)
-		ret, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "cat2(1,2)")
+		ret, err := lib.EvalFromSourceWithArgs(NewGlobalDataTracePrint(nil), "cat2(1,2)")
 		require.EqualValues(t, []byte{1, 2}, ret)
 	})
 	const complicated = `
@@ -328,12 +328,12 @@ func TestExtendLib(t *testing.T) {
 		return c3
 	}
 	t.Run("ext-4", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "complicated(0,1,2)")
+		ret, err := lib.EvalFromSourceWithArgs(NewGlobalDataTracePrint(nil), "complicated(0,1,2)")
 		require.NoError(t, err)
 		require.EqualValues(t, compl(d(0), d(1), d(2)), ret)
 	})
 	t.Run("ext-5", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "complicated(0,1,complicated(2,1,0))")
+		ret, err := lib.EvalFromSourceWithArgs(NewGlobalDataTracePrint(nil), "complicated(0,1,complicated(2,1,0))")
 		require.NoError(t, err)
 		exp := compl(d(0), d(1), compl(d(2), d(1), d(0)))
 		require.EqualValues(t, exp, ret)
@@ -349,11 +349,11 @@ func TestExtendLib(t *testing.T) {
 		require.EqualValues(t, []byte{3, 2, 1}, ret)
 	})
 	t.Run("always panics", func(t *testing.T) {
-		_, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "byte(0,1)")
+		_, err := lib.EvalFromSourceWithArgs(NewGlobalDataTracePrint(nil), "byte(0,1)")
 		require.Error(t, err)
 	})
 	t.Run("never panics", func(t *testing.T) {
-		_, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "if(concat,byte(0,1),0x01)")
+		_, err := lib.EvalFromSourceWithArgs(NewGlobalDataTracePrint(nil), "if(concat,byte(0,1),0x01)")
 		require.NoError(t, err)
 	})
 }
@@ -386,7 +386,7 @@ func TestComparison(t *testing.T) {
 	lib := NewBaseLibrary()
 	runTest := func(s string, a0, a1 []byte) bool {
 		t.Logf("---- runTest: '%s'\n", s)
-		ret, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), s, a0, a1)
+		ret, err := lib.EvalFromSourceWithArgs(NewGlobalDataTracePrint(nil), s, a0, a1)
 		require.NoError(t, err)
 		if len(ret) == 0 {
 			return false
@@ -438,14 +438,14 @@ func TestSigED25519(t *testing.T) {
 
 	t.Run("validSignatureED25519-ok", func(t *testing.T) {
 		signature := ed25519.Sign(privKey, []byte(msg))
-		res, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "validSignatureED25519($0,$1,$2)", []byte(msg), signature, pubKey)
+		res, err := lib.EvalFromSourceWithArgs(NewGlobalDataTracePrint(nil), "validSignatureED25519($0,$1,$2)", []byte(msg), signature, pubKey)
 		require.NoError(t, err)
 
 		require.True(t, len(res) > 0)
 	})
 	t.Run("validSignatureED25519-wrong-msg", func(t *testing.T) {
 		signature := ed25519.Sign(privKey, []byte(msg))
-		res, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "validSignatureED25519($0,$1,$2)", []byte(msg+"klmn"), signature, pubKey)
+		res, err := lib.EvalFromSourceWithArgs(NewGlobalDataTracePrint(nil), "validSignatureED25519($0,$1,$2)", []byte(msg+"klmn"), signature, pubKey)
 		require.NoError(t, err)
 
 		require.True(t, len(res) == 0)
@@ -453,7 +453,7 @@ func TestSigED25519(t *testing.T) {
 	t.Run("validSignatureED25519-wrong-sig", func(t *testing.T) {
 		signature := ed25519.Sign(privKey, []byte(msg))
 		signature[5]++
-		res, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "validSignatureED25519($0,$1,$2)", []byte(msg), signature, pubKey)
+		res, err := lib.EvalFromSourceWithArgs(NewGlobalDataTracePrint(nil), "validSignatureED25519($0,$1,$2)", []byte(msg), signature, pubKey)
 		require.NoError(t, err)
 
 		require.True(t, len(res) == 0)
@@ -462,13 +462,13 @@ func TestSigED25519(t *testing.T) {
 		signature := ed25519.Sign(privKey, []byte(msg))
 		pk := easyfl_util.Concat([]byte(pubKey))
 		pk[3]++
-		res, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "validSignatureED25519($0,$1,$2)", []byte(msg), signature, pk)
+		res, err := lib.EvalFromSourceWithArgs(NewGlobalDataTracePrint(nil), "validSignatureED25519($0,$1,$2)", []byte(msg), signature, pk)
 		require.NoError(t, err)
 
 		require.True(t, len(res) == 0)
 	})
 	t.Run("validSignatureED25519-wrong-pubkey", func(t *testing.T) {
-		_, err := lib.EvalFromSource(NewGlobalDataTracePrint(nil), "validSignatureED25519($0,$1,$2)", nil, nil, nil)
+		_, err := lib.EvalFromSourceWithArgs(NewGlobalDataTracePrint(nil), "validSignatureED25519($0,$1,$2)", nil, nil, nil)
 		easyfl_util.RequireErrorWith(t, err, "bad public key length")
 	})
 }
@@ -477,74 +477,74 @@ func TestTracing(t *testing.T) {
 	lib := NewBaseLibrary()
 	t.Run("no panic 0", func(t *testing.T) {
 		tr := NewGlobalDataLog(nil)
-		ret, err := lib.EvalFromSource(tr, "slice(concat(concat(1,2),concat(3,4,5)),2,3)")
+		ret, err := lib.EvalFromSourceWithArgs(tr, "slice(concat(concat(1,2),concat(3,4,5)),2,3)")
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{3, 4}, ret)
 		tr.PrintLog()
 	})
 	t.Run("with panic 1", func(t *testing.T) {
 		tr := NewGlobalDataLog(nil)
-		_, err := lib.EvalFromSource(tr, "slice(0x0102,2,3)")
+		_, err := lib.EvalFromSourceWithArgs(tr, "slice(0x0102,2,3)")
 		require.Error(t, err)
 		tr.PrintLog()
 	})
 	t.Run("no panic 2", func(t *testing.T) {
 		tr := NewGlobalDataLog(nil)
-		_, err := lib.EvalFromSource(tr, "slice(tail(0x0102030405,2),1,2)")
+		_, err := lib.EvalFromSourceWithArgs(tr, "slice(tail(0x0102030405,2),1,2)")
 		require.NoError(t, err)
 		tr.PrintLog()
 	})
 	t.Run("with panic 3", func(t *testing.T) {
 		tr := NewGlobalDataLog(nil)
-		_, err := lib.EvalFromSource(tr, "slice(tail(0x0102030405,2),1,5)")
+		_, err := lib.EvalFromSourceWithArgs(tr, "slice(tail(0x0102030405,2),1,5)")
 		require.Error(t, err)
 		tr.PrintLog()
 	})
 	t.Run("no panic 4", func(t *testing.T) {
 		tr := NewGlobalDataLog(nil)
-		_, err := lib.EvalFromSource(tr, "equal(slice(tail(0x0102030405,2),1,2), slice(tail(0x0102030405,2),2,2))")
+		_, err := lib.EvalFromSourceWithArgs(tr, "equal(slice(tail(0x0102030405,2),1,2), slice(tail(0x0102030405,2),2,2))")
 		require.NoError(t, err)
 		tr.PrintLog()
 	})
 	t.Run("no panic 5", func(t *testing.T) {
 		tr := NewGlobalDataLog(nil)
-		_, err := lib.EvalFromSource(tr, "equal(len(slice(tail(0x0102030405,2),1,2)), u64/2)")
+		_, err := lib.EvalFromSourceWithArgs(tr, "equal(len(slice(tail(0x0102030405,2),1,2)), u64/2)")
 		require.NoError(t, err)
 		tr.PrintLog()
 	})
 	t.Run("no panic 6", func(t *testing.T) {
 		tr := NewGlobalDataLog(nil)
-		_, err := lib.EvalFromSource(tr, "equal(len(slice(tail(0x0102030405,2),1,2)), u64/2)")
+		_, err := lib.EvalFromSourceWithArgs(tr, "equal(len(slice(tail(0x0102030405,2),1,2)), u64/2)")
 		require.NoError(t, err)
 		tr.PrintLog()
 	})
 	t.Run("no trace", func(t *testing.T) {
 		tr := NewGlobalDataNoTrace(nil)
-		_, err := lib.EvalFromSource(tr, "equal(len(slice(tail(0x0102030405,2),1,2)), u64/2)")
+		_, err := lib.EvalFromSourceWithArgs(tr, "equal(len(slice(tail(0x0102030405,2),1,2)), u64/2)")
 		require.NoError(t, err)
 	})
 	t.Run("trace print", func(t *testing.T) {
 		tr := NewGlobalDataTracePrint(nil)
-		_, err := lib.EvalFromSource(tr, "equal(len(slice(tail(0x0102030405,2),1,2)), u64/2)")
+		_, err := lib.EvalFromSourceWithArgs(tr, "equal(len(slice(tail(0x0102030405,2),1,2)), u64/2)")
 		require.NoError(t, err)
 	})
 	t.Run("trace if", func(t *testing.T) {
 		tr := NewGlobalDataLog(nil)
-		_, err := lib.EvalFromSource(tr, "if(nil,0x1234,0x5678)")
+		_, err := lib.EvalFromSourceWithArgs(tr, "if(nil,0x1234,0x5678)")
 		require.NoError(t, err)
 		tr.PrintLog()
 	})
 	t.Run("trace not", func(t *testing.T) {
 		tr := NewGlobalDataTracePrint(nil)
-		_, err := lib.EvalFromSource(tr, "not(not(not($0)))", []byte{10})
+		_, err := lib.EvalFromSourceWithArgs(tr, "not(not(not($0)))", []byte{10})
 		require.NoError(t, err)
 	})
 	t.Run("trace concat", func(t *testing.T) {
 		tr := NewGlobalDataTracePrint(nil)
-		_, err := lib.EvalFromSource(tr, "concat($0,concat($0,$0))", []byte{10})
+		_, err := lib.EvalFromSourceWithArgs(tr, "concat($0,concat($0,$0))", []byte{10})
 		require.NoError(t, err)
 		tr = NewGlobalDataTracePrint(nil)
-		_, err = lib.EvalFromSource(tr, "concat(concat())")
+		_, err = lib.EvalFromSourceWithArgs(tr, "concat(concat())")
 		require.NoError(t, err)
 	})
 	t.Run("trace caching", func(t *testing.T) {
@@ -556,7 +556,7 @@ func TestTracing(t *testing.T) {
 			return []byte{1}
 		})
 		tr := NewGlobalDataTracePrint(nil)
-		res, err := lib.EvalFromSource(tr, "c6(c6(prn))")
+		res, err := lib.EvalFromSourceWithArgs(tr, "c6(c6(prn))")
 		require.NoError(t, err)
 		require.EqualValues(t, bytes.Repeat([]byte{1}, 36), res)
 		require.EqualValues(t, 1, counter)
@@ -1061,12 +1061,12 @@ func TestBytecodeParams(t *testing.T) {
 		require.EqualValues(t, hex.EncodeToString(res), "0181ff81ff81ff")
 	})
 	t.Run("4", func(t *testing.T) {
-		res, err := lib.EvalFromSource(nil, "concat(42,41)")
+		res, err := lib.EvalFromSourceWithArgs(nil, "concat(42,41)")
 		require.NoError(t, err)
 
 		require.EqualValues(t, res, []byte{42, 41})
 
-		res1, err := lib.EvalFromSource(nil, "eval(bytecode(concat(42,41)))")
+		res1, err := lib.EvalFromSourceWithArgs(nil, "eval(bytecode(concat(42,41)))")
 		require.NoError(t, err)
 		require.EqualValues(t, res, res1)
 	})
@@ -1081,7 +1081,7 @@ func TestBytecodeParams(t *testing.T) {
 		const src = "lessOrEqualThan(0xabcdef123456,0xabcdef123000)"
 		t.Logf("orig: %s", src)
 		srcBytecode := fmt.Sprintf("bytecode(%s)", src)
-		code, err := lib.EvalFromSource(nil, srcBytecode)
+		code, err := lib.EvalFromSourceWithArgs(nil, srcBytecode)
 		require.NoError(t, err)
 		t.Logf("code: %s", easyfl_util.Fmt(code))
 		decomp, err := lib.DecompileBytecode(code)
@@ -1096,7 +1096,7 @@ func TestBytecodeParams(t *testing.T) {
 		const src = "lessOrEqualThan(0xabcdef123456,0xabcdef123000)"
 		t.Logf("orig: %s", src)
 		srcBytecode := fmt.Sprintf("bytecode(%s)", src)
-		code, err := lib.EvalFromSource(nil, srcBytecode)
+		code, err := lib.EvalFromSourceWithArgs(nil, srcBytecode)
 		require.NoError(t, err)
 		t.Logf("code: %s", easyfl_util.Fmt(code))
 		decomp, err := lib.DecompileBytecode(code)
@@ -1104,11 +1104,11 @@ func TestBytecodeParams(t *testing.T) {
 		t.Logf("decompile: %s", decomp)
 		require.EqualValues(t, src, decomp)
 
-		prefix, err := lib.EvalFromSource(nil, fmt.Sprintf("parsePrefixBytecode(0x%x)", code))
+		prefix, err := lib.EvalFromSourceWithArgs(nil, fmt.Sprintf("parsePrefixBytecode(0x%x)", code))
 		require.NoError(t, err)
-		arg0, err := lib.EvalFromSource(nil, fmt.Sprintf("parseArgumentBytecode(0x%x, #lessOrEqualThan, 0)", code))
+		arg0, err := lib.EvalFromSourceWithArgs(nil, fmt.Sprintf("parseArgumentBytecode(0x%x, #lessOrEqualThan, 0)", code))
 		require.NoError(t, err)
-		arg1, err := lib.EvalFromSource(nil, fmt.Sprintf("parseArgumentBytecode(0x%x, #lessOrEqualThan, 1)", code))
+		arg1, err := lib.EvalFromSourceWithArgs(nil, fmt.Sprintf("parseArgumentBytecode(0x%x, #lessOrEqualThan, 1)", code))
 		require.NoError(t, err)
 		require.EqualValues(t, code, easyfl_util.Concat(prefix, arg0, arg1))
 
@@ -1470,5 +1470,49 @@ func TestForAll(t *testing.T) {
 		lib.MustTrue(source)
 		source = fmt.Sprintf("not(forAll(range(10,255), 0x%s))", hex.EncodeToString(code))
 		lib.MustTrue(source)
+	})
+	t.Run("inline 1", func(t *testing.T) {
+		const srcExtend = "func _forAll : forAll($0, $$1)"
+		err := lib.ExtendMany(srcExtend)
+		require.NoError(t, err)
+
+		res, err := lib.EvalFromSourceNoArgs(nil, "_forAll(range(5,24), lessThan($0, 25))")
+		require.NoError(t, err)
+		require.True(t, len(res) > 0)
+
+		res, err = lib.EvalFromSourceNoArgs(nil, "_forAll(range(5,99), lessThan($0, 25))")
+		require.NoError(t, err)
+		require.True(t, len(res) == 0)
+	})
+	t.Run("inline 2", func(t *testing.T) {
+		res, err := lib.EvalFromSourceNoArgs(nil, "forAll(range(5,24), bytecode(lessThan($0, 25)))")
+		require.NoError(t, err)
+		require.True(t, len(res) > 0)
+
+		res, err = lib.EvalFromSourceNoArgs(nil, "forAll(range(5,99), bytecode(lessThan($0, 25)))")
+		require.NoError(t, err)
+		require.True(t, len(res) == 0)
+	})
+}
+
+// TODO refactor eval function to varargs
+
+func TestSumAll(t *testing.T) {
+	lib := NewBaseLibrary()
+	t.Run("1", func(t *testing.T) {
+		const srcExtend = `
+func sumAll0 :
+if(
+  equal(len($0), u64/0),
+  u64/0,
+  if(
+     equal(len($0), u64/1),
+     uint8Bytes(eval($$1)),
+     0xffffffffffffffff
+  )
+)
+`
+		err := lib.ExtendMany(srcExtend)
+		require.NoError(t, err)
 	})
 }
