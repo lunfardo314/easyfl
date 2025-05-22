@@ -75,7 +75,7 @@ func EmbeddedFunctions(targetLib *Library) func(sym string) EmbeddedFunction {
 		case "parsePrefixBytecode":
 			return targetLib.evalParsePrefixBytecode
 		case "eval":
-			return targetLib.evalBytecode
+			return targetLib.evalEvalWithParams
 		case "callLocalLibrary":
 			return targetLib.evalCallLocalLibrary
 		case "forAll":
@@ -597,10 +597,17 @@ func (lib *Library) evalBytecodeArg(par *CallParams) []byte {
 	return ret
 }
 
-// TODO with varargs
-func (lib *Library) evalBytecode(par *CallParams) []byte {
-	ret := lib.MustEvalFromBytecodeWithSlicePool(par.ctx.glb, par.ctx.spool, par.Arg(0))
-	par.Trace("evalBytecode:: %s} -> %s", easyfl_util.FmtLazy(par.Arg(0)), easyfl_util.FmtLazy(ret))
+func (lib *Library) evalEvalWithParams(par *CallParams) []byte {
+	if par.Arity() == 0 {
+		par.TracePanic("evalEvalWithParams: at least one argument with bytecode is required")
+		return nil
+	}
+	args := make([][]byte, par.Arity()-1)
+	for i := range args {
+		args[i] = par.Arg(byte(i) + 1)
+	}
+	ret := lib.MustEvalFromBytecodeWithSlicePool(par.ctx.glb, par.ctx.spool, par.Arg(0), args...)
+	par.Trace("evalEvalWithParams:: %s(%v) -> %s", easyfl_util.FmtLazy(par.Arg(0)), args, easyfl_util.FmtLazy(ret))
 	return ret
 }
 

@@ -2,7 +2,7 @@ package easyfl
 
 const baseLibraryDefinitions = `
 # Base EasyFL library
-hash: 0dfa0c138587a03c48dc06a2072143f038f4fc1616914205ee2ec24b78bc7a14
+hash: e37734255d4535ac74a6d2e1a16f814b509200c269a6d2f837a0d5f0478975bd
 functions:
 # BEGIN EMBEDDED function definitions
 #    function codes (opcodes) from 0 to 15 are reserved for predefined parameter access functions $i and $$i
@@ -238,9 +238,9 @@ functions:
       embedded: true
    -
       sym: "eval"
-      description: "evaluates $0 as bytecode without open parameters (as closed formula)"
+      description: "evaluates $0 as bytecode with parameters $1, $7 (if any)"
       funCode: 77
-      numArgs: 1
+      numArgs: -1
       embedded: true
    -
       sym: "callLocalLibrary"
@@ -250,7 +250,7 @@ functions:
       embedded: true
    -
       sym: "forAll"
-      description: "universal quantifier"
+      description: "universal quantifier over finite collection of byte values"
       funCode: 79
       numArgs: 2
       embedded: true

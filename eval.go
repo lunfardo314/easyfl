@@ -95,7 +95,7 @@ func disposeVarScope(vs []*call) {
 	varScopePool[len(vs)-1].Put(vs)
 }
 
-// Eval evaluates the expression by calling it eval function with the parameter
+// Eval evaluates the expression by calling the eval function with the parameter
 func (c *call) Eval() []byte {
 	if c.cached {
 		return c.cache
@@ -175,7 +175,7 @@ func evalExpression(glb GlobalData, spool *slicepool.SlicePool, f *Expression, v
 	return newEvalContext(varScope, glb, spool).eval(f)
 }
 
-// EvalExpression evaluates expression, in the context of any data context and given values of parameters
+// EvalExpression evaluates the expression, in the context of any data context and given values of parameters
 func EvalExpression(glb GlobalData, f *Expression, args ...[]byte) []byte {
 	argsForData := make([]*call, len(args))
 
