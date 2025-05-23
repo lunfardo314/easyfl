@@ -2,7 +2,7 @@ package easyfl
 
 const baseLibraryDefinitions = `
 # Base EasyFL library
-hash: e37734255d4535ac74a6d2e1a16f814b509200c269a6d2f837a0d5f0478975bd
+hash: 059be73837994f40be42a898c4ed3d7d5d1b851fc2e3bb1293b1edec1a151e2b
 functions:
 # BEGIN EMBEDDED function definitions
 #    function codes (opcodes) from 0 to 15 are reserved for predefined parameter access functions $i and $$i
@@ -255,21 +255,27 @@ functions:
       numArgs: 2
       embedded: true
    -
+      sym: "sumAll"
+      description: "sums values of the bytecode function over range of finite collection of byte values as arguments"
+      funCode: 80
+      numArgs: 2
+      embedded: true
+   -
       sym: "atArray8"
       description: "returns element of the serialized lazy array at index $0"
-      funCode: 80
+      funCode: 81
       numArgs: 2
       embedded: true
    -
       sym: "arrayLength8"
       description: "returns number of elements of lazy array as 1-byte long value"
-      funCode: 81
+      funCode: 82
       numArgs: 1
       embedded: true
    -
       sym: "range"
       description: "returns byte slice with all byte values between $0 and $1 (inclusive). $0 and $1 must be 1-byte long"
-      funCode: 82
+      funCode: 83
       numArgs: 2
       embedded: true
 # END LONG EMBEDDED function definitions

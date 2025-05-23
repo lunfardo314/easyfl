@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"encoding/binary"
 	"encoding/hex"
+	"math"
 	"reflect"
 
 	"github.com/lunfardo314/easyfl/easyfl_util"
@@ -80,6 +81,8 @@ func EmbeddedFunctions(targetLib *Library) func(sym string) EmbeddedFunction {
 			return targetLib.evalCallLocalLibrary
 		case "forAll":
 			return targetLib.evalForAll
+		case "sumAll":
+			return targetLib.evalSumAll
 		}
 		return nil
 	}
@@ -634,6 +637,36 @@ func (lib *Library) evalForAll(par *CallParams) []byte {
 		}
 	}
 	return par.AllocData(0xff)
+}
+
+func (lib *Library) evalSumAll(par *CallParams) []byte {
+	sumBytecode := par.Arg(1)
+	expr, err := lib.ExpressionFromBytecode(sumBytecode)
+	if err != nil {
+		par.TracePanic("evalForAll: wrong sum function bytecode '%s': %v", easyfl_util.FmtLazy(sumBytecode), err)
+		return nil
+	}
+	defer disposeExpression(expr)
+
+	var arg [1]byte
+	var resBin []byte
+	var sum, val uint64
+	for _, idx := range par.Arg(0) {
+		arg[0] = idx
+		resBin = EvalExpressionWithSlicePool(par.ctx.glb, par.ctx.spool, expr, arg[:])
+		if val, err = easyfl_util.Uint64FromBytes(resBin); err != nil {
+			par.TracePanic("evalSumAll: wrong sum function result '%s': %v", easyfl_util.FmtLazy(resBin), err)
+			return nil
+		}
+		if sum >= math.MaxUint64-val {
+			par.TracePanic("evalSumAll: arithmetic overflow")
+			return nil
+		}
+		sum += val
+	}
+	ret := par.Alloc(8)
+	binary.BigEndian.PutUint64(ret, sum)
+	return ret
 }
 
 var byteRange [256]byte
