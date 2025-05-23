@@ -17,7 +17,7 @@ functions:
       short: true
    -
       sym: "slice"
-      description: "slice($0,$1,$2) takes a slice of $0, from $1 to $2 inclusive. $1 and $2 must be 1-byte long"
+      description: "slice($0,$1,$2) takes a slice of $0, from $1 to $2 inclusive"
       funCode: 17
       numArgs: 3
       embedded: true

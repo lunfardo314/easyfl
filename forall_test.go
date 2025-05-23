@@ -109,9 +109,12 @@ if(
 }
 
 const forAllFiniteSource = `
-// $0 range slice
-// $1 function to evaluate
-func forAllFinite :
+func split2Prefix : slice($0, 0, div(len($0),2))
+func split2Suffix : tail($0, add(div(len($0),2),1))
+
+// $0 - elements
+// $1 predicate bytecode
+func forAll4 :
 or(
    // empty
   equal(len($0), u64/0),
@@ -121,11 +124,114 @@ or(
      eval($1, $0)
   ),
   and(
+     // 2 elements
+     equal(len($0), u64/2), 
+     eval($1, byte($0,0)),
+     eval($1, byte($0,1))
+  ),
+  and(
+     // 3 elements
+     equal(len($0), u64/3), 
+     eval($1, byte($0,0)),
+     eval($1, byte($0,1)),
+     eval($1, byte($0,2))
+  ),
+  and(
+     // 4 elements
+     equal(len($0), u64/4), 
+     eval($1, byte($0,0)),
+     eval($1, byte($0,1)),
+     eval($1, byte($0,2)),
+     eval($1, byte($0,3))
+  ),
+  !!!forAllUpTo4_no_more_4_elements
+)
+
+// up to 8 elements
+func forAllFinite6 :
+if(
+  lessOrEqualThan(len($0), u64/4),
+  forAll4($0, $1),
+  and(
+    forAll4(split2Prefix($0), $1),
+    forAll4(split2Suffix($0), $1),
   )
+)
+
+// up to 16 elements
+func forAllFinite5 :
+if(
+  lessOrEqualThan(len($0), u64/4),
+  forAll4($0, $1),
+  and(
+    forAllFinite6(split2Prefix($0), $1),
+    forAllFinite6(split2Suffix($0), $1),
+  )
+)
+
+// up to 32 elements
+func forAllFinite4 :
+if(
+  lessOrEqualThan(len($0), u64/4),
+  forAll4($0, $1),
+  and(
+    forAllFinite5(split2Prefix($0), $1),
+    forAllFinite5(split2Suffix($0), $1),
+  )
+)
+
+// up to 64 elements
+func forAllFinite3 :
+if(
+  lessOrEqualThan(len($0), u64/4),
+  forAll4($0, $1),
+  and(
+    forAllFinite4(split2Prefix($0), $1),
+    forAllFinite4(split2Suffix($0), $1),
+  )
+)
+
+// up to 128 elements
+func forAllFinite2 :
+if(
+  lessOrEqualThan(len($0), u64/4),
+  forAll4($0, $1),
+  and(
+    forAllFinite3(split2Prefix($0), $1),
+    forAllFinite3(split2Suffix($0), $1),
+  )
+)
+
+// up to 256 elements
+func forAllFinite1 :
+if(
+  lessOrEqualThan(len($0), u64/4),
+  forAll4($0, $1),
+  and(
+    forAllFinite2(split2Prefix($0), $1),
+    forAllFinite2(split2Suffix($0), $1),
+  )
+)
+
+// $0 range slice
+// $1 function to evaluate
+func forAllFinite : 
+and(
+   require(lessOrEqualThan(len($0), u64/256), !!!forAllFinite_no_more_256_elements),
+   forAllFinite1($0, $1)
 )
 `
 
 func TestForAllExtended(t *testing.T) {
 	lib := NewBaseLibrary()
 	lib.MustExtendMany(forAllFiniteSource)
+
+	lib.MustTrue("forAllFinite(0x,0x)")
+	lib.MustTrue("forAllFinite(0x,1)")
+	_, _, code, err := lib.CompileExpression("equal($0,1)")
+	require.NoError(t, err)
+	lib.MustTrue("forAllFinite(1,0x%s)", hex.EncodeToString(code))
+	_, _, code, err = lib.CompileExpression("isZero(div($0,2))")
+	require.NoError(t, err)
+	lib.MustTrue("forAllFinite(0x02040610,0x%s)", hex.EncodeToString(code))
 }

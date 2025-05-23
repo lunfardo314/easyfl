@@ -119,20 +119,24 @@ func evalFail(par *CallParams) []byte {
 // slices first argument 'from' 'to' inclusive 'to'
 func evalSlice(par *CallParams) []byte {
 	data := par.Arg(0)
-	from := par.Arg(1)
-	to := par.Arg(2)
-	if len(from) != 1 || len(to) != 1 {
-		par.TracePanic("slice:: data: %s, from: %s, to: %s -- wrong bound values", easyfl_util.FmtLazy(data), easyfl_util.FmtLazy(from), easyfl_util.FmtLazy(to))
+	from, err := easyfl_util.Uint64FromBytes(par.Arg(1))
+	if err != nil {
+		par.TracePanic("slice: wrong lower bound")
+		return nil
 	}
-	if from[0] > to[0] {
-		par.TracePanic("slice:: data: %s, from: %s, to: %s -- wrong slice bounds. ", easyfl_util.Fmt(data), easyfl_util.Fmt(from), easyfl_util.Fmt(to))
+	toIncl, err := easyfl_util.Uint64FromBytes(par.Arg(2))
+	if err != nil {
+		par.TracePanic("slice: wrong upper bound")
+		return nil
 	}
-	upper := int(to[0]) + 1
-	if upper > len(data) {
-		par.TracePanic("slice:: data: %s, from: %s, to: %s -- slice out of bounds. ", easyfl_util.Fmt(data), easyfl_util.Fmt(from), easyfl_util.Fmt(to))
+	if from > toIncl {
+		par.TracePanic("slice:: from: %d, to: %d -- wrong slice bounds", from, toIncl)
 	}
-	ret := data[from[0]:upper]
-	par.Trace("slice:: data: %s, from: %s, to: %s -> %s", easyfl_util.FmtLazy(data), easyfl_util.FmtLazy(from), easyfl_util.FmtLazy(to), easyfl_util.FmtLazy(ret))
+	if int(toIncl+1) > len(data) {
+		par.TracePanic("slice:: data: %s, from: %d, toIncl: %d -- slice out of bounds. ", easyfl_util.Fmt(data), from, toIncl)
+	}
+	ret := data[from : toIncl+1]
+	par.Trace("slice:: data: %s, from: %s, to: %s -> %s", easyfl_util.FmtLazy(data), from, toIncl, easyfl_util.FmtLazy(ret))
 	return ret
 }
 

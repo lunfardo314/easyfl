@@ -192,8 +192,8 @@ func EvalExpression(glb GlobalData, f *Expression, args ...[]byte) []byte {
 	return ret
 }
 
-// EvalExpressionWithSlicePool evaluates expression, in the context of any data context and given values of parameters
-// It must be provided slice pool for allocation of interim  data
+// EvalExpressionWithSlicePool evaluates the expression in the context of any data context and given values of parameters
+// It must be provided slice pool for allocation of interim data
 func EvalExpressionWithSlicePool(glb GlobalData, spool *slicepool.SlicePool, f *Expression, args ...[]byte) []byte {
 	argsForData := make([]*call, len(args))
 
@@ -201,11 +201,7 @@ func EvalExpressionWithSlicePool(glb GlobalData, spool *slicepool.SlicePool, f *
 	for i, d := range args {
 		argsForData[i] = newCall(dataFunction(d), nil, ctx)
 	}
-	retp := evalExpression(glb, spool, f, argsForData)
-	ret := make([]byte, len(retp))
-	copy(ret, retp)
-
-	return ret
+	return evalExpression(glb, spool, f, argsForData)
 }
 
 // EvalFromSourceWithArgs compiles the source of the expression and evaluates it
@@ -275,7 +271,7 @@ func (lib *Library) MustEvalFromBytecodeWithSlicePool(glb GlobalData, spool *sli
 	return EvalExpressionWithSlicePool(glb, spool, expr, args...)
 }
 
-// EvalFromBytecode evaluates expression, never panics but return an error
+// EvalFromBytecode evaluates the expression, never panics but return an error
 func (lib *Library) EvalFromBytecode(glb GlobalData, code []byte, args ...[]byte) ([]byte, error) {
 	var ret []byte
 	err := easyfl_util.CatchPanicOrError(func() error {
@@ -367,8 +363,8 @@ func (lib *Library) MustEqual(source1, source2 string) {
 		func() string { return easyfl_util.Fmt(res1) }, func() string { return easyfl_util.Fmt(res2) })
 }
 
-func (lib *Library) MustTrue(source string) {
-	res, err := lib.EvalFromSourceWithArgs(nil, source)
+func (lib *Library) MustTrue(source string, args ...any) {
+	res, err := lib.EvalFromSourceWithArgs(nil, fmt.Sprintf(source, args...))
 	easyfl_util.Assertf(err == nil, "expression '%s' resulted in error: '%v'", source, err)
 	easyfl_util.Assertf(len(res) > 0, "expression '%s' must be true", res)
 }
