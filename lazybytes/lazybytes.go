@@ -184,7 +184,7 @@ func (a *ArrayEditable) PutAtIdxWithPadding(idx byte, data []byte) {
 	a.MustPutAtIdx(idx, data)
 }
 
-func (a *ArrayReadOnly) mustAt(idx int) []byte {
+func (a *ArrayReadOnly) MustAt(idx int) []byte {
 	szDataLenOffset := uint32(a.sizeBytes) * uint32(idx)
 	if idx == 0 {
 		return a.bytes[:a.index[0]]
@@ -198,7 +198,7 @@ func (a *ArrayReadOnly) mustAt(idx int) []byte {
 
 func (a *ArrayReadOnly) ForEach(fun func(i int, data []byte) bool) {
 	for i := 0; i < a.NumElements(); i++ {
-		if !fun(i, a.mustAt(i)) {
+		if !fun(i, a.MustAt(i)) {
 			return
 		}
 	}
@@ -208,13 +208,13 @@ func (a *ArrayReadOnly) At(idx int) ([]byte, error) {
 	if idx >= a.NumElements() {
 		return nil, fmt.Errorf("ArrayReadOnly.At(%d): index is out of range. Num elements: %d", idx, a.NumElements())
 	}
-	return a.mustAt(idx), nil
+	return a.MustAt(idx), nil
 }
 
 func (a *ArrayReadOnly) String() string {
 	ret := make([]string, a.NumElements())
 	for i := range ret {
-		ret[i] = easyfl_util.Fmt(a.mustAt(i))
+		ret[i] = easyfl_util.Fmt(a.MustAt(i))
 	}
 	return fmt.Sprintf("[%s]", strings.Join(ret, ","))
 }
