@@ -26,28 +26,33 @@ import (
 //  - get rid of mutex in the readonly mode
 //  - get rid of unnecessary functions
 
-// Array can be interpreted two ways:
+// ArrayEditable can be interpreted two ways:
 // - as byte slice
 // - as a serialized append-only array of up to 255 byte slices
-// Serialization cached and optimized by analyzing maximum length of the data element
+// Serialization cached and optimized by analyzing the maximum length of the data element
 // if readOnly == false NOT THREAD_SAFE!!!
 // if readOnly == true, it is thread safe
 
-type Array struct {
-	readonly       bool
-	mutex          sync.RWMutex
-	bytes          []byte
-	parsed         [][]byte
-	maxNumElements int
-}
+type (
+	ArrayEditable struct {
+		elements       [][]byte
+		maxNumElements int
+	}
+
+	ArrayReadOnly struct {
+		bytes     []byte
+		index     []uint32
+		sizeBytes byte
+	}
+)
 
 type lenPrefixType uint16
 
-// prefix of the serialized slice array are two bytes interpreted as uint16 big-endian
+// a prefix of the serialized slice array is two bytes interpreted as uint16 big-endian
 // The highest 2 bits are interpreted as 4 possible dataLenBytes (0, 1, 2 and 4 bytes)
-// The rest is interpreted as uint16 of the number of elements in the array. Max 2^14-1 =
+// The rest is interpreted as uint16 as the number of elements in the array. Max 2^14-1 =
 // 0 byte with ArrayMaxData code, the number of bits reserved for element data length
-// 1 byte is number of elements in the array
+// 1 byte is the number of elements in the array
 const (
 	dataLenBytes0  = uint16(0x00) << 14
 	dataLenBytes8  = uint16(0x01) << 14
@@ -87,214 +92,155 @@ func (dl lenPrefixType) Bytes() []byte {
 	return ret
 }
 
-func ArrayFromBytesReadOnly(data []byte, maxNumElements ...int) *Array {
+func ArrayFromBytesReadOnly(data []byte, maxNumElements ...int) (*ArrayReadOnly, error) {
 	mx := maxArrayLen
 	if len(maxNumElements) > 0 {
 		mx = maxNumElements[0]
 	}
-	ret := &Array{
-		bytes:          data,
-		maxNumElements: mx,
-	}
-	ret.readonly = true
-	return ret
-}
-
-func ParseArrayFromBytesReadOnly(data []byte, maxNumElements ...int) (*Array, error) {
-	var ret *Array
-	err := easyfl_util.CatchPanicOrError(func() error {
-		ret = ArrayFromBytesReadOnly(data, maxNumElements...)
-		ret.NumElements()
-		return nil
-	})
+	index, dlBytes, err := parseArray(data, mx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ArrayFromBytesReadOnly: %v", err)
 	}
-	return ret, nil
+	return &ArrayReadOnly{
+		bytes:     data,
+		index:     index,
+		sizeBytes: dlBytes,
+	}, nil
 }
 
 // EmptyArray by default mutable
-func EmptyArray(maxNumElements ...int) *Array {
-	return ArrayFromBytesReadOnly(emptyArrayPrefix.Bytes(), maxNumElements...).SetReadOnly(false)
+func EmptyArray(maxNumElements ...int) *ArrayEditable {
+	mx := maxArrayLen
+	if len(maxNumElements) > 0 {
+		mx = maxNumElements[0]
+	}
+	return &ArrayEditable{
+		elements:       make([][]byte, 0, mx),
+		maxNumElements: mx,
+	}
 }
 
-func MakeArrayFromDataReadOnly(element ...[]byte) *Array {
+func MakeArrayFromDataReadOnly(element ...[]byte) *ArrayReadOnly {
 	ret := EmptyArray(len(element))
 	for _, el := range element {
-		ret.Push(el)
+		ret.MustPush(el)
 	}
-	return ret.SetReadOnly(true)
+	return ret.MakeReadOnly()
 }
 
-func MakeArrayReadOnly(element ...any) *Array {
+func MakeArrayReadOnly(element ...any) *ArrayReadOnly {
 	ret := EmptyArray(len(element))
 	for _, el := range element {
 		if el == nil {
-			ret.Push(nil)
+			ret.MustPush(nil)
 			continue
 		}
 		switch e := el.(type) {
 		case []byte:
-			ret.Push(e)
+			ret.MustPush(e)
 		case interface{ Bytes() []byte }:
-			ret.Push(e.Bytes())
+			ret.MustPush(e.Bytes())
 		default:
 			panic(fmt.Errorf("lazyarray.Make: only '[]byte' and 'interface{Bytes() []byte}' types are allowed as arguments. Got %T", el))
 		}
 	}
-	ret.SetReadOnly(true)
+	return ret.MakeReadOnly()
+}
+
+func (a *ArrayEditable) MakeReadOnly() *ArrayReadOnly {
+	ret, err := ArrayFromBytesReadOnly(a.Bytes())
+	easyfl_util.AssertNoError(err)
 	return ret
 }
 
-func (a *Array) SetData(data []byte) {
-	a.mustEditable()
-	a.bytes = data
-	a.parsed = nil
+func (a *ArrayEditable) MustPush(data []byte) int {
+	easyfl_util.Assertf(len(a.elements) < a.maxNumElements, "ArrayEditable.MustPush: too many elements")
+	a.elements = append(a.elements, data)
+	return len(a.elements) - 1
 }
 
-func (a *Array) SetEmptyArray() {
-	a.mustEditable()
-	a.SetData([]byte{0, 0})
-}
-
-func (a *Array) mustEditable() {
-	if a.readonly {
-		panic("attempt to write to a read-only lazy array")
-	}
-}
-
-func (a *Array) SetReadOnly(ro bool) *Array {
-	a.readonly = ro
-	return a
-}
-
-func (a *Array) Push(data []byte) int {
-	a.mustEditable()
-	a.ensureParsed()
-	if len(a.parsed) >= a.maxNumElements {
-		panic("Array.Push: too many elements")
-	}
-	a.parsed = append(a.parsed, data)
-	a.bytes = nil // invalidate bytes
-	return len(a.parsed) - 1
-}
-
-func (a *Array) PushUint32(v uint32) int {
+func (a *ArrayEditable) PushUint32(v uint32) int {
 	var vBin [4]byte
 	binary.BigEndian.PutUint32(vBin[:], v)
-	return a.Push(vBin[:])
+	return a.MustPush(vBin[:])
 }
 
-func (a *Array) PushUint64(v uint64) int {
+func (a *ArrayEditable) PushUint64(v uint64) int {
 	var vBin [8]byte
 	binary.BigEndian.PutUint64(vBin[:], v)
-	return a.Push(vBin[:])
+	return a.MustPush(vBin[:])
 }
 
-// PutAtIdx puts data at index, panics if array has no element at that index
-func (a *Array) PutAtIdx(idx byte, data []byte) {
-	a.mustEditable()
-	a.parsed[idx] = data
-	a.bytes = nil // invalidate bytes
+// MustPutAtIdx puts data at index, panics if the array has no element at that index
+func (a *ArrayEditable) MustPutAtIdx(idx byte, data []byte) {
+	a.elements[idx] = data
 }
 
 // PutAtIdxWithPadding puts data at index, pads elements with nils if necessary
-func (a *Array) PutAtIdxWithPadding(idx byte, data []byte) {
-	a.mustEditable()
+func (a *ArrayEditable) PutAtIdxWithPadding(idx byte, data []byte) {
 	for int(idx) >= a.NumElements() {
-		a.Push(nil)
+		a.MustPush(nil)
 	}
-	a.PutAtIdx(idx, data)
+	a.MustPutAtIdx(idx, data)
 }
 
-func (a *Array) ForEach(fun func(i int, data []byte) bool) {
+func (a *ArrayReadOnly) mustAt(idx int) []byte {
+	szDataLenOffset := uint32(a.sizeBytes) * uint32(idx)
+	if idx == 0 {
+		return a.bytes[:a.index[0]]
+	}
+	n := len(a.index)
+	if idx == n {
+		return a.bytes[szDataLenOffset+a.index[n-1]:]
+	}
+	return a.bytes[szDataLenOffset+a.index[n-1] : szDataLenOffset+a.index[n]]
+}
+
+func (a *ArrayReadOnly) ForEach(fun func(i int, data []byte) bool) {
 	for i := 0; i < a.NumElements(); i++ {
-		if !fun(i, a.At(i)) {
-			break
+		if !fun(i, a.mustAt(i)) {
+			return
 		}
 	}
 }
 
-func (a *Array) validBytes() bool {
-	a.mutex.RLock()
-	defer a.mutex.RUnlock()
-
-	if len(a.bytes) > 0 {
-		return true
+func (a *ArrayReadOnly) At(idx int) ([]byte, error) {
+	if idx >= a.NumElements() {
+		return nil, fmt.Errorf("ArrayReadOnly.At(%d): index is out of range. Num elements: %d", idx, a.NumElements())
 	}
-	return len(a.parsed) == 0
+	return a.mustAt(idx), nil
 }
 
-func (a *Array) parsedNotNil() bool {
-	a.mutex.RLock()
-	defer a.mutex.RUnlock()
-
-	return len(a.parsed) > 0
-}
-
-func (a *Array) ensureParsed() {
-	if a.parsedNotNil() {
-		return
-	}
-
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
-
-	if a.parsed != nil {
-		return
-	}
-	var err error
-	a.parsed, err = parseArray(a.bytes, a.maxNumElements)
-	if err != nil {
-		panic(err)
-	}
-}
-
-func (a *Array) ensureBytes() {
-	if a.validBytes() {
-		return
-	}
-	var buf bytes.Buffer
-
-	a.mutex.RLock()
-	defer a.mutex.RUnlock()
-
-	if err := encodeArray(a.parsed, &buf); err != nil {
-		panic(err)
-	}
-	a.bytes = buf.Bytes()
-}
-
-func (a *Array) At(idx int) []byte {
-	a.ensureParsed()
-	return a.parsed[idx]
-}
-
-func (a *Array) Parsed() [][]byte {
-	a.ensureParsed()
-	return a.parsed
-}
-
-func (a *Array) ParsedString() string {
-	p := a.Parsed()
-	ret := make([]string, len(p))
-	for i := range p {
-		ret[i] = easyfl_util.Fmt(p[i])
+func (a *ArrayReadOnly) String() string {
+	ret := make([]string, a.NumElements())
+	for i := range ret {
+		ret[i] = easyfl_util.Fmt(a.mustAt(i))
 	}
 	return fmt.Sprintf("[%s]", strings.Join(ret, ","))
 }
 
-func (a *Array) NumElements() int {
-	a.ensureParsed()
-	return len(a.parsed)
+func (a *ArrayEditable) NumElements() int {
+	return len(a.elements)
 }
 
-func (a *Array) Bytes() []byte {
-	a.ensureBytes()
+func (a *ArrayReadOnly) NumElements() int {
+	return len(a.index) + 1
+}
+
+func (a *ArrayReadOnly) Bytes() []byte {
 	return a.bytes
 }
 
-func (a *Array) AsTree() *Tree {
+func (a *ArrayEditable) Bytes() []byte {
+	var buf bytes.Buffer
+	err := encodeArray(a.elements, &buf)
+	easyfl_util.AssertNoError(err)
+	ret := make([]byte, buf.Len())
+	copy(ret, buf.Bytes())
+	return ret
+}
+
+func (a *ArrayReadOnly) AsTree() *Tree {
 	return &Tree{
 		sa:       a,
 		subtrees: make(map[byte]*Tree),
@@ -359,34 +305,28 @@ func writeData(data [][]byte, numDataLenBytes int, w io.Writer) error {
 	return nil
 }
 
-// decodeElement 'reads' element without memory allocation, just cutting a slice
-// from the data. Suitable for immutable data
-func decodeElement(buf []byte, numDataLenBytes int) ([]byte, []byte, error) {
-	var sz int
-	switch numDataLenBytes {
-	case 0:
-		sz = 0
-	case 1:
-		sz = int(buf[0])
-	case 2:
-		sz = int(binary.BigEndian.Uint16(buf[:2]))
-	case 4:
-		sz = int(binary.BigEndian.Uint32(buf[:4]))
-	default:
-		return nil, nil, errors.New("wrong lenPrefixType value")
-	}
-	return buf[numDataLenBytes+sz:], buf[numDataLenBytes : numDataLenBytes+sz], nil
-}
+// decodeData forms index of elements in the data
+func decodeData(data []byte, numDataLenBytes int, n int) ([]uint32, error) {
+	ret := make([]uint32, n-1)
+	var sz uint32
 
-// decodeData decodes by splitting into slices, reusing the same underlying array
-func decodeData(data []byte, numDataLenBytes int, n int) ([][]byte, error) {
-	ret := make([][]byte, n)
-	var err error
-	for i := 0; i < n; i++ {
-		data, ret[i], err = decodeElement(data, numDataLenBytes)
-		if err != nil {
-			return nil, err
+	for i := range ret {
+		switch numDataLenBytes {
+		case 1:
+			sz = uint32(data[0])
+		case 2:
+			sz = uint32(binary.BigEndian.Uint16(data[:2]))
+		case 4:
+			sz = binary.BigEndian.Uint32(data[:4])
+		default:
+			panic("wrong lenPrefixType value")
 		}
+
+		if int(sz+1) > len(data) {
+			return nil, errors.New("serialization error: unexpected EOF")
+		}
+		data = data[sz+1:]
+		ret[i] = sz
 	}
 	if len(data) != 0 {
 		return nil, errors.New("serialization error: not all bytes were consumed")
@@ -405,24 +345,29 @@ func encodeArray(data [][]byte, w io.Writer) error {
 	return writeData(data, prefix.dataLenBytes(), w)
 }
 
-func parseArray(data []byte, maxNumElements int) ([][]byte, error) {
+func parseArray(data []byte, maxNumElements int) ([]uint32, byte, error) {
 	if len(data) < 2 {
-		return nil, errors.New("unexpected EOF")
+		return nil, 0, errors.New("unexpected EOF")
 	}
 	prefix := lenPrefixType(binary.BigEndian.Uint16(data[:2]))
 	if prefix.numElements() > maxNumElements {
-		return nil, fmt.Errorf("parseArray: number of elements in the prefix %d is larger than maxNumElements %d ",
+		return nil, 0, fmt.Errorf("parseArray: number of elements in the prefix %d is larger than maxNumElements %d ",
 			prefix.numElements(), maxNumElements)
 	}
-	return decodeData(data[2:], prefix.dataLenBytes(), prefix.numElements())
+	dlBytes := prefix.dataLenBytes()
+	arr, err := decodeData(data[2:], dlBytes, prefix.numElements())
+	if err != nil {
+		return nil, 0, fmt.Errorf("parseArray: %v", err)
+	}
+	return arr, byte(dlBytes), nil
 }
 
 //------------------------------------------------------------------------------
 
-// Tree is a read only interface to Array, which is interpreted as a tree
+// Tree is a read-only interface to ArrayEditable, which is interpreted as a tree
 type Tree struct {
 	// bytes
-	sa *Array
+	sa *ArrayReadOnly
 	// cache of parsed subtrees
 	subtrees     map[byte]*Tree
 	subtreeMutex sync.RWMutex
@@ -433,11 +378,15 @@ type TreePath []byte
 // MaxElementsLazyTree each node of the tree can have maximum 256 elements
 const MaxElementsLazyTree = 256
 
-func TreeFromBytesReadOnly(data []byte) *Tree {
-	return &Tree{
-		sa:       ArrayFromBytesReadOnly(data, MaxElementsLazyTree),
-		subtrees: make(map[byte]*Tree),
+func TreeFromBytesReadOnly(data []byte) (*Tree, error) {
+	arr, err := ArrayFromBytesReadOnly(data, MaxElementsLazyTree)
+	if err != nil {
+		return nil, fmt.Errorf("TreeFromBytesReadOnly: %v", err)
 	}
+	return &Tree{
+		sa:       arr,
+		subtrees: make(map[byte]*Tree),
+	}, nil
 }
 
 func TreeFromTreesReadOnly(trees ...*Tree) *Tree {
@@ -446,18 +395,14 @@ func TreeFromTreesReadOnly(trees ...*Tree) *Tree {
 	sa := EmptyArray(MaxElementsLazyTree)
 	m := make(map[byte]*Tree)
 	for i, tr := range trees {
-		sa.Push(tr.Bytes())
+		sa.MustPush(tr.Bytes())
 		m[byte(i)] = tr
 	}
 
 	return &Tree{
-		sa:       sa.SetReadOnly(true),
+		sa:       sa.MakeReadOnly(),
 		subtrees: m,
 	}
-}
-
-func TreeEmpty() *Tree {
-	return TreeFromBytesReadOnly(emptyArrayPrefix.Bytes())
 }
 
 func Path(p ...any) TreePath {
@@ -476,84 +421,94 @@ func (p TreePath) Hex() string {
 	return hex.EncodeToString(p.Bytes())
 }
 
-// Bytes recursively updates bytes in the tree from leaves
+// Bytes recursively update bytes in the tree from leaves
 func (st *Tree) Bytes() []byte {
-	if st.sa.validBytes() {
-		return st.sa.Bytes()
-	}
-	st.subtreeMutex.RLock()
-	defer st.subtreeMutex.RUnlock()
-
-	for i, subtree := range st.subtrees {
-		if !subtree.sa.validBytes() {
-			st.sa.PutAtIdx(i, subtree.Bytes())
-		}
-	}
 	return st.sa.Bytes()
 }
 
-// takes from cache or creates a subtree
-func (st *Tree) getSubtree(idx byte) *Tree {
+// takes from the cache or creates a subtree
+func (st *Tree) getSubtree(idx byte) (*Tree, error) {
 	st.subtreeMutex.RLock()
 	defer st.subtreeMutex.RUnlock()
 
 	ret, ok := st.subtrees[idx]
 	if ok {
-		return ret
+		return ret, nil
 	}
-	return TreeFromBytesReadOnly(st.sa.At(int(idx)))
+	bin, err := st.sa.At(int(idx))
+	if err != nil {
+		return nil, fmt.Errorf("getSubtree: %v", err)
+	}
+	ret, err = TreeFromBytesReadOnly(bin)
+	if err != nil {
+		return nil, fmt.Errorf("getSubtree: %v", err)
+	}
+	st.subtrees[idx] = ret
+	return ret, nil
 }
 
-func (st *Tree) Subtree(path TreePath) *Tree {
+func (st *Tree) Subtree(path TreePath) (*Tree, error) {
 	if len(path) == 0 {
-		return st
+		return st, nil
 	}
-	subtree := st.getSubtree(path[0])
-	ret := subtree.Subtree(path[1:])
-
-	st.subtreeMutex.Lock()
-	defer st.subtreeMutex.Unlock()
-
-	st.subtrees[path[0]] = subtree
-	return ret
+	subtree, err := st.getSubtree(path[0])
+	if err != nil {
+		return nil, err
+	}
+	if len(path) == 1 {
+		return subtree, nil
+	}
+	ret, err := subtree.Subtree(path[1:])
+	if err != nil {
+		return nil, err
+	}
+	return ret, nil
 }
 
 // BytesAtPath returns serialized for of the element at globalpath
-func (st *Tree) BytesAtPath(path TreePath) []byte {
+func (st *Tree) BytesAtPath(path TreePath) ([]byte, error) {
 	if len(path) == 0 {
-		return st.Bytes()
+		return st.Bytes(), nil
 	}
 	if len(path) == 1 {
 		return st.sa.At(int(path[0]))
 	}
-	subtree := st.getSubtree(path[0])
-	ret := subtree.BytesAtPath(path[1:])
-
-	st.subtreeMutex.Lock()
-	defer st.subtreeMutex.Unlock()
-
-	st.subtrees[path[0]] = subtree
-	return ret
-}
-
-// NumElements returns number of elements of the Array at the end of globalpath
-func (st *Tree) NumElements(path TreePath) int {
-	return st.Subtree(path).sa.NumElements()
-}
-
-func (st *Tree) ForEach(fun func(i byte, data []byte) bool, path TreePath) {
-	sub := st.Subtree(path)
-	for i := 0; i < sub.sa.NumElements(); i++ {
-		if !fun(byte(i), sub.sa.At(i)) {
-			return
-		}
+	subtree, err := st.getSubtree(path[0])
+	if err != nil {
+		return nil, err
 	}
+	return subtree.BytesAtPath(path[1:])
 }
 
-func (st *Tree) ForEachIndex(fun func(i byte) bool, path TreePath) {
-	for i := 0; i < st.NumElements(path); i++ {
+// NumElements returns the size the array at the end of the path
+func (st *Tree) NumElements(path TreePath) (int, error) {
+	s, err := st.Subtree(path)
+	if err != nil {
+		return 0, err
+	}
+	return s.sa.NumElements(), nil
+}
+
+func (st *Tree) ForEach(fun func(i byte, data []byte) bool, path TreePath) error {
+	sub, err := st.Subtree(path)
+	if err != nil {
+		return err
+	}
+	sub.sa.ForEach(func(i int, data []byte) bool {
+		return fun(byte(i), data)
+	})
+	return nil
+}
+
+func (st *Tree) ForEachIndex(fun func(i byte) bool, path TreePath) error {
+	n, err := st.NumElements(path)
+	if err != nil {
+		return err
+	}
+	for i := 0; i < n; i++ {
 		if !fun(byte(i)) {
-			break
+			return nil
 		}
 	}
+	return nil
 }

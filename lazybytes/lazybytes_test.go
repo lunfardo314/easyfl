@@ -37,9 +37,9 @@ func TestLazySliceSemantics(t *testing.T) {
 	})
 	t.Run("serialize all nil", func(t *testing.T) {
 		ls := EmptyArray()
-		ls.Push(nil)
-		ls.Push(nil)
-		ls.Push(nil)
+		ls.MustPush(nil)
+		ls.MustPush(nil)
+		ls.MustPush(nil)
 		require.EqualValues(t, 3, ls.NumElements())
 		lsBin := ls.Bytes()
 		require.EqualValues(t, []byte{byte(dataLenBytes0), 3}, lsBin)
@@ -52,11 +52,11 @@ func TestLazySliceSemantics(t *testing.T) {
 	})
 	t.Run("serialize some nil", func(t *testing.T) {
 		ls := EmptyArray()
-		ls.Push(nil)
-		ls.Push(nil)
-		ls.Push(data[17])
-		ls.Push(nil)
-		ls.Push([]byte("1234567890"))
+		ls.MustPush(nil)
+		ls.MustPush(nil)
+		ls.MustPush(data[17])
+		ls.MustPush(nil)
+		ls.MustPush([]byte("1234567890"))
 		require.EqualValues(t, 5, ls.NumElements())
 		lsBin := ls.Bytes()
 		lsBack := ArrayFromBytesReadOnly(lsBin)
@@ -69,7 +69,7 @@ func TestLazySliceSemantics(t *testing.T) {
 	})
 	t.Run("deserialize rubbish", func(t *testing.T) {
 		ls := EmptyArray()
-		ls.Push(data[17])
+		ls.MustPush(data[17])
 		lsBin := ls.Bytes()
 		lsBack := ArrayFromBytesReadOnly(lsBin)
 		require.NotPanics(t, func() {
@@ -106,28 +106,28 @@ func TestLazySliceSemantics(t *testing.T) {
 	t.Run("too long", func(t *testing.T) {
 		require.NotPanics(t, func() {
 			ls := EmptyArray()
-			ls.Push(bytes.Repeat(data[0], 256))
+			ls.MustPush(bytes.Repeat(data[0], 256))
 		})
 		require.NotPanics(t, func() {
 			ls := EmptyArray()
-			ls.Push(bytes.Repeat(data[0], 257))
+			ls.MustPush(bytes.Repeat(data[0], 257))
 		})
 		require.NotPanics(t, func() {
 			ls := EmptyArray()
 			for i := 0; i < 255; i++ {
-				ls.Push(data[0])
+				ls.MustPush(data[0])
 			}
 		})
 		require.Panics(t, func() {
 			ls := EmptyArray(300)
 			for i := 0; i < 301; i++ {
-				ls.Push(data[0])
+				ls.MustPush(data[0])
 			}
 		})
 		require.Panics(t, func() {
 			ls := EmptyArray()
 			for i := 0; i < math.MaxUint16+1; i++ {
-				ls.Push(data[0])
+				ls.MustPush(data[0])
 			}
 		})
 	})
@@ -158,7 +158,7 @@ func TestLazySliceSemantics(t *testing.T) {
 	t.Run("serialize short", func(t *testing.T) {
 		ls := EmptyArray()
 		for i := 0; i < 100; i++ {
-			ls.Push(bytes.Repeat(data[0], 100))
+			ls.MustPush(bytes.Repeat(data[0], 100))
 		}
 		lsBack := ArrayFromBytesReadOnly(ls.Bytes())
 		require.EqualValues(t, ls.NumElements(), lsBack.NumElements())
@@ -169,7 +169,7 @@ func TestLazySliceSemantics(t *testing.T) {
 	t.Run("serialization long 1", func(t *testing.T) {
 		ls := EmptyArray()
 		for i := 0; i < 100; i++ {
-			ls.Push(bytes.Repeat(data[0], 2000))
+			ls.MustPush(bytes.Repeat(data[0], 2000))
 		}
 		daBytes := ls.Bytes()
 		daBack := ArrayFromBytesReadOnly(daBytes)
@@ -181,11 +181,11 @@ func TestLazySliceSemantics(t *testing.T) {
 	t.Run("serialization long 2", func(t *testing.T) {
 		ls1 := EmptyArray()
 		for i := 0; i < 100; i++ {
-			ls1.Push(bytes.Repeat(data[0], 2000))
+			ls1.MustPush(bytes.Repeat(data[0], 2000))
 		}
 		ls2 := EmptyArray()
 		for i := 0; i < 100; i++ {
-			ls2.Push(bytes.Repeat(data[0], 2000))
+			ls2.MustPush(bytes.Repeat(data[0], 2000))
 		}
 		for i := 0; i < 100; i++ {
 			require.EqualValues(t, ls1.At(i), ls2.At(i))
@@ -227,7 +227,7 @@ func TestSliceTreeSemantics(t *testing.T) {
 	t.Run("level 1-1", func(t *testing.T) {
 		sa := EmptyArray()
 		for i := 0; i < howMany; i++ {
-			sa.Push(data[i])
+			sa.MustPush(data[i])
 		}
 		st := TreeFromBytesReadOnly(sa.Bytes())
 		t.Logf("ser len = %d bytes (%d x uint16)", len(sa.Bytes()), howMany)
@@ -243,13 +243,13 @@ func TestSliceTreeSemantics(t *testing.T) {
 	t.Run("tree from trees", func(t *testing.T) {
 		sa1 := EmptyArray()
 		for i := 0; i < 2; i++ {
-			sa1.Push(data[i])
+			sa1.MustPush(data[i])
 		}
 		st1 := TreeFromBytesReadOnly(sa1.Bytes())
 
 		sa2 := EmptyArray()
 		for i := 2 - 1; i >= 0; i-- {
-			sa2.Push(data[i])
+			sa2.MustPush(data[i])
 		}
 		st2 := TreeFromBytesReadOnly(sa2.Bytes())
 
@@ -263,7 +263,7 @@ func TestSliceTreeSemantics(t *testing.T) {
 func BenchmarkAt(b *testing.B) {
 	arr := EmptyArray()
 	for i := 0; i < 100; i++ {
-		arr.Push(bytes.Repeat([]byte{1}, i))
+		arr.MustPush(bytes.Repeat([]byte{1}, i))
 	}
 	for i := 0; i < b.N; i++ {
 		arr.At(10)
@@ -274,7 +274,7 @@ func TestConcurrency(t *testing.T) {
 	t.Run("1", func(t *testing.T) {
 		arr := EmptyArray()
 		for i := 0; i < 100; i++ {
-			arr.Push(bytes.Repeat([]byte{1}, i))
+			arr.MustPush(bytes.Repeat([]byte{1}, i))
 		}
 		arrBytes := arr.Bytes()
 		t.Logf("len = %d", len(arrBytes))
