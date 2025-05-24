@@ -28,7 +28,7 @@ import (
 
 // Array can be interpreted two ways:
 // - as byte slice
-// - as serialized append-only array of up to 255 byte slices
+// - as a serialized append-only array of up to 255 byte slices
 // Serialization cached and optimized by analyzing maximum length of the data element
 // if readOnly == false NOT THREAD_SAFE!!!
 // if readOnly == true, it is thread safe

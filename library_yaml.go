@@ -1,8 +1,7 @@
 package easyfl
 
-const baseLibraryDefinitions = `
-# Base EasyFL library
-hash: d99faae72b4188f121d8859419a2f0b42f6b6f615d8d77779cd5e7ca6f3e69b4
+const baseLibraryDefinitions = `# Base EasyFL library
+hash: c1c561706d3a9c49a73172a3b58712808489d2c5f316ba6c3aff5a82e5ba2009
 functions:
 # BEGIN EMBEDDED function definitions
 #    function codes (opcodes) from 0 to 15 are reserved for predefined parameter access functions $i and $$i
@@ -237,8 +236,8 @@ functions:
       numArgs: 1
       embedded: true
    -
-      sym: "eval"
-      description: "evaluates $0 as bytecode without open parameters (as closed formula)"
+      sym: "parseInlineData"
+      description: "treats $0 as bytecode of the inline data call. Strips the call prefix, returns the data"
       funCode: 77
       numArgs: 1
       embedded: true
@@ -271,7 +270,7 @@ functions:
       bytecode: 80
       source: >
          0x         
-
+         
    -
       sym: "true"
       description: "returns non-empty value"
@@ -280,7 +279,7 @@ functions:
       bytecode: 81ff
       source: >
          0xff         
-
+         
    -
       sym: "require"
       description: "equivalent to or($0,$1). Useful in context like require(<cond>, !!!fail_condition_not_satisfied)"
@@ -289,7 +288,7 @@ functions:
       bytecode: 48420001
       source: >
          or($0,$1)         
-
+         
    -
       sym: "lessOrEqualThan"
       description: "returns $0<=$1. Requires operands must be equal length"
@@ -298,7 +297,7 @@ functions:
       bytecode: 4842200001140001
       source: >
          or(lessThan($0,$1),equal($0,$1))         
-
+         
    -
       sym: "greaterThan"
       description: "returns $0>$1. Requires operands must be equal length"
@@ -307,7 +306,7 @@ functions:
       bytecode: 1749420001
       source: >
          not(lessOrEqualThan($0,$1))         
-
+         
    -
       sym: "greaterOrEqualThan"
       description: "returns $0>=$1. Requires operands must be equal length"
@@ -316,7 +315,7 @@ functions:
       bytecode: 17200001
       source: >
          not(lessThan($0,$1))         
-
+         
    -
       sym: "bytecode"
       description: "returns bytecode of the operand, i.e. arguments is compiled instead of evaluated"
@@ -325,16 +324,16 @@ functions:
       bytecode: 08
       source: >
          $$0         
-
+         
    -
-      sym: "evalArgumentBytecode"
-      description: "in bytecode $0, parses argument with index $2, enforces call prefix is equal to $1"
+      sym: "parseInlineDataArgument"
+      description: "in bytecode $0, parses argument with index $2, treats it as inline data call, returns the inline data, Enforces call prefix is equal to $1"
       funCode: 326
       numArgs: 3
       bytecode: 444d4c4b000102
       source: >
-         eval(parseArgumentBytecode($0,$1,$2))         
-
+         parseInlineData(parseArgumentBytecode($0,$1,$2))         
+         
    -
       sym: "lessThanUint"
       description: "returns $0<$1 for arguments of any size <= 8. Each of arguments ar expanded fit leading 0-s up to 8 bytes and compare lexicographically"
@@ -343,7 +342,7 @@ functions:
       bytecode: 201f001f01
       source: >
          lessThan(uint8Bytes($0), uint8Bytes($1))         
-
+         
    -
       sym: "equalUint"
       description: "returns $0==$1 preliminary expanding each operand with leading 0-s to 8 bytes"
@@ -352,7 +351,7 @@ functions:
       bytecode: 141f001f01
       source: >
          equal(uint8Bytes($0), uint8Bytes($1))         
-
+         
    -
       sym: "max"
       description: "returns bigger one out of 2 operands of equal size"
@@ -361,7 +360,7 @@ functions:
       bytecode: 182000010100
       source: >
          if(lessThan($0,$1),$1,$0)         
-
+         
    -
       sym: "min"
       description: "returns smaller one out of 2 operands of equal size"
@@ -370,7 +369,8 @@ functions:
       bytecode: 182000010001
       source: >
          if(lessThan($0,$1),$0,$1)         
-
+         
 # END EXTENDED function definitions (defined by EasyFL formulas)
 # END all function definitions
+
 `

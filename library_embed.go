@@ -67,14 +67,14 @@ func EmbeddedFunctions(targetLib *Library) func(sym string) EmbeddedFunction {
 		if ret, found := unboundEmbeddedFunctions[sym]; found {
 			return ret
 		}
-		// function bound to particular target library
+		// function bound to a particular target library
 		switch sym {
 		case "parseArgumentBytecode":
 			return targetLib.evalParseArgumentBytecode
 		case "parsePrefixBytecode":
 			return targetLib.evalParsePrefixBytecode
-		case "eval":
-			return targetLib.evalBytecode
+		case "parseInlineData":
+			return targetLib.evalParseInlineData
 		case "callLocalLibrary":
 			return targetLib.evalCallLocalLibrary
 		}
@@ -84,7 +84,7 @@ func EmbeddedFunctions(targetLib *Library) func(sym string) EmbeddedFunction {
 
 // evalCallLocalLibrary not tested here, only in Proxima
 func (lib *Library) evalCallLocalLibrary(ctx *CallParams) []byte {
-	// arg 0 - local library binary (as lazy array)
+	// arg 0 - local library binary (as a lazy array)
 	// arg 1 - 1-byte index of then function in the library
 	// arg 2 ... arg 15 optional arguments
 	arr := lazybytes.ArrayFromBytesReadOnly(ctx.Arg(0))
@@ -511,28 +511,33 @@ func evalNumElementsOfArray(par *CallParams) []byte {
 	return par.AllocData(byte(arr.NumElements()))
 }
 
+func (lib *Library) evalParseInlineData(par *CallParams) []byte {
+	dataBytecode := par.Arg(0)
+	if !HasInlineDataPrefix(dataBytecode) {
+		par.TracePanic("evalParseInlineData: not an inline data function call: %s", easyfl_util.FmtLazy(dataBytecode))
+	}
+	return dataBytecode[1:]
+}
+
 // evalParseArgumentBytecode takes bytecode of the argument as is.
-// Note: data prefix is not stripped. To get data it must be evaluated
+// Note: data prefix is not stripped. To get the data, it must be evaluated
 func (lib *Library) evalParseArgumentBytecode(par *CallParams) []byte {
 	a0 := par.Arg(0)
-	_, prefix, args, err := lib.ParseBytecodeOneLevel(a0)
+	sym, prefix, args, err := lib.ParseBytecodeOneLevel(a0)
 	if err != nil {
 		par.TracePanic("evalParseArgumentBytecode:: %v", err)
 	}
 	expectedPrefix := par.Arg(1)
-	idx := par.Arg(2)
-	if !bytes.Equal(prefix, expectedPrefix) {
-		_, _, _, symPrefix, err := lib.parseCallPrefix(prefix)
-		if err != nil {
-			par.TracePanic("evalParseArgumentBytecode: can't parse prefix '%s': %v", easyfl_util.FmtLazy(prefix), err)
-		}
-		_, _, _, symExpectedPrefix, err := lib.parseCallPrefix(expectedPrefix)
-		if err != nil {
-			par.TracePanic("evalParseArgumentBytecode: can't parse expected prefix '%s': %v", easyfl_util.FmtLazy(expectedPrefix), err)
-		}
-		par.TracePanic("evalParseArgumentBytecode: unexpected function prefix. Expected '%s'('%s'), got '%s'('%s')",
-			easyfl_util.FmtLazy(expectedPrefix), symExpectedPrefix, easyfl_util.FmtLazy(prefix), symPrefix)
+	_, _, _, symExpectedPrefix, err := lib.parseCallPrefix(expectedPrefix)
+	if err != nil {
+		par.TracePanic("evalParseArgumentBytecode: can't parse prefix '%s': %v", easyfl_util.FmtLazy(expectedPrefix), err)
 	}
+
+	if sym != symExpectedPrefix {
+		par.TracePanic("evalParseArgumentBytecode: unexpected function prefix. Expected '%s'('%s'), got '%s'('%s')",
+			easyfl_util.FmtLazy(expectedPrefix), symExpectedPrefix, easyfl_util.FmtLazy(prefix), sym)
+	}
+	idx := par.Arg(2)
 	if len(idx) != 1 || len(args) <= int(idx[0]) {
 		par.TracePanic("evalParseArgumentBytecode: wrong parameter index")
 	}
@@ -549,40 +554,4 @@ func (lib *Library) evalParsePrefixBytecode(par *CallParams) []byte {
 	}
 	par.Trace("parseBytecodePrefix::%s -> %s", easyfl_util.FmtLazy(code), easyfl_util.FmtLazy(prefix))
 	return prefix
-}
-
-func (lib *Library) evalBytecodeArg(par *CallParams) []byte {
-	a0 := par.Arg(0)
-	_, prefix, args, err := lib.ParseBytecodeOneLevel(a0)
-	if err != nil {
-		par.TracePanic("evalParseArgumentBytecode:: %v", err)
-	}
-	expectedPrefix := par.Arg(1)
-	idx := par.Arg(2)
-	if !bytes.Equal(prefix, expectedPrefix) {
-		_, _, _, symPrefix, err := lib.parseCallPrefix(prefix)
-		if err != nil {
-			par.TracePanic("evalBytecodeArg: can't parse prefix '%s': %v", easyfl_util.FmtLazy(prefix), err)
-		}
-		_, _, _, symExpectedPrefix, err := lib.parseCallPrefix(expectedPrefix)
-		if err != nil {
-			par.TracePanic("evalBytecodeArg: can't parse expected prefix '%s': %v", easyfl_util.FmtLazy(expectedPrefix), err)
-		}
-		par.TracePanic("evalBytecodeArg: unexpected function prefix. Expected '%s'('%s'), got '%s'('%s')",
-			easyfl_util.FmtLazy(expectedPrefix), symExpectedPrefix, easyfl_util.FmtLazy(prefix), symPrefix)
-	}
-	if len(idx) != 1 || len(args) <= int(idx[0]) {
-		par.TracePanic("evalParseArgumentBytecode: wrong parameter index")
-	}
-
-	ret := lib.MustEvalFromBytecodeWithSlicePool(par.ctx.glb, par.ctx.spool, args[idx[0]])
-
-	par.Trace("evalBytecodeArg:: %s, %s, %s -> %s", easyfl_util.FmtLazy(a0), easyfl_util.FmtLazy(expectedPrefix), easyfl_util.FmtLazy(idx), easyfl_util.FmtLazy(ret))
-	return ret
-}
-
-func (lib *Library) evalBytecode(par *CallParams) []byte {
-	ret := lib.MustEvalFromBytecodeWithSlicePool(par.ctx.glb, par.ctx.spool, par.Arg(0))
-	par.Trace("evalBytecode:: %s} -> %s", easyfl_util.FmtLazy(par.Arg(0)), easyfl_util.FmtLazy(ret))
-	return ret
 }

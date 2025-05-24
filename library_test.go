@@ -905,7 +905,7 @@ func TestDecompile(t *testing.T) {
 
 		sym, prefix, args, err := lib.ParseBytecodeOneLevel(bin, 0)
 		require.NoError(t, err)
-		require.True(t, IsDataPrefix(prefix))
+		require.True(t, HasInlineDataPrefix(prefix))
 		t.Logf("sym = %s", sym)
 		_, _, binBack2, err := lib.CompileExpression(formulaBack)
 		require.NoError(t, err)
@@ -1048,7 +1048,7 @@ func TestBytecodeParams(t *testing.T) {
 		t.Logf("eval: %s", easyfl_util.Fmt(res))
 		require.EqualValues(t, []byte{0xff, 0x81, 0xff}, res)
 	})
-	t.Run("3-1", func(t *testing.T) {
+	t.Run("4", func(t *testing.T) {
 		const src = "concat(1,$$0, $$1, $$2)"
 
 		expr, n, code, err := lib.CompileExpression(src)
@@ -1060,24 +1060,7 @@ func TestBytecodeParams(t *testing.T) {
 		t.Logf("eval: %s", easyfl_util.Fmt(res))
 		require.EqualValues(t, hex.EncodeToString(res), "0181ff81ff81ff")
 	})
-	t.Run("4", func(t *testing.T) {
-		res, err := lib.EvalFromSource(nil, "concat(42,41)")
-		require.NoError(t, err)
-
-		require.EqualValues(t, res, []byte{42, 41})
-
-		res1, err := lib.EvalFromSource(nil, "eval(bytecode(concat(42,41)))")
-		require.NoError(t, err)
-		require.EqualValues(t, res, res1)
-	})
 	t.Run("5", func(t *testing.T) {
-		sources := []string{"123", "0x", "u64/1234567890", "concat(1,2,3)", "lessOrEqualThan(1,2)", "lessOrEqualThan(2, 1)",
-			"lessOrEqualThan(0xabcdef123456, 0xabcdef123000)", "concat(1,concat(2,3), concat)", "nil"}
-		for _, src := range sources {
-			lib.MustEqual(src, fmt.Sprintf("eval(bytecode(%s))", src))
-		}
-	})
-	t.Run("6", func(t *testing.T) {
 		const src = "lessOrEqualThan(0xabcdef123456,0xabcdef123000)"
 		t.Logf("orig: %s", src)
 		srcBytecode := fmt.Sprintf("bytecode(%s)", src)
@@ -1089,7 +1072,7 @@ func TestBytecodeParams(t *testing.T) {
 		t.Logf("decompile: %s", decomp)
 		require.EqualValues(t, src, decomp)
 
-		srcParse := fmt.Sprintf("evalArgumentBytecode(0x%s,#lessOrEqualThan, 1)", hex.EncodeToString(code))
+		srcParse := fmt.Sprintf("parseInlineData(parseArgumentBytecode(0x%s,#lessOrEqualThan, 1))", hex.EncodeToString(code))
 		lib.MustEqual(srcParse, "0xabcdef123000")
 	})
 	t.Run("7", func(t *testing.T) {
@@ -1111,6 +1094,60 @@ func TestBytecodeParams(t *testing.T) {
 		arg1, err := lib.EvalFromSource(nil, fmt.Sprintf("parseArgumentBytecode(0x%x, #lessOrEqualThan, 1)", code))
 		require.NoError(t, err)
 		require.EqualValues(t, code, easyfl_util.Concat(prefix, arg0, arg1))
+
+	})
+}
+
+func TestParseDataArgument(t *testing.T) {
+	lib := NewBaseLibrary()
+	t.Run("1", func(t *testing.T) {
+		runSrc := func(src string) {
+			_, _, code, err := lib.CompileExpression(src)
+			require.NoError(t, err)
+			t.Logf("src: %s\ncode: %s", src, easyfl_util.Fmt(code))
+
+			prefix, err := lib.EvalFromSource(nil, fmt.Sprintf("parsePrefixBytecode(0x%s)", hex.EncodeToString(code)))
+			require.NoError(t, err)
+			t.Logf("prefix: %s", easyfl_util.Fmt(prefix))
+
+			_, _, _, sym, err := lib.parseCallPrefix(prefix)
+			require.NoError(t, err)
+			t.Logf("sym: %s", sym)
+			require.EqualValues(t, "concat", sym)
+		}
+		runSrc("concat")
+		runSrc("concat(0x010203030201)")
+		runSrc("concat(0x010203030201, 0x112233)")
+
+		srcPrefix := "#concat"
+		_, _, codeScrPrefix, err := lib.CompileExpression(srcPrefix)
+		require.NoError(t, err)
+		t.Logf("src: %s\ncode: %s", srcPrefix, easyfl_util.Fmt(codeScrPrefix))
+	})
+	t.Run("2", func(t *testing.T) {
+		runSrc := func(src string, prefixFun string, nArg byte, expected string) {
+			_, _, code, err := lib.CompileExpression(src)
+			require.NoError(t, err)
+			t.Logf("src: %s\ncode: %s", src, easyfl_util.Fmt(code))
+			srcToEval := fmt.Sprintf("parseInlineData(parseArgumentBytecode(0x%s, #%s, %d))", hex.EncodeToString(code), prefixFun, nArg)
+			lib.MustEqual(srcToEval, expected)
+		}
+		runSrcFail := func(src string, prefixFun string, nArg byte, expectedErr ...string) {
+			_, _, code, err := lib.CompileExpression(src)
+			require.NoError(t, err)
+			t.Logf("src: %s\ncode: %s", src, easyfl_util.Fmt(code))
+			srcToEval := fmt.Sprintf("parseInlineData(parseArgumentBytecode(0x%s, #%s, %d))", hex.EncodeToString(code), prefixFun, nArg)
+			lib.MustError(srcToEval, expectedErr...)
+		}
+
+		runSrc("concat(0x010203030201)", "concat", 0, "0x010203030201")
+		runSrc("concat(0x010203030201, 0x112233)", "concat", 1, "0x112233")
+		runSrc("concat(0x010203030201, 0x112233, 0x445566)", "concat", 2, "0x445566")
+		runSrc("slice(0x010203030201, 1, 1)", "slice", 2, "1")
+
+		runSrcFail("slice(0x010203030201, 1, 1)", "slice", 3, "wrong parameter index")
+		runSrcFail("slice(0x010203030201, 1, 1)", "concat", 3, "unexpected function prefix")
+		runSrcFail("concat", "concat", 0, "wrong parameter index")
 
 	})
 }
@@ -1406,11 +1443,11 @@ func TestEmbed(t *testing.T) {
 	t.Run("bytecode manipulation", func(t *testing.T) {
 		_, _, binCode, err := lib.CompileExpression("slice(0x01020304,1,2)")
 		easyfl_util.AssertNoError(err)
-		src := fmt.Sprintf("eval(parseArgumentBytecode(0x%s, #slice, %d))", hex.EncodeToString(binCode), 0)
+		src := fmt.Sprintf("parseInlineDataArgument(0x%s, #slice, %d)", hex.EncodeToString(binCode), 0)
 		lib.MustEqual(src, "0x01020304")
-		src = fmt.Sprintf("eval(parseArgumentBytecode(0x%s, #slice, %d))", hex.EncodeToString(binCode), 1)
+		src = fmt.Sprintf("parseInlineDataArgument(0x%s, #slice, %d)", hex.EncodeToString(binCode), 1)
 		lib.MustEqual(src, "1")
-		src = fmt.Sprintf("eval(parseArgumentBytecode(0x%s, #slice, %d))", hex.EncodeToString(binCode), 2)
+		src = fmt.Sprintf("parseInlineDataArgument(0x%s, #slice, %d)", hex.EncodeToString(binCode), 2)
 		lib.MustEqual(src, "2")
 		src = fmt.Sprintf("parsePrefixBytecode(0x%s)", hex.EncodeToString(binCode))
 		lib.MustEqual(src, "#slice")

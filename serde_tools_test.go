@@ -1,6 +1,7 @@
 package easyfl
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -14,7 +15,7 @@ func TestLibraryRenewYAML(t *testing.T) {
 	require.NoError(t, err)
 	yamlData := lib.ToYAML(true, "# Base EasyFL library")
 	t.Logf("size of the YAML file: %d bytes", len(yamlData))
-	//err = os.WriteFile("library.yaml", yamlData, 0644)
+	err = os.WriteFile("library.yaml", yamlData, 0644)
 	require.NoError(t, err)
 }
 

@@ -632,14 +632,17 @@ func dataFunction(data []byte) EvalFunction {
 	}
 }
 
-// parseCallPrefix returns:
+// parseCallPrefix analyzes the prefix of the bytecode. The prefix contains information about functions to call and the number of arguments
+// The prefix is 1-byte long for short calls and 2-byte long for long calls
+// In the bytecode, the prefix is followed by the arguments
+// returns:
 // - call prefix
 // - eval function
 // - call arity
 // - symbol
 // - error or nil
 func (lib *Library) parseCallPrefix(code []byte, localLib ...*LocalLibrary) ([]byte, EvalFunction, int, string, error) {
-	if len(code) == 0 || IsDataPrefix(code) {
+	if len(code) == 0 || HasInlineDataPrefix(code) {
 		return nil, EvalFunction{}, 0, "", fmt.Errorf("parseCallPrefix: not a function call")
 	}
 
@@ -653,7 +656,7 @@ func (lib *Library) parseCallPrefix(code []byte, localLib ...*LocalLibrary) ([]b
 	if code[0]&FirstByteLongCallMask == 0 {
 		// short call
 		if code[0] <= LastEmbeddedReserved {
-			// this is param reference
+			// this is a param reference
 			if code[0]&BytecodeParameterFlag == 0 {
 				// eval param reference
 				evalFun = EvalFunction{
@@ -724,7 +727,7 @@ func (lib *Library) parseCallPrefix(code []byte, localLib ...*LocalLibrary) ([]b
 // - true if it is data, false if not (it is a function call)
 // - EOF if not enough data
 func ParseBytecodeInlineDataPrefix(code []byte) ([]byte, bool, error) {
-	if !IsDataPrefix(code) {
+	if !HasInlineDataPrefix(code) {
 		// not data
 		return nil, false, nil
 	}
@@ -737,7 +740,7 @@ func ParseBytecodeInlineDataPrefix(code []byte) ([]byte, bool, error) {
 	return code[0 : 1+size], true, nil
 }
 
-func IsDataPrefix(data []byte) bool {
+func HasInlineDataPrefix(data []byte) bool {
 	if len(data) == 0 {
 		return false
 	}
@@ -746,7 +749,7 @@ func IsDataPrefix(data []byte) bool {
 
 // StripDataPrefix if the first byte is a data prefix, strips it. Usually used for the data prefix returned by ParseBytecodeInlineDataPrefix
 func StripDataPrefix(data []byte) []byte {
-	if IsDataPrefix(data) {
+	if HasInlineDataPrefix(data) {
 		// if it is data, skip the prefix
 		return data[1:]
 	}
@@ -755,10 +758,10 @@ func StripDataPrefix(data []byte) []byte {
 }
 
 // ParsePrefixBytecode tries to parse first 1, 2 or 3 bytes as a prefix, which contains
-// all information about the function call (if it is not inline data)
+// all information about the function call
 // Returns:
-// 1 byte for short call
-// 2 bytes for long calls
+// 1 byte for the short calls and inline data
+// 2 bytes for the long calls
 // 3 bytes for local library call
 func (lib *Library) ParsePrefixBytecode(code []byte) ([]byte, error) {
 	callPrefix, _, _, _, err := lib.parseCallPrefix(code)
@@ -771,11 +774,11 @@ func (lib *Library) ParsePrefixBytecode(code []byte) ([]byte, error) {
 // ParseBytecodeOneLevel parses bytecode of the function. Returns:
 // - if it is inline data, it returns its prefix
 // - if it is a function call, it returns pref, arg1, ... argN, where
-// -- perf is call prefix
+// -- perf is a call prefix
 // -- argi is a canonical bytecode of the argument i
 // Note, that argi is a canonical form of some expression too and the original expression is a concatenation
 // of its on-level parsed form.
-// To have next level, the argument can be parsed one level again
+// To have the next level, the argument can be parsed one level again
 func (lib *Library) ParseBytecodeOneLevel(code []byte, expectedNumArgs ...int) (string, []byte, [][]byte, error) {
 	f, err := lib.ExpressionFromBytecode(code)
 
