@@ -416,7 +416,7 @@ type Tree struct {
 
 type TreePath []byte
 
-// MaxElementsLazyTree each node of the tree can have maximum 256 elements
+// MaxElementsLazyTree each node of the tree can have maximum of 256 elements
 const MaxElementsLazyTree = 256
 
 func TreeFromBytesReadOnly(data []byte) (*Tree, error) {
@@ -506,7 +506,7 @@ func (st *Tree) Subtree(path TreePath) (*Tree, error) {
 	return ret, nil
 }
 
-// BytesAtPath returns serialized for of the element at path
+// BytesAtPath returns serialized for of the element at 'path'
 func (st *Tree) BytesAtPath(path TreePath) ([]byte, error) {
 	if len(path) == 0 {
 		return st.Bytes(), nil
@@ -519,6 +519,12 @@ func (st *Tree) BytesAtPath(path TreePath) ([]byte, error) {
 		return nil, err
 	}
 	return subtree.BytesAtPath(path[1:])
+}
+
+func (st *Tree) MustBytesAtPath(path TreePath) []byte {
+	ret, err := st.BytesAtPath(path)
+	easyfl_util.AssertNoError(err)
+	return ret
 }
 
 // NumElements returns the size of the array at the end of the path
