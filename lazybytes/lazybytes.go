@@ -183,13 +183,13 @@ func (a *ArrayEditable) MustPush(data []byte) int {
 	return len(a.elements) - 1
 }
 
-func (a *ArrayEditable) PushUint32(v uint32) int {
+func (a *ArrayEditable) MustPushUint32(v uint32) int {
 	var vBin [4]byte
 	binary.BigEndian.PutUint32(vBin[:], v)
 	return a.MustPush(vBin[:])
 }
 
-func (a *ArrayEditable) PushUint64(v uint64) int {
+func (a *ArrayEditable) MustPushUint64(v uint64) int {
 	var vBin [8]byte
 	binary.BigEndian.PutUint64(vBin[:], v)
 	return a.MustPush(vBin[:])
@@ -200,8 +200,8 @@ func (a *ArrayEditable) MustPutAtIdx(idx byte, data []byte) {
 	a.elements[idx] = data
 }
 
-// PutAtIdxWithPadding puts data at index, pads elements with nils if necessary
-func (a *ArrayEditable) PutAtIdxWithPadding(idx byte, data []byte) {
+// MustPutAtIdxWithPadding puts data at index, pads elements with nils if necessary
+func (a *ArrayEditable) MustPutAtIdxWithPadding(idx byte, data []byte) {
 	for int(idx) >= a.NumElements() {
 		a.MustPush(nil)
 	}
