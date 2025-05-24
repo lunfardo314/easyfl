@@ -112,6 +112,26 @@ func ArrayFromBytesReadOnly(data []byte, maxNumElements ...int) (*ArrayReadOnly,
 	}, nil
 }
 
+func ArrayFromBytesEditable(data []byte, maxNumElements ...int) (*ArrayEditable, error) {
+	mx := maxArrayLen
+	if len(maxNumElements) > 0 {
+		mx = maxNumElements[0]
+	}
+	arr, err := ArrayFromBytesReadOnly(data, mx)
+	if err != nil {
+		return nil, fmt.Errorf("ArrayFromBytesEditable: %v", err)
+	}
+	elements := make([][]byte, arr.NumElements())
+	arr.ForEach(func(i int, d []byte) bool {
+		elements[i] = d
+		return true
+	})
+	return &ArrayEditable{
+		elements:       elements,
+		maxNumElements: mx,
+	}, nil
+}
+
 // EmptyArray by default mutable
 func EmptyArray(maxNumElements ...int) *ArrayEditable {
 	mx := maxArrayLen
