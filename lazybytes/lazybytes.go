@@ -221,6 +221,15 @@ func (a *ArrayReadOnly) String() string {
 	return fmt.Sprintf("[%s]", strings.Join(ret, ","))
 }
 
+func (a *ArrayReadOnly) Parsed() [][]byte {
+	ret := make([][]byte, a.NumElements())
+	a.ForEach(func(i int, data []byte) bool {
+		ret[i] = data
+		return true
+	})
+	return ret
+}
+
 func (a *ArrayEditable) NumElements() int {
 	return len(a.elements)
 }

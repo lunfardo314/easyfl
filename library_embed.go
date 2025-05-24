@@ -87,7 +87,10 @@ func (lib *Library) evalCallLocalLibrary(ctx *CallParams) []byte {
 	// arg 0 - local library binary (as a lazy array)
 	// arg 1 - 1-byte index of then function in the library
 	// arg 2 ... arg 15 optional arguments
-	arr := lazybytes.ArrayFromBytesReadOnly(ctx.Arg(0))
+	arr, err := lazybytes.ArrayFromBytesReadOnly(ctx.Arg(0))
+	if err != nil {
+		ctx.TracePanic("evalCallLocalLibrary: %v", err)
+	}
 	libData := arr.Parsed()
 	idx := ctx.Arg(1)
 	if len(idx) != 1 || int(idx[0]) >= len(libData) {
@@ -498,16 +501,26 @@ func evalRShift64(par *CallParams) []byte {
 }
 
 func evalAtArray8(par *CallParams) []byte {
-	arr := lazybytes.ArrayFromBytesReadOnly(par.Arg(0))
+	arr, err := lazybytes.ArrayFromBytesReadOnly(par.Arg(0))
+	if err != nil {
+		par.TracePanic("evalAtArray8: %v", err)
+	}
 	idx := par.Arg(1)
 	if len(idx) != 1 {
-		panic("evalAtArray8: 1-byte value expected")
+		par.TracePanic("evalAtArray8: 1-byte value expected")
 	}
-	return arr.At(int(idx[0]))
+	ret, err := arr.At(int(idx[0]))
+	if err != nil {
+		par.TracePanic("evalAtArray8: %v", err)
+	}
+	return ret
 }
 
 func evalNumElementsOfArray(par *CallParams) []byte {
-	arr := lazybytes.ArrayFromBytesReadOnly(par.Arg(0))
+	arr, err := lazybytes.ArrayFromBytesReadOnly(par.Arg(0))
+	if err != nil {
+		par.TracePanic("evalNumElementsOfArray: %v", err)
+	}
 	return par.AllocData(byte(arr.NumElements()))
 }
 
