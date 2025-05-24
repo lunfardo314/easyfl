@@ -27,7 +27,7 @@ func TestLazyArraySemantics(t *testing.T) {
 		require.Error(t, err)
 		//require.EqualValues(t, 0, len(ls.Bytes()))
 		//require.Panics(t, func() {
-		//	ls.NumElements()
+		//	ls.NumElementsAtPath()
 		//})
 	})
 	t.Run("empty", func(t *testing.T) {

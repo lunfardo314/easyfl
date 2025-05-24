@@ -527,13 +527,19 @@ func (st *Tree) MustBytesAtPath(path TreePath) []byte {
 	return ret
 }
 
-// NumElements returns the size of the array at the end of the path
-func (st *Tree) NumElements(path TreePath) (int, error) {
+// NumElementsAtPath returns the size of the array at the end of the path
+func (st *Tree) NumElementsAtPath(path TreePath) (int, error) {
 	s, err := st.Subtree(path)
 	if err != nil {
 		return 0, err
 	}
 	return s.sa.NumElements(), nil
+}
+
+func (st *Tree) MustNumElementsAtPath(path TreePath) int {
+	ret, err := st.NumElementsAtPath(path)
+	easyfl_util.AssertNoError(err)
+	return ret
 }
 
 func (st *Tree) ForEach(fun func(i byte, data []byte) bool, path TreePath) error {
@@ -548,7 +554,7 @@ func (st *Tree) ForEach(fun func(i byte, data []byte) bool, path TreePath) error
 }
 
 func (st *Tree) ForEachIndex(fun func(i byte) bool, path TreePath) error {
-	n, err := st.NumElements(path)
+	n, err := st.NumElementsAtPath(path)
 	if err != nil {
 		return err
 	}
