@@ -23,12 +23,12 @@ func init() {
 
 func TestLazyArraySemantics(t *testing.T) {
 	t.Run("nil", func(t *testing.T) {
-		ls, err := ArrayFromBytesReadOnly(nil)
-		require.NoError(t, err)
-		require.EqualValues(t, 0, len(ls.Bytes()))
-		require.Panics(t, func() {
-			ls.NumElements()
-		})
+		_, err := ArrayFromBytesReadOnly(nil)
+		require.Error(t, err)
+		//require.EqualValues(t, 0, len(ls.Bytes()))
+		//require.Panics(t, func() {
+		//	ls.NumElements()
+		//})
 	})
 	t.Run("empty", func(t *testing.T) {
 		ls := EmptyArray()
@@ -56,7 +56,7 @@ func TestLazyArraySemantics(t *testing.T) {
 		ls := EmptyArray()
 		ls.MustPush(nil)
 		ls.MustPush(nil)
-		ls.MustPush(data[17])
+		ls.MustPush([]byte("ab"))
 		ls.MustPush(nil)
 		ls.MustPush([]byte("1234567890"))
 		require.EqualValues(t, 5, ls.NumElements())
@@ -66,7 +66,7 @@ func TestLazyArraySemantics(t *testing.T) {
 		require.EqualValues(t, 5, lsBack.NumElements())
 		require.EqualValues(t, 0, len(lsBack.MustAt(0)))
 		require.EqualValues(t, 0, len(lsBack.MustAt(1)))
-		require.EqualValues(t, data[17], lsBack.MustAt(2))
+		require.EqualValues(t, []byte("ab"), lsBack.MustAt(2))
 		require.EqualValues(t, 0, len(lsBack.MustAt(3)))
 		require.EqualValues(t, []byte("1234567890"), lsBack.MustAt(4))
 	})
@@ -76,15 +76,14 @@ func TestLazyArraySemantics(t *testing.T) {
 		lsBin := ls.Bytes()
 		lsBack, err := ArrayFromBytesReadOnly(lsBin)
 		require.NoError(t, err)
+		require.True(t, bytes.Equal(lsBin, lsBack.Bytes()))
+
 		require.NotPanics(t, func() {
 			require.EqualValues(t, data[17], ls.MakeReadOnly().MustAt(0))
 		})
 		lsBinWrong := append(lsBin, 1, 2, 3)
-		lsBack, err = ArrayFromBytesReadOnly(lsBinWrong)
-		require.NoError(t, err)
-		require.Panics(t, func() {
-			lsBack.MustAt(0)
-		})
+		_, err = ArrayFromBytesReadOnly(lsBinWrong)
+		require.Error(t, err)
 	})
 	t.Run("push+boundaries", func(t *testing.T) {
 		ls := EmptyArray(1000)
@@ -207,22 +206,17 @@ func TestLazyArraySemantics(t *testing.T) {
 
 func TestTreeSemantics(t *testing.T) {
 	t.Run("nil", func(t *testing.T) {
-		st, err := TreeFromBytesReadOnly(nil)
-		require.NoError(t, err)
-		b, err := st.BytesAtPath(nil)
-		require.NoError(t, err)
-		require.EqualValues(t, 0, len(b))
+		_, err := TreeFromBytesReadOnly(nil)
+		require.Error(t, err)
 	})
-	t.Run("nil panic", func(t *testing.T) {
-		st, err := TreeFromBytesReadOnly(nil)
+	t.Run("empty array error", func(t *testing.T) {
+		st, err := TreeFromBytesReadOnly(EmptyArray().Bytes())
 		require.NoError(t, err)
 		_, err = st.BytesAtPath(Path(1))
 		require.Error(t, err)
 	})
-	t.Run("nonsense panic", func(t *testing.T) {
-		st, err := TreeFromBytesReadOnly([]byte("0123456789"))
-		require.NoError(t, err)
-		_, err = st.BytesAtPath(Path(1))
+	t.Run("rubbish panic", func(t *testing.T) {
+		_, err := TreeFromBytesReadOnly([]byte("0123456789"))
 		require.Error(t, err)
 	})
 	t.Run("level 1-1", func(t *testing.T) {

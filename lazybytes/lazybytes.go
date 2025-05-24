@@ -39,10 +39,14 @@ type (
 		maxNumElements int
 	}
 
+	_slice struct {
+		from uint32
+		to   uint32
+	}
 	ArrayReadOnly struct {
-		bytes     []byte
-		index     []uint32
-		sizeBytes byte
+		bytes        []byte
+		index        []_slice
+		numSizeBytes byte
 	}
 )
 
@@ -102,9 +106,9 @@ func ArrayFromBytesReadOnly(data []byte, maxNumElements ...int) (*ArrayReadOnly,
 		return nil, fmt.Errorf("ArrayFromBytesReadOnly: %v", err)
 	}
 	return &ArrayReadOnly{
-		bytes:     data,
-		index:     index,
-		sizeBytes: dlBytes,
+		bytes:        data,
+		index:        index,
+		numSizeBytes: dlBytes,
 	}, nil
 }
 
@@ -185,15 +189,13 @@ func (a *ArrayEditable) PutAtIdxWithPadding(idx byte, data []byte) {
 }
 
 func (a *ArrayReadOnly) MustAt(idx int) []byte {
-	szDataLenOffset := uint32(a.sizeBytes) * uint32(idx)
-	if idx == 0 {
-		return a.bytes[:a.index[0]]
+	if a.numSizeBytes == 0 {
+		prefix := lenPrefixType(binary.BigEndian.Uint16(a.bytes[:2]))
+		easyfl_util.Assertf(idx+1 <= prefix.numElements(), "ArrayReadOnly.MustAt: index %d is out of range. Num elements: %d", idx, prefix.numElements())
+		return nil
 	}
-	n := len(a.index)
-	if idx == n {
-		return a.bytes[szDataLenOffset+a.index[n-1]:]
-	}
-	return a.bytes[szDataLenOffset+a.index[n-1] : szDataLenOffset+a.index[n]]
+	easyfl_util.Assertf(idx >= 0 && idx < a.NumElements(), "ArrayReadOnly.MustAt: index %d is out of range. Num elements: %d", idx, a.NumElements())
+	return a.bytes[a.index[idx].from:a.index[idx].to]
 }
 
 func (a *ArrayReadOnly) ForEach(fun func(i int, data []byte) bool) {
@@ -224,7 +226,8 @@ func (a *ArrayEditable) NumElements() int {
 }
 
 func (a *ArrayReadOnly) NumElements() int {
-	return len(a.index) + 1
+	prefix := lenPrefixType(binary.BigEndian.Uint16(a.bytes[:2]))
+	return prefix.numElements()
 }
 
 func (a *ArrayReadOnly) Bytes() []byte {
@@ -306,29 +309,38 @@ func writeData(data [][]byte, numDataLenBytes int, w io.Writer) error {
 }
 
 // decodeData forms index of elements in the data
-func decodeData(data []byte, numDataLenBytes int, n int) ([]uint32, error) {
-	ret := make([]uint32, n-1)
-	var sz uint32
+func decodeData(data []byte, numDataLenBytes int, n int) ([]_slice, error) {
+	if numDataLenBytes == 0 {
+		return nil, nil
+	}
+	ret := make([]_slice, n)
+
+	from := uint32(2)
+	var sz, to uint32
 
 	for i := range ret {
 		switch numDataLenBytes {
 		case 1:
-			sz = uint32(data[0])
+			sz = uint32(data[from])
 		case 2:
-			sz = uint32(binary.BigEndian.Uint16(data[:2]))
+			sz = uint32(binary.BigEndian.Uint16(data[from : from+2]))
 		case 4:
-			sz = binary.BigEndian.Uint32(data[:4])
+			sz = binary.BigEndian.Uint32(data[from : from+4])
 		default:
 			panic("wrong lenPrefixType value")
 		}
-
-		if int(sz+1) > len(data) {
+		from += uint32(numDataLenBytes)
+		to = from + sz
+		if to > uint32(len(data)) {
 			return nil, errors.New("serialization error: unexpected EOF")
 		}
-		data = data[sz+1:]
-		ret[i] = sz
+		ret[i] = _slice{
+			from: from,
+			to:   to,
+		}
+		from = to
 	}
-	if len(data) != 0 {
+	if int(to) != len(data) {
 		return nil, errors.New("serialization error: not all bytes were consumed")
 	}
 	return ret, nil
@@ -345,7 +357,7 @@ func encodeArray(data [][]byte, w io.Writer) error {
 	return writeData(data, prefix.dataLenBytes(), w)
 }
 
-func parseArray(data []byte, maxNumElements int) ([]uint32, byte, error) {
+func parseArray(data []byte, maxNumElements int) ([]_slice, byte, error) {
 	if len(data) < 2 {
 		return nil, 0, errors.New("unexpected EOF")
 	}
@@ -355,7 +367,7 @@ func parseArray(data []byte, maxNumElements int) ([]uint32, byte, error) {
 			prefix.numElements(), maxNumElements)
 	}
 	dlBytes := prefix.dataLenBytes()
-	arr, err := decodeData(data[2:], dlBytes, prefix.numElements())
+	arr, err := decodeData(data, dlBytes, prefix.numElements())
 	if err != nil {
 		return nil, 0, fmt.Errorf("parseArray: %v", err)
 	}
@@ -465,7 +477,7 @@ func (st *Tree) Subtree(path TreePath) (*Tree, error) {
 	return ret, nil
 }
 
-// BytesAtPath returns serialized for of the element at globalpath
+// BytesAtPath returns serialized for of the element at path
 func (st *Tree) BytesAtPath(path TreePath) ([]byte, error) {
 	if len(path) == 0 {
 		return st.Bytes(), nil
@@ -480,7 +492,7 @@ func (st *Tree) BytesAtPath(path TreePath) ([]byte, error) {
 	return subtree.BytesAtPath(path[1:])
 }
 
-// NumElements returns the size the array at the end of the path
+// NumElements returns the size of the array at the end of the path
 func (st *Tree) NumElements(path TreePath) (int, error) {
 	s, err := st.Subtree(path)
 	if err != nil {
