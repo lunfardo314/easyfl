@@ -175,7 +175,7 @@ func evalExpression(glb GlobalData, spool *slicepool.SlicePool, f *Expression, v
 	return newEvalContext(varScope, glb, spool).eval(f)
 }
 
-// EvalExpression evaluates expression, in the context of any data context and given values of parameters
+// EvalExpression evaluates the expression, in the context of any data context and given values of parameters
 func EvalExpression(glb GlobalData, f *Expression, args ...[]byte) []byte {
 	argsForData := make([]*call, len(args))
 
@@ -208,7 +208,7 @@ func EvalExpressionWithSlicePool(glb GlobalData, spool *slicepool.SlicePool, f *
 	return ret
 }
 
-// EvalFromSource compiles source of the expression and evaluates it
+// EvalFromSource compiles the source of the expression and evaluates it
 // Never panics
 func (lib *Library) EvalFromSource(glb GlobalData, source string, args ...[]byte) ([]byte, error) {
 	var ret []byte
@@ -259,7 +259,7 @@ func (lib *Library) MustEvalFromBytecodeWithSlicePool(glb GlobalData, spool *sli
 	return EvalExpressionWithSlicePool(glb, spool, expr, args...)
 }
 
-// EvalFromBytecode evaluates expression, never panics but return an error
+// EvalFromBytecode evaluates the expression, never panics but return an error
 func (lib *Library) EvalFromBytecode(glb GlobalData, code []byte, args ...[]byte) ([]byte, error) {
 	var ret []byte
 	err := easyfl_util.CatchPanicOrError(func() error {

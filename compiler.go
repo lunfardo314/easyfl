@@ -468,7 +468,7 @@ func (lib *Library) ExpressionSourceToBytecode(formulaSource string, localLib ..
 	return buf.Bytes(), numArgs, nil
 }
 
-// ExpressionFromBytecode creates evaluation form of the expression from its canonical representation
+// ExpressionFromBytecode creates an evaluation form of the expression from its canonical representation as a bytecode
 func (lib *Library) ExpressionFromBytecode(code []byte, localLib ...*LocalLibrary) (*Expression, error) {
 	ret, remaining, _, err := lib.expressionFromBytecode(code, localLib...)
 	if err != nil {
@@ -481,7 +481,7 @@ func (lib *Library) ExpressionFromBytecode(code []byte, localLib ...*LocalLibrar
 	return ret, nil
 }
 
-// ExpressionToBytecode converts evaluation form of the expression into the canonical bytecode form
+// ExpressionToBytecode converts the evaluation form of the expression into the canonical bytecode form
 func ExpressionToBytecode(f *Expression) []byte {
 	var buf bytes.Buffer
 	easyfl_util.AssertNoError(writeExpressionBytecode(&buf, f))
@@ -537,6 +537,7 @@ func writeExpressionSource(w io.Writer, f *Expression) error {
 }
 
 // expressionFromBytecode parses bytecode into the executable expression tree
+// TODO enforce function codes must be strictly less down the call tree (no recursion == non-Turing completeness)
 func (lib *Library) expressionFromBytecode(bytecode []byte, localLib ...*LocalLibrary) (*Expression, []byte, byte, error) {
 	if len(bytecode) == 0 {
 		return nil, nil, 0xff, io.EOF
