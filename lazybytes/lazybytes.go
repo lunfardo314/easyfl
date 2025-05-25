@@ -467,15 +467,27 @@ func (st *Tree) Bytes() []byte {
 	return st.sa.Bytes()
 }
 
-// takes from the cache or creates a subtree
-func (st *Tree) getSubtree(idx byte) (*Tree, error) {
+func (st *Tree) _getCachedSubtree(idx byte) *Tree {
 	st.subtreeMutex.RLock()
 	defer st.subtreeMutex.RUnlock()
+
+	return st.subtrees[idx]
+}
+
+// takes from the cache or creates a subtree
+func (st *Tree) getSubtree(idx byte) (*Tree, error) {
+	if ret := st._getCachedSubtree(idx); ret != nil {
+		return ret, nil
+	}
+
+	st.subtreeMutex.Lock()
+	defer st.subtreeMutex.Unlock()
 
 	ret, ok := st.subtrees[idx]
 	if ok {
 		return ret, nil
 	}
+
 	bin, err := st.sa.At(int(idx))
 	if err != nil {
 		return nil, fmt.Errorf("getSubtree: %v", err)

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"math"
+	"math/rand"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -258,6 +260,50 @@ func TestTreeSemantics(t *testing.T) {
 	})
 }
 
+func TestTreeConcurrency(t *testing.T) {
+	treeBytes := buildTree(7)
+	tree, err := TreeFromBytesReadOnly(treeBytes)
+	require.NoError(t, err)
+	routine := func(wg *sync.WaitGroup) {
+		for i := 0; i < 1000; i++ {
+			_, _ = tree.BytesAtPath(randomPath(8))
+		}
+		wg.Done()
+	}
+
+	const nRoutines = 100
+	var wg sync.WaitGroup
+	wg.Add(nRoutines)
+	for i := 0; i < nRoutines; i++ {
+		go routine(&wg)
+	}
+	wg.Wait()
+}
+
+func randomArray(n int) []byte {
+	arr := EmptyArray(n)
+	for i := 0; i < n; i++ {
+		arr.MustPushUint64(rand.Uint64())
+	}
+	return arr.Bytes()
+}
+
+func randomPath(depth int) []byte {
+	ret := make([]byte, depth)
+	for i := 0; i < depth; i++ {
+		ret[i] = byte(rand.Intn(2))
+	}
+	return ret
+}
+
+// builds a tree with 2^n leaves
+func buildTree(n int, leaves ...[]byte) []byte {
+	if n == 0 {
+		return randomArray(7)
+	}
+	return MakeArrayFromDataReadOnly(buildTree(n-1), buildTree(n-1)).Bytes()
+}
+
 func BenchmarkAt(b *testing.B) {
 	arr := EmptyArray()
 	for i := 0; i < 100; i++ {
@@ -266,5 +312,13 @@ func BenchmarkAt(b *testing.B) {
 	arrReadOnly := arr.MakeReadOnly()
 	for i := 0; i < b.N; i++ {
 		arrReadOnly.MustAt(10)
+	}
+}
+
+func BenchmarkAtPath(b *testing.B) {
+	treeBytes := buildTree(7)
+	tree, _ := TreeFromBytesReadOnly(treeBytes)
+	for i := 0; i < b.N; i++ {
+		_, _ = tree.BytesAtPath(randomPath(8))
 	}
 }
