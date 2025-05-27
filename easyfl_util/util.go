@@ -151,6 +151,16 @@ func TrimmedLeadingZeroUint64(v uint64) []byte {
 	return TrimLeadingZeroBytes(ret[:])
 }
 
+func TrimmedLeadingZeroUint32(v uint32) []byte {
+	ret := Uint64To8Bytes(uint64(v))
+	return TrimLeadingZeroBytes(ret[:])
+}
+
+func TrimmedLeadingZeroUint16(v uint16) []byte {
+	ret := Uint64To8Bytes(uint64(v))
+	return TrimLeadingZeroBytes(ret[:])
+}
+
 func TrimmedLeadingZeroUint64Hex(v uint64) string {
 	return hex.EncodeToString(TrimmedLeadingZeroUint64(v))
 }
