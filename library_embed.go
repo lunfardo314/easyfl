@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"encoding/binary"
 	"encoding/hex"
+	"math"
 	"reflect"
 
 	"github.com/lunfardo314/easyfl/easyfl_util"
@@ -342,6 +343,9 @@ func Must2ArithmeticOperands(par *CallParams, name string) (op0 uint64, op1 uint
 
 func evalAddUint(par *CallParams) []byte {
 	a0, a1 := Must2ArithmeticOperands(par, "addUint")
+	if a0 > math.MaxUint64-a1 {
+		par.TracePanic("evalAddUint:: %d + %d -> overflow in addition", a0, a1)
+	}
 	ret := par.Alloc(8)
 	binary.BigEndian.PutUint64(ret, a0+a1)
 	return ret
@@ -359,6 +363,12 @@ func evalSubUint(par *CallParams) []byte {
 
 func evalMulUint(par *CallParams) []byte {
 	a0, a1 := Must2ArithmeticOperands(par, "mulUint")
+	if a0 == 0 || a1 == 0 {
+		return par.Alloc(8)
+	}
+	if a0 > math.MaxUint64/a1-1 {
+		par.TracePanic("evalMulUint:: %d * %d -> overflow in multiplication", a0, a1)
+	}
 	ret := par.Alloc(8)
 	binary.BigEndian.PutUint64(ret, a0*a1)
 	return ret
@@ -366,6 +376,9 @@ func evalMulUint(par *CallParams) []byte {
 
 func evalDivUint(par *CallParams) []byte {
 	a0, a1 := Must2ArithmeticOperands(par, "divUint")
+	if a1 == 0 {
+		par.TracePanic("evalDivUint:: %d / %d -> divide by zero", a0, a1)
+	}
 	ret := par.Alloc(8)
 	binary.BigEndian.PutUint64(ret, a0/a1)
 	return ret
@@ -373,6 +386,9 @@ func evalDivUint(par *CallParams) []byte {
 
 func evalModuloUint(par *CallParams) []byte {
 	a0, a1 := Must2ArithmeticOperands(par, "moduloUint")
+	if a1 == 0 {
+		par.TracePanic("evalModuloUint:: %d / %d -> divide by zero", a0, a1)
+	}
 	ret := par.Alloc(8)
 	binary.BigEndian.PutUint64(ret, a0%a1)
 	return ret
