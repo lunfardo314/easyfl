@@ -59,8 +59,8 @@ var unboundEmbeddedFunctions = map[string]EmbeddedFunction{
 	"validSignatureED25519": evalValidSigED25519,
 	"blake2b":               evalBlake2b,
 	// lazy array
-	"atArray8":     evalAtArray8,
-	"arrayLength8": evalNumElementsOfArray,
+	"atArray8": evalAtArray8,
+	"arrayLen": evalNumElementsOfArray,
 }
 
 func EmbeddedFunctions(targetLib *Library) func(sym string) EmbeddedFunction {
@@ -537,7 +537,9 @@ func evalNumElementsOfArray(par *CallParams) []byte {
 	if err != nil {
 		par.TracePanic("evalNumElementsOfArray: %v", err)
 	}
-	return par.AllocData(byte(arr.NumElements()))
+	ret := par.Alloc(8)
+	binary.BigEndian.PutUint64(ret, uint64(arr.NumElements()))
+	return ret
 }
 
 func (lib *Library) evalParseInlineData(par *CallParams) []byte {

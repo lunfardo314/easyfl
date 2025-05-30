@@ -1,7 +1,7 @@
 package easyfl
 
 const baseLibraryDefinitions = `# Base EasyFL library
-hash: c1c561706d3a9c49a73172a3b58712808489d2c5f316ba6c3aff5a82e5ba2009
+hash: 8bdf09e2b0ac49931c31f7cd5de874bb75d770d3ead164351439e25ce87fb476
 functions:
 # BEGIN EMBEDDED function definitions
 #    function codes (opcodes) from 0 to 15 are reserved for predefined parameter access functions $i and $$i
@@ -254,8 +254,8 @@ functions:
       numArgs: 2
       embedded: true
    -
-      sym: "arrayLength8"
-      description: "returns number of elements of lazy array as 1-byte long value"
+      sym: "arrayLen"
+      description: "returns number of elements of lazy array as 8 byte-long big-endian value"
       funCode: 80
       numArgs: 1
       embedded: true
