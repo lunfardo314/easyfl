@@ -93,25 +93,25 @@ func TupleFromBytes(data []byte, maxNumElements ...int) (*Tuple, error) {
 	}, nil
 }
 
-//func ArrayFromBytesEditable(data []byte, maxNumElements ...int) (*TupleEditable, error) {
-//	mx := maxTupleLen
-//	if len(maxNumElements) > 0 {
-//		mx = maxNumElements[0]
-//	}
-//	arr, err := TupleFromBytes(data, mx)
-//	if err != nil {
-//		return nil, fmt.Errorf("ArrayFromBytesEditable: %v", err)
-//	}
-//	elements := make([][]byte, arr.NumElements())
-//	arr.ForEach(func(i int, d []byte) bool {
-//		elements[i] = d
-//		return true
-//	})
-//	return &TupleEditable{
-//		elements:       elements,
-//		maxNumElements: mx,
-//	}, nil
-//}
+func TupleFromBytesEditable(data []byte, maxNumElements ...int) (*TupleEditable, error) {
+	mx := maxTupleLen
+	if len(maxNumElements) > 0 {
+		mx = maxNumElements[0]
+	}
+	arr, err := TupleFromBytes(data, mx)
+	if err != nil {
+		return nil, fmt.Errorf("ArrayFromBytesEditable: %v", err)
+	}
+	elements := make([][]byte, arr.NumElements())
+	arr.ForEach(func(i int, d []byte) bool {
+		elements[i] = d
+		return true
+	})
+	return &TupleEditable{
+		elements:       elements,
+		maxNumElements: mx,
+	}, nil
+}
 
 // EmptyTupleEditable by default mutable
 func EmptyTupleEditable(maxNumElements ...int) *TupleEditable {
