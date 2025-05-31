@@ -1,7 +1,7 @@
 package easyfl
 
 const baseLibraryDefinitions = `# Base EasyFL library
-hash: 8bdf09e2b0ac49931c31f7cd5de874bb75d770d3ead164351439e25ce87fb476
+hash: 8d5795e2395cb0ef70181f6e5701df2dfcfa18590abc2711b2f0eab29fb0821e
 functions:
 # BEGIN EMBEDDED function definitions
 #    function codes (opcodes) from 0 to 15 are reserved for predefined parameter access functions $i and $$i
@@ -248,14 +248,14 @@ functions:
       numArgs: -1
       embedded: true
    -
-      sym: "atArray8"
-      description: "returns element of the serialized lazy array at index $0"
+      sym: "atTuple8"
+      description: "returns element of the serialized tuple at index $0 which must be 1 byte-long"
       funCode: 79
       numArgs: 2
       embedded: true
    -
-      sym: "arrayLen"
-      description: "returns number of elements of lazy array as 8 byte-long big-endian value"
+      sym: "tupleLen"
+      description: "returns number of elements of a tuple as 8 byte-long big-endian value"
       funCode: 80
       numArgs: 1
       embedded: true

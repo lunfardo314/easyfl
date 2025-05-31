@@ -9,8 +9,8 @@ import (
 	"reflect"
 
 	"github.com/lunfardo314/easyfl/easyfl_util"
-	"github.com/lunfardo314/easyfl/lazybytes"
 	"github.com/lunfardo314/easyfl/slicepool"
+	"github.com/lunfardo314/easyfl/tuples"
 	"golang.org/x/crypto/blake2b"
 )
 
@@ -58,9 +58,9 @@ var unboundEmbeddedFunctions = map[string]EmbeddedFunction{
 	// base crypto
 	"validSignatureED25519": evalValidSigED25519,
 	"blake2b":               evalBlake2b,
-	// lazy array
-	"atArray8": evalAtArray8,
-	"arrayLen": evalNumElementsOfArray,
+	// tuples
+	"atTuple8": evalAtTuple8,
+	"tupleLen": evalNumElementsOfTuple,
 }
 
 func EmbeddedFunctions(targetLib *Library) func(sym string) EmbeddedFunction {
@@ -88,7 +88,7 @@ func (lib *Library) evalCallLocalLibrary(ctx *CallParams) []byte {
 	// arg 0 - local library binary (as a lazy array)
 	// arg 1 - 1-byte index of then function in the library
 	// arg 2 ... arg 15 optional arguments
-	arr, err := lazybytes.ArrayFromBytesReadOnly(ctx.Arg(0))
+	arr, err := tuples.TupleFromBytes(ctx.Arg(0))
 	if err != nil {
 		ctx.TracePanic("evalCallLocalLibrary: %v", err)
 	}
@@ -516,26 +516,26 @@ func evalRShift64(par *CallParams) []byte {
 	return ret
 }
 
-func evalAtArray8(par *CallParams) []byte {
-	arr, err := lazybytes.ArrayFromBytesReadOnly(par.Arg(0))
+func evalAtTuple8(par *CallParams) []byte {
+	arr, err := tuples.TupleFromBytes(par.Arg(0))
 	if err != nil {
-		par.TracePanic("evalAtArray8: %v", err)
+		par.TracePanic("evalAtTuple8: %v", err)
 	}
 	idx := par.Arg(1)
 	if len(idx) != 1 {
-		par.TracePanic("evalAtArray8: 1-byte value expected")
+		par.TracePanic("evalAtTuple8: 1-byte value expected")
 	}
 	ret, err := arr.At(int(idx[0]))
 	if err != nil {
-		par.TracePanic("evalAtArray8: %v", err)
+		par.TracePanic("evalAtTuple8: %v", err)
 	}
 	return ret
 }
 
-func evalNumElementsOfArray(par *CallParams) []byte {
-	arr, err := lazybytes.ArrayFromBytesReadOnly(par.Arg(0))
+func evalNumElementsOfTuple(par *CallParams) []byte {
+	arr, err := tuples.TupleFromBytes(par.Arg(0))
 	if err != nil {
-		par.TracePanic("evalNumElementsOfArray: %v", err)
+		par.TracePanic("evalNumElementsOfTuple: %v", err)
 	}
 	ret := par.Alloc(8)
 	binary.BigEndian.PutUint64(ret, uint64(arr.NumElements()))

@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/lunfardo314/easyfl/easyfl_util"
-	"github.com/lunfardo314/easyfl/lazybytes"
+	"github.com/lunfardo314/easyfl/tuples"
 )
 
 type (
@@ -61,13 +61,13 @@ func (lib *Library) CompileLocalLibrary(source string) ([][]byte, error) {
 	return ret, nil
 }
 
-// CompileLocalLibraryToLazyArray compiles local library and serializes it as lazy array
-func (lib *Library) CompileLocalLibraryToLazyArray(source string) ([]byte, error) {
+// CompileLocalLibraryToTuple compiles local library and serializes it as lazy array
+func (lib *Library) CompileLocalLibraryToTuple(source string) ([]byte, error) {
 	libBin, err := lib.CompileLocalLibrary(source)
 	if err != nil {
 		return nil, err
 	}
-	ret := lazybytes.MakeArrayFromDataReadOnly(libBin...)
+	ret := tuples.MakeTupleFromDataElements(libBin...)
 	return ret.Bytes(), nil
 }
 
