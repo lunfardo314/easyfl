@@ -128,7 +128,7 @@ func (lib *Library) ToYAML(compiled bool, prefix ...string) []byte {
 
 	prn(&buf, "# BEGIN EMBEDDED function definitions\n")
 	if compiled {
-		prn(&buf, "#    function codes (opcodes) from %d to %d are reserved for predefined parameter access functions $i and $$i\n", FirstEmbeddedReserved, LastEmbeddedReserved)
+		prn(&buf, "#    function codes (opcodes) from %d to %d are reserved for predefined parameter access functions $i\n", FirstEmbeddedReserved, LastEmbeddedReserved)
 	}
 	prn(&buf, "# BEGIN SHORT EMBEDDED function definitions\n")
 	if compiled {

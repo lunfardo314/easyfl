@@ -274,7 +274,7 @@ func evalNot(par *CallParams) []byte {
 }
 
 func evalConcat(par *CallParams) []byte {
-	var args [16][]byte
+	var args [MaxParameters][]byte
 	a := args[:par.Arity()]
 	totalSize := 0
 	for i := range a {

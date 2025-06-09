@@ -49,7 +49,7 @@ func newEvalContext(varScope []*call, glb GlobalData, spool *slicepool.SlicePool
 
 var (
 	callPool     sync.Pool
-	varScopePool [16]sync.Pool
+	varScopePool [MaxParameters + 1]sync.Pool
 )
 
 func newCall(f EvalFunction, args []*Expression, ctx *evalContext) (ret *call) {

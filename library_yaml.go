@@ -1,156 +1,156 @@
 package easyfl
 
 const baseLibraryDefinitions = `# Base EasyFL library
-hash: 8d5795e2395cb0ef70181f6e5701df2dfcfa18590abc2711b2f0eab29fb0821e
+hash: 6ec4a1b7217c7f1992f82b332bdc8e50c97b95a34828218c3760547479563036
 functions:
 # BEGIN EMBEDDED function definitions
-#    function codes (opcodes) from 0 to 15 are reserved for predefined parameter access functions $i and $$i
+#    function codes (opcodes) from 0 to 14 are reserved for predefined parameter access functions $i
 # BEGIN SHORT EMBEDDED function definitions
-#    function codes (opcodes) from 16 to 63 are reserved for 'SHORT EMBEDDED function codes'
+#    function codes (opcodes) from 15 to 63 are reserved for 'SHORT EMBEDDED function codes'
    -
       sym: "fail"
       description: "fails with parameter as panic message, where '_' is replaced with space"
-      funCode: 16
+      funCode: 15
       numArgs: 1
       embedded: true
       short: true
    -
       sym: "slice"
       description: "slice($0,$1,$2) takes a slice of $0, from $1 to $2 inclusive. $1 and $2 must be 1-byte long"
-      funCode: 17
+      funCode: 16
       numArgs: 3
       embedded: true
       short: true
    -
       sym: "byte"
       description: "byte($0,$1) takes byte $1 of $0, returns 1-byte long slice. $1 must be 1-byte long"
-      funCode: 18
+      funCode: 17
       numArgs: 2
       embedded: true
       short: true
    -
       sym: "tail"
       description: "tail($0,$1) returns slice of $0 from $1 to the end"
-      funCode: 19
+      funCode: 18
       numArgs: 2
       embedded: true
       short: true
    -
       sym: "equal"
       description: "equal($0,$1) returns non-empty value if $0 and $1 are equal slices"
-      funCode: 20
+      funCode: 19
       numArgs: 2
       embedded: true
       short: true
    -
       sym: "hasPrefix"
       description: "hasPrefix($0,$1) returns non-empty value if $0 has $1 as prefix"
-      funCode: 21
+      funCode: 20
       numArgs: 2
       embedded: true
       short: true
    -
       sym: "len"
       description: "len($0)returns uint64 big-endian 8 bytes of the length of $0"
-      funCode: 22
+      funCode: 21
       numArgs: 1
       embedded: true
       short: true
    -
       sym: "not"
       description: "not($0) returns 0x if $0 is not empty, and non-empty value if $0 is empty"
-      funCode: 23
+      funCode: 22
       numArgs: 1
       embedded: true
       short: true
    -
       sym: "if"
       description: "if($0,$1,$2) returns eval value of $1 if $0 is non-empty and eval value of $1 otherwise"
-      funCode: 24
+      funCode: 23
       numArgs: 3
       embedded: true
       short: true
    -
       sym: "isZero"
       description: "isZero($0) returns 0x if $0 contains at least one non-zero byte"
-      funCode: 25
+      funCode: 24
       numArgs: 1
       embedded: true
       short: true
    -
       sym: "add"
       description: "add($0,$1) returns $0 + $1 as big-endian uint64. $0 and $1 is expanded to 8 bytes by adding leading 0-s"
-      funCode: 26
+      funCode: 25
       numArgs: 2
       embedded: true
       short: true
    -
       sym: "sub"
       description: "sub($0,$1) returns $0 - $1 as big-endian uint64 or panics with 'underflow' if $0<$1. $0 and $1 is expanded to 8 bytes by adding leading 0-s"
-      funCode: 27
+      funCode: 26
       numArgs: 2
       embedded: true
       short: true
    -
       sym: "mul"
       description: "mul($0,$1) returns $0 x $1 as big-endian uint64. $0 and $1 is expanded to 8 bytes by adding leading 0-s"
-      funCode: 28
+      funCode: 27
       numArgs: 2
       embedded: true
       short: true
    -
       sym: "div"
       description: "div($0,$1) returns $0 / $1 (integer division) as big-endian uint64 or panics if $1 is 0. $0 and $1 is expanded to 8 bytes by adding leading 0-s"
-      funCode: 29
+      funCode: 28
       numArgs: 2
       embedded: true
       short: true
    -
       sym: "mod"
       description: "mod($0,$1) returns $0 mod $1 as big-endian uint64 or panics if $1 is 0. $0 and $1 is expanded to 8 bytes by adding leading 0-s"
-      funCode: 30
+      funCode: 29
       numArgs: 2
       embedded: true
       short: true
    -
       sym: "uint8Bytes"
       description: " expands $0 with leading 0-s up to 8 bytes"
-      funCode: 31
+      funCode: 30
       numArgs: 1
       embedded: true
       short: true
    -
       sym: "lessThan"
       description: "returns non-empty value of $0 < $1 lexicographically, otherwise returns 0x. Operands must be of equal length"
-      funCode: 32
+      funCode: 31
       numArgs: 2
       embedded: true
       short: true
    -
       sym: "bitwiseOR"
       description: "bitwise OR operation on $0 and $1, which must have equal length"
-      funCode: 33
+      funCode: 32
       numArgs: 2
       embedded: true
       short: true
    -
       sym: "bitwiseAND"
       description: "bitwise AND operation on $0 and $1, which must have equal length"
-      funCode: 34
+      funCode: 33
       numArgs: 2
       embedded: true
       short: true
    -
       sym: "bitwiseNOT"
       description: "bitwise inversion of $0"
-      funCode: 35
+      funCode: 34
       numArgs: 1
       embedded: true
       short: true
    -
       sym: "bitwiseXOR"
       description: "bitwise XOR operation on $0 and $1, which must have equal length"
-      funCode: 36
+      funCode: 35
       numArgs: 2
       embedded: true
       short: true
@@ -294,7 +294,7 @@ functions:
       description: "returns $0<=$1. Requires operands must be equal length"
       funCode: 322
       numArgs: 2
-      bytecode: 4842200001140001
+      bytecode: 48421f0001130001
       source: >
          or(lessThan($0,$1),equal($0,$1))         
          
@@ -303,7 +303,7 @@ functions:
       description: "returns $0>$1. Requires operands must be equal length"
       funCode: 323
       numArgs: 2
-      bytecode: 1749420001
+      bytecode: 1649420001
       source: >
          not(lessOrEqualThan($0,$1))         
          
@@ -312,23 +312,14 @@ functions:
       description: "returns $0>=$1. Requires operands must be equal length"
       funCode: 324
       numArgs: 2
-      bytecode: 17200001
+      bytecode: 161f0001
       source: >
          not(lessThan($0,$1))         
          
    -
-      sym: "bytecode"
-      description: "returns bytecode of the operand, i.e. arguments is compiled instead of evaluated"
-      funCode: 325
-      numArgs: 1
-      bytecode: 08
-      source: >
-         $$0         
-         
-   -
       sym: "parseInlineDataArgument"
       description: "in bytecode $0, parses argument with index $2, treats it as inline data call, returns the inline data, Enforces call prefix is equal to $1"
-      funCode: 326
+      funCode: 325
       numArgs: 3
       bytecode: 444d4c4b000102
       source: >
@@ -337,36 +328,36 @@ functions:
    -
       sym: "lessThanUint"
       description: "returns $0<$1 for arguments of any size <= 8. Each of arguments ar expanded fit leading 0-s up to 8 bytes and compare lexicographically"
-      funCode: 327
+      funCode: 326
       numArgs: 2
-      bytecode: 201f001f01
+      bytecode: 1f1e001e01
       source: >
          lessThan(uint8Bytes($0), uint8Bytes($1))         
          
    -
       sym: "equalUint"
       description: "returns $0==$1 preliminary expanding each operand with leading 0-s to 8 bytes"
-      funCode: 328
+      funCode: 327
       numArgs: 2
-      bytecode: 141f001f01
+      bytecode: 131e001e01
       source: >
          equal(uint8Bytes($0), uint8Bytes($1))         
          
    -
       sym: "max"
       description: "returns bigger one out of 2 operands of equal size"
-      funCode: 329
+      funCode: 328
       numArgs: 2
-      bytecode: 182000010100
+      bytecode: 171f00010100
       source: >
          if(lessThan($0,$1),$1,$0)         
          
    -
       sym: "min"
       description: "returns smaller one out of 2 operands of equal size"
-      funCode: 330
+      funCode: 329
       numArgs: 2
-      bytecode: 182000010001
+      bytecode: 171f00010001
       source: >
          if(lessThan($0,$1),$0,$1)         
          

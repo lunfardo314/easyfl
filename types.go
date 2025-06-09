@@ -12,9 +12,8 @@ const (
 
 	FirstEmbeddedReserved = 0x00
 	// MaxParameters maximum number of parameters in the function definition and the call.
-	MaxParameters         = 0x08
-	LastEmbeddedReserved  = FirstEmbeddedReserved + 2*MaxParameters - 1 // 15 reserved for parameter access 2 x 8
-	BytecodeParameterFlag = byte(0x08)
+	MaxParameters        = 0x0f
+	LastEmbeddedReserved = FirstEmbeddedReserved + MaxParameters - 1
 
 	// ----- embedded short
 
@@ -91,7 +90,7 @@ type (
 const traceYN = false
 
 var (
-	expressionArrayPool [15]sync.Pool
+	expressionArrayPool [MaxParameters + 1]sync.Pool
 	expressionPool      sync.Pool
 )
 

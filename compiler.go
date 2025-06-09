@@ -273,26 +273,26 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 			return false, 0, err
 		}
 		return true, 0, nil
-	case strings.HasPrefix(sym, "$$"):
-		// bytecode parameter reference function
-		n, err = strconv.Atoi(sym[2:])
-		if err != nil {
-			return false, 0, err
-		}
-		if n < 0 || n > MaxParameters {
-			return false, 0, fmt.Errorf("wrong bytecode parameter reference '%s'", sym)
-		}
-		if _, err = w.Write([]byte{BytecodeParameterFlag | byte(n)}); err != nil {
-			return false, 0, err
-		}
-		return true, n + 1, nil
+	//case strings.HasPrefix(sym, "$$"):
+	//	// bytecode parameter reference function
+	//	n, err = strconv.Atoi(sym[2:])
+	//	if err != nil {
+	//		return false, 0, err
+	//	}
+	//	if n < 0 || n > MaxParameters {
+	//		return false, 0, fmt.Errorf("wrong bytecode parameter reference '%s'", sym)
+	//	}
+	//	if _, err = w.Write([]byte{BytecodeParameterFlag | byte(n)}); err != nil {
+	//		return false, 0, err
+	//	}
+	//	return true, n + 1, nil
 	case strings.HasPrefix(sym, "$"):
 		// eval parameter reference function
 		n, err = strconv.Atoi(sym[1:])
 		if err != nil {
 			return false, 0, err
 		}
-		if n < 0 || n > MaxParameters {
+		if n < 0 || n > MaxParameters-1 {
 			return false, 0, fmt.Errorf("wrong eval parameter reference '%s'", sym)
 		}
 		if _, err = w.Write([]byte{byte(n)}); err != nil {
@@ -461,6 +461,9 @@ func (lib *Library) ExpressionSourceToBytecode(formulaSource string, localLib ..
 	}
 
 	var buf bytes.Buffer
+	if formulaSource == "concat($15)" {
+		println("")
+	}
 	numArgs, err := f.bytecodeFromParsedExpression(lib, &buf, localLib...)
 	if err != nil {
 		return nil, 0, err
@@ -537,7 +540,6 @@ func writeExpressionSource(w io.Writer, f *Expression) error {
 }
 
 // expressionFromBytecode parses bytecode into the executable expression tree
-// TODO enforce function codes must be strictly less down the call tree (no recursion == non-Turing completeness)
 func (lib *Library) expressionFromBytecode(bytecode []byte, localLib ...*LocalLibrary) (*Expression, []byte, byte, error) {
 	if len(bytecode) == 0 {
 		return nil, nil, 0xff, io.EOF
@@ -570,7 +572,7 @@ func (lib *Library) expressionFromBytecode(bytecode []byte, localLib ...*LocalLi
 	}
 	if len(callPrefix) == 1 && callPrefix[0] < LastEmbeddedReserved {
 		// it is a parameter function call
-		maxParameterNumber = callPrefix[0] & (^BytecodeParameterFlag)
+		maxParameterNumber = callPrefix[0] // & (^BytecodeParameterFlag)
 	}
 	if len(callPrefix) == 1 && arity < 0 {
 		return nil, nil, 0xff, fmt.Errorf("EasyFL: short embedded with vararg is not allowed")
@@ -658,20 +660,26 @@ func (lib *Library) parseCallPrefix(code []byte, localLib ...*LocalLibrary) ([]b
 		// short call
 		if code[0] <= LastEmbeddedReserved {
 			// this is a param reference
-			if code[0]&BytecodeParameterFlag == 0 {
-				// eval param reference
-				evalFun = EvalFunction{
-					EmbeddedFunction: evalEvalParamFun(code[0]),
-				}
-				sym = fmt.Sprintf("$%d", code[0])
-			} else {
-				// bytecode param reference
-				paramNr := code[0] & (^BytecodeParameterFlag)
-				evalFun = EvalFunction{
-					EmbeddedFunction: evalBytecodeParamFun(paramNr),
-				}
-				sym = fmt.Sprintf("$$%d", paramNr)
+			// eval param reference
+			evalFun = EvalFunction{
+				EmbeddedFunction: evalEvalParamFun(code[0]),
 			}
+			sym = fmt.Sprintf("$%d", code[0])
+			//
+			//if code[0]&BytecodeParameterFlag == 0 {
+			//	// eval param reference
+			//	evalFun = EvalFunction{
+			//		EmbeddedFunction: evalEvalParamFun(code[0]),
+			//	}
+			//	sym = fmt.Sprintf("$%d", code[0])
+			//} else {
+			//	// bytecode param reference
+			//	paramNr := code[0] & (^BytecodeParameterFlag)
+			//	evalFun = EvalFunction{
+			//		EmbeddedFunction: evalBytecodeParamFun(paramNr),
+			//	}
+			//	sym = fmt.Sprintf("$$%d", paramNr)
+			//}
 		} else {
 			embeddedFun, arity, sym, err = lib.functionByCode(uint16(code[0]))
 			if err != nil {
