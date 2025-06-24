@@ -39,14 +39,14 @@ type (
 )
 
 // LibraryHash returns hash of the library bytes. used for consistency checking
-func (lib *Library) LibraryHash() [32]byte {
+func (lib *Library[T]) LibraryHash() [32]byte {
 	ret := blake2b.Sum256(lib.libraryBytes())
 	return ret
 }
 
 // libraryBytes is serialized compiled library essence. Data includes names (sym), fun codes, num args and bytecodes
 // in the order of its appearance. I.e. hash does not depend on source and description
-func (lib *Library) libraryBytes() []byte {
+func (lib *Library[T]) libraryBytes() []byte {
 	var buf bytes.Buffer
 
 	lib.write(&buf)
@@ -56,7 +56,7 @@ func (lib *Library) libraryBytes() []byte {
 // currently only serialization is implemented.
 // Serialization is only used for calculating library hash, to support library upgrades
 
-func (lib *Library) write(w io.Writer) {
+func (lib *Library[T]) write(w io.Writer) {
 	_ = binary.Write(w, binary.BigEndian, lib.numEmbeddedShort)
 	_ = binary.Write(w, binary.BigEndian, lib.numEmbeddedLong)
 	_ = binary.Write(w, binary.BigEndian, lib.numExtended)
@@ -73,7 +73,7 @@ func (lib *Library) write(w io.Writer) {
 	}
 }
 
-func (fd *funDescriptor) write(w io.Writer) {
+func (fd *funDescriptor[T]) write(w io.Writer) {
 	// fun code
 	_ = binary.Write(w, binary.BigEndian, fd.funCode)
 
@@ -96,7 +96,7 @@ func (fd *funDescriptor) write(w io.Writer) {
 
 // ToYAML generates YAML data. Prefix is added at the beginning, usually it is a comment
 // If compiled = true, it also adds hash of the library and each function descriptor contain funCode and compiled bytecode (whenever relevant)
-func (lib *Library) ToYAML(compiled bool, prefix ...string) []byte {
+func (lib *Library[T]) ToYAML(compiled bool, prefix ...string) []byte {
 	var buf bytes.Buffer
 
 	if len(prefix) > 0 {
@@ -202,7 +202,7 @@ func prnFuncDescription(w io.Writer, f *FuncDescriptorYAMLAble, compiled bool) {
 	}
 }
 
-func (lib *Library) mustFunYAMLAbleByName(sym string) *FuncDescriptorYAMLAble {
+func (lib *Library[T]) mustFunYAMLAbleByName(sym string) *FuncDescriptorYAMLAble {
 	fi, err := lib.functionByName(sym)
 	easyfl_util.AssertNoError(err)
 	d := lib.funByFunCode[fi.FunCode]
@@ -232,9 +232,9 @@ func ReadLibraryFromYAML(data []byte) (*LibraryFromYAML, error) {
 // If embedding functions are available, embeds them and enforces consistency
 // NOTE: if embedded functions are not provided, library is not ready for use, however its consistency
 // has been checked, and it can be serialized to YAML
-func (lib *Library) Upgrade(fromYAML *LibraryFromYAML, embed ...func(sym string) EmbeddedFunction) error {
+func (lib *Library[T]) Upgrade(fromYAML *LibraryFromYAML, embed ...func(sym string) EmbeddedFunction[T]) error {
 	var err error
-	var ef EmbeddedFunction
+	var ef EmbeddedFunction[T]
 
 	for _, d := range fromYAML.Functions {
 		if d.Embedded {
@@ -261,7 +261,7 @@ func (lib *Library) Upgrade(fromYAML *LibraryFromYAML, embed ...func(sym string)
 	return nil
 }
 
-func (lib *Library) UpgradeFromYAML(yamlData []byte, embed ...func(sym string) EmbeddedFunction) error {
+func (lib *Library[T]) UpgradeFromYAML(yamlData []byte, embed ...func(sym string) EmbeddedFunction[T]) error {
 	fromYAML, err := ReadLibraryFromYAML(yamlData)
 	if err != nil {
 		return err
@@ -269,12 +269,12 @@ func (lib *Library) UpgradeFromYAML(yamlData []byte, embed ...func(sym string) E
 	return lib.Upgrade(fromYAML, embed...)
 }
 
-func (libYAML *LibraryFromYAML) ValidateCompiled() error {
+func ValidateCompiled[T any](libYAML *LibraryFromYAML) error {
 	hashProvidedBin, err := hex.DecodeString(libYAML.Hash)
 	if err != nil || len(hashProvidedBin) != sha256.Size {
 		return fmt.Errorf("ValidateCompiled: not compiled or wrong hash string")
 	}
-	lib := NewLibrary()
+	lib := NewLibrary[T]()
 	if err = lib.Upgrade(libYAML); err != nil {
 		return err
 	}

@@ -25,9 +25,9 @@ type funParsed struct {
 }
 
 // parsedExpression interim representation of the parsed expression
-type parsedExpression struct {
+type parsedExpression[T any] struct {
 	sym    string
-	params []*parsedExpression
+	params []*parsedExpression[T]
 }
 
 // parseFunctions parses many function definitions
@@ -98,11 +98,11 @@ func stripSpaces(str string) string {
 	}, str)
 }
 
-func parseExpression(s string) (*parsedExpression, error) {
+func parseExpression[T any](s string) (*parsedExpression[T], error) {
 	name, rest, foundOpen := strings.Cut(s, "(")
-	f := &parsedExpression{
+	f := &parsedExpression[T]{
 		sym:    name,
-		params: make([]*parsedExpression, 0),
+		params: make([]*parsedExpression[T], 0),
 	}
 	if !foundOpen {
 		if strings.Contains(rest, ")") || strings.Contains(rest, ",") {
@@ -114,9 +114,9 @@ func parseExpression(s string) (*parsedExpression, error) {
 	if err != nil {
 		return nil, err
 	}
-	var ff *parsedExpression
+	var ff *parsedExpression[T]
 	for _, _call := range spl {
-		if ff, err = parseExpression(_call); err != nil {
+		if ff, err = parseExpression[T](_call); err != nil {
 			return nil, err
 		}
 		f.params = append(f.params, ff)
@@ -193,7 +193,7 @@ const (
 )
 
 // bytecodeFromParsedExpression takes parsed expression and generates bytecode of it
-func (f *parsedExpression) bytecodeFromParsedExpression(lib *Library, w io.Writer, localLib ...*LocalLibrary) (int, error) {
+func (f *parsedExpression[T]) bytecodeFromParsedExpression(lib *Library[T], w io.Writer, localLib ...*LocalLibrary[T]) (int, error) {
 	numArgs := 0
 	if len(f.params) == 0 {
 		isLiteral, nArgs, err := parseLiteral(lib, f.sym, w)
@@ -254,7 +254,7 @@ func mustDataWithPrefix(data []byte) []byte {
 	return buf.Bytes()
 }
 
-func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
+func parseLiteral[T any](lib *Library[T], sym string, w io.Writer) (bool, int, error) {
 	// write bytecode data
 	n, err := strconv.Atoi(sym)
 	itIsANumber := err == nil
@@ -454,8 +454,8 @@ func parseLiteral(lib *Library, sym string, w io.Writer) (bool, int, error) {
 }
 
 // ExpressionSourceToBytecode compiles expression from source form into the canonical bytecode representation
-func (lib *Library) ExpressionSourceToBytecode(formulaSource string, localLib ...*LocalLibrary) ([]byte, int, error) {
-	f, err := parseExpression(formulaSource)
+func (lib *Library[T]) ExpressionSourceToBytecode(formulaSource string, localLib ...*LocalLibrary[T]) ([]byte, int, error) {
+	f, err := parseExpression[T](formulaSource)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -472,7 +472,7 @@ func (lib *Library) ExpressionSourceToBytecode(formulaSource string, localLib ..
 }
 
 // ExpressionFromBytecode creates an evaluation form of the expression from its canonical representation as a bytecode
-func (lib *Library) ExpressionFromBytecode(code []byte, localLib ...*LocalLibrary) (*Expression, error) {
+func (lib *Library[T]) ExpressionFromBytecode(code []byte, localLib ...*LocalLibrary[T]) (*Expression[T], error) {
 	ret, remaining, _, err := lib.expressionFromBytecode(code, localLib...)
 	if err != nil {
 		return nil, err
@@ -485,20 +485,20 @@ func (lib *Library) ExpressionFromBytecode(code []byte, localLib ...*LocalLibrar
 }
 
 // ExpressionToBytecode converts the evaluation form of the expression into the canonical bytecode form
-func ExpressionToBytecode(f *Expression) []byte {
+func ExpressionToBytecode[T any](f *Expression[T]) []byte {
 	var buf bytes.Buffer
 	easyfl_util.AssertNoError(writeExpressionBytecode(&buf, f))
 	return buf.Bytes()
 }
 
 // ExpressionToSource converts evaluation form of the expression into the source form (decompiles)
-func ExpressionToSource(f *Expression) string {
+func ExpressionToSource[T any](f *Expression[T]) string {
 	var buf bytes.Buffer
 	easyfl_util.AssertNoError(writeExpressionSource(&buf, f))
 	return string(buf.Bytes())
 }
 
-func writeExpressionBytecode(w io.Writer, expr *Expression) error {
+func writeExpressionBytecode[T any](w io.Writer, expr *Expression[T]) error {
 	if _, err := w.Write(expr.CallPrefix); err != nil {
 		return err
 	}
@@ -510,7 +510,7 @@ func writeExpressionBytecode(w io.Writer, expr *Expression) error {
 	return nil
 }
 
-func writeExpressionSource(w io.Writer, f *Expression) error {
+func writeExpressionSource[T any](w io.Writer, f *Expression[T]) error {
 	if _, err := w.Write([]byte(f.FunctionName)); err != nil {
 		return err
 	}
@@ -540,7 +540,7 @@ func writeExpressionSource(w io.Writer, f *Expression) error {
 }
 
 // expressionFromBytecode parses bytecode into the executable expression tree
-func (lib *Library) expressionFromBytecode(bytecode []byte, localLib ...*LocalLibrary) (*Expression, []byte, byte, error) {
+func (lib *Library[T]) expressionFromBytecode(bytecode []byte, localLib ...*LocalLibrary[T]) (*Expression[T], []byte, byte, error) {
 	if len(bytecode) == 0 {
 		return nil, nil, 0xff, io.EOF
 	}
@@ -559,8 +559,8 @@ func (lib *Library) expressionFromBytecode(bytecode []byte, localLib ...*LocalLi
 		default:
 			sym = fmt.Sprintf("0x%s", hex.EncodeToString(dataPrefix[1:]))
 		}
-		ret := newExpression(sym, dataPrefix, 0)
-		ret.EvalFunc = dataFunction(dataPrefix[1:])
+		ret := newExpression[T](sym, dataPrefix, 0)
+		ret.EvalFunc = dataFunction[T](dataPrefix[1:])
 		return ret, bytecode[len(dataPrefix):], 0xff, nil
 	}
 	maxParameterNumber := byte(0xff)
@@ -579,11 +579,11 @@ func (lib *Library) expressionFromBytecode(bytecode []byte, localLib ...*LocalLi
 	}
 	easyfl_util.Assertf(arity >= 0, "EasyFL: arity >= 0")
 
-	ret := newExpression(sym, callPrefix, arity)
+	ret := newExpression[T](sym, callPrefix, arity)
 
 	bytecode = bytecode[len(callPrefix):]
 	// collect call Args
-	var p *Expression
+	var p *Expression[T]
 	var m byte
 	for i := 0; i < arity; i++ {
 		p, bytecode, m, err = lib.expressionFromBytecode(bytecode, localLib...)
@@ -602,7 +602,7 @@ func (lib *Library) expressionFromBytecode(bytecode []byte, localLib ...*LocalLi
 }
 
 // CompileExpression compiles from sources directly into the evaluation form
-func (lib *Library) CompileExpression(source string, localLib ...*LocalLibrary) (*Expression, int, []byte, error) {
+func (lib *Library[T]) CompileExpression(source string, localLib ...*LocalLibrary[T]) (*Expression[T], int, []byte, error) {
 	src := strings.Join(splitLinesStripComments(source), "")
 	bytecode, numParams, err := lib.ExpressionSourceToBytecode(stripSpaces(src), localLib...)
 	if err != nil {
@@ -616,7 +616,7 @@ func (lib *Library) CompileExpression(source string, localLib ...*LocalLibrary) 
 }
 
 // DecompileBytecode decompiles canonical bytecode into source. Symbols are restored wherever possible
-func (lib *Library) DecompileBytecode(code []byte) (string, error) {
+func (lib *Library[T]) DecompileBytecode(code []byte) (string, error) {
 	f, err := lib.ExpressionFromBytecode(code)
 	if err != nil {
 		return "", err
@@ -624,10 +624,10 @@ func (lib *Library) DecompileBytecode(code []byte) (string, error) {
 	return ExpressionToSource(f), nil
 }
 
-func dataFunction(data []byte) EvalFunction {
+func dataFunction[T any](data []byte) EvalFunction[T] {
 	d := data
-	return EvalFunction{
-		EmbeddedFunction: func(par *CallParams) []byte {
+	return EvalFunction[T]{
+		EmbeddedFunction: func(par *CallParams[T]) []byte {
 			par.Trace("-> %s", easyfl_util.Fmt(d))
 			return data
 		},
@@ -644,13 +644,13 @@ func dataFunction(data []byte) EvalFunction {
 // - call arity
 // - symbol
 // - error or nil
-func (lib *Library) parseCallPrefix(code []byte, localLib ...*LocalLibrary) ([]byte, EvalFunction, int, string, error) {
+func (lib *Library[T]) parseCallPrefix(code []byte, localLib ...*LocalLibrary[T]) ([]byte, EvalFunction[T], int, string, error) {
 	if len(code) == 0 || HasInlineDataPrefix(code) {
-		return nil, EvalFunction{}, 0, "", fmt.Errorf("parseCallPrefix: not a function call")
+		return nil, EvalFunction[T]{}, 0, "", fmt.Errorf("parseCallPrefix: not a function call")
 	}
 
-	var evalFun EvalFunction
-	var embeddedFun EmbeddedFunction
+	var evalFun EvalFunction[T]
+	var embeddedFun EmbeddedFunction[T]
 	var numParams, arity int
 	var err error
 	var callPrefix []byte
@@ -661,31 +661,16 @@ func (lib *Library) parseCallPrefix(code []byte, localLib ...*LocalLibrary) ([]b
 		if code[0] <= LastEmbeddedReserved {
 			// this is a param reference
 			// eval param reference
-			evalFun = EvalFunction{
-				EmbeddedFunction: evalEvalParamFun(code[0]),
+			evalFun = EvalFunction[T]{
+				EmbeddedFunction: evalEvalParamFun[T](code[0]),
 			}
 			sym = fmt.Sprintf("$%d", code[0])
-			//
-			//if code[0]&BytecodeParameterFlag == 0 {
-			//	// eval param reference
-			//	evalFun = EvalFunction{
-			//		EmbeddedFunction: evalEvalParamFun(code[0]),
-			//	}
-			//	sym = fmt.Sprintf("$%d", code[0])
-			//} else {
-			//	// bytecode param reference
-			//	paramNr := code[0] & (^BytecodeParameterFlag)
-			//	evalFun = EvalFunction{
-			//		EmbeddedFunction: evalBytecodeParamFun(paramNr),
-			//	}
-			//	sym = fmt.Sprintf("$$%d", paramNr)
-			//}
 		} else {
 			embeddedFun, arity, sym, err = lib.functionByCode(uint16(code[0]))
 			if err != nil {
-				return nil, EvalFunction{}, 0, sym, err
+				return nil, EvalFunction[T]{}, 0, sym, err
 			}
-			evalFun = EvalFunction{
+			evalFun = EvalFunction[T]{
 				EmbeddedFunction: embeddedFun,
 				bytecode:         code,
 			}
@@ -694,34 +679,34 @@ func (lib *Library) parseCallPrefix(code []byte, localLib ...*LocalLibrary) ([]b
 	} else {
 		// long call
 		if len(code) < 2 {
-			return nil, EvalFunction{}, 0, "", io.EOF
+			return nil, EvalFunction[T]{}, 0, "", io.EOF
 		}
 		arity = int((code[0] & FirstByteLongCallArityMask) >> 2)
 		t := binary.BigEndian.Uint16(code[:2])
 		idx := t & Uint16LongCallCodeMask
 		if idx > FirstLocalFunCode {
-			return nil, EvalFunction{}, 0, "", fmt.Errorf("wrong call prefix")
+			return nil, EvalFunction[T]{}, 0, "", fmt.Errorf("wrong call prefix")
 		}
 		callPrefix = code[:2]
 		if idx == FirstLocalFunCode {
 			// it is a local library call
 			if len(localLib) == 0 {
-				return nil, EvalFunction{}, 0, "", fmt.Errorf("local library not provided")
+				return nil, EvalFunction[T]{}, 0, "", fmt.Errorf("local library not provided")
 			}
 			if len(code) < 3 {
-				return nil, EvalFunction{}, 0, "", io.EOF
+				return nil, EvalFunction[T]{}, 0, "", io.EOF
 			}
 			idx = uint16(FirstLocalFunCode) + uint16(code[2])
 			callPrefix = code[:3]
 		}
 		embeddedFun, numParams, sym, err = lib.functionByCode(idx, localLib...)
 		if err != nil {
-			return nil, EvalFunction{}, 0, "", err
+			return nil, EvalFunction[T]{}, 0, "", err
 		}
 		if numParams > 0 && numParams != arity {
-			return nil, EvalFunction{}, 0, "", fmt.Errorf("wrong number of call args")
+			return nil, EvalFunction[T]{}, 0, "", fmt.Errorf("wrong number of call args")
 		}
-		evalFun = EvalFunction{
+		evalFun = EvalFunction[T]{
 			EmbeddedFunction: embeddedFun,
 			bytecode:         code,
 		}
@@ -772,7 +757,7 @@ func StripDataPrefix(data []byte) []byte {
 // 1 byte for the short calls and inline data
 // 2 bytes for the long calls
 // 3 bytes for local library call
-func (lib *Library) ParsePrefixBytecode(code []byte) ([]byte, error) {
+func (lib *Library[T]) ParsePrefixBytecode(code []byte) ([]byte, error) {
 	callPrefix, _, _, _, err := lib.parseCallPrefix(code)
 	if err != nil {
 		return nil, err
@@ -788,7 +773,7 @@ func (lib *Library) ParsePrefixBytecode(code []byte) ([]byte, error) {
 // Note, that argi is a canonical form of some expression too and the original expression is a concatenation
 // of its on-level parsed form.
 // To have the next level, the argument can be parsed one level again
-func (lib *Library) ParseBytecodeOneLevel(code []byte, expectedNumArgs ...int) (string, []byte, [][]byte, error) {
+func (lib *Library[T]) ParseBytecodeOneLevel(code []byte, expectedNumArgs ...int) (string, []byte, [][]byte, error) {
 	f, err := lib.ExpressionFromBytecode(code)
 
 	if err != nil {
@@ -847,9 +832,9 @@ func ComposeBytecodeOneLevel(sym string, args [][]byte) string {
 	return ret
 }
 
-func makeEmbeddedFunForExpression(sym string, expr *Expression) EmbeddedFunction {
-	return func(par *CallParams) []byte {
-		varScope := newVarScope(len(par.args))
+func makeEmbeddedFunForExpression[T any](sym string, expr *Expression[T]) EmbeddedFunction[T] {
+	return func(par *CallParams[T]) []byte {
+		varScope := newVarScope[T](len(par.args))
 
 		for i := range varScope {
 			varScope[i] = newCall(par.args[i].EvalFunc, par.args[i].Args, par.ctx)

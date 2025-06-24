@@ -19,53 +19,55 @@ import (
 //  - certain function could be optimized.
 //  - do we need short end long embedding?
 
-var unboundEmbeddedFunctions = map[string]EmbeddedFunction{
-	// short base
-	"fail":      evalFail,
-	"slice":     evalSlice,
-	"byte":      evalByte,
-	"tail":      evalTail,
-	"equal":     evalEqual,
-	"hasPrefix": evalHasPrefix,
-	"len":       evalLen,
-	"not":       evalNot,
-	"if":        evalIf,
-	"isZero":    evalIsZero,
-	// long base
-	"concat":            evalConcat,
-	"and":               evalAnd,
-	"or":                evalOr,
-	"repeat":            evalRepeat,
-	"firstCaseIndex":    evalFirstCaseIndex,
-	"firstEqualIndex":   evalFirstEqualIndex,
-	"selectCaseByIndex": evalSelectCaseByIndex,
-	// arithmetics short
-	"add":        evalAddUint,
-	"sub":        evalSubUint,
-	"mul":        evalMulUint,
-	"div":        evalDivUint,
-	"mod":        evalModuloUint,
-	"uint8Bytes": evalUint8Bytes,
-	// bitwise and compare short
-	"lessThan":   evalLessThan,
-	"bitwiseOR":  evalBitwiseOR,
-	"bitwiseAND": evalBitwiseAND,
-	"bitwiseNOT": evalBitwiseNOT,
-	"bitwiseXOR": evalBitwiseXOR,
-	// bitwise long
-	"lshift64": evalLShift64,
-	"rshift64": evalRShift64,
-	// base crypto
-	"validSignatureED25519": evalValidSigED25519,
-	"blake2b":               evalBlake2b,
-	// tuples
-	"atTuple8": evalAtTuple8,
-	"tupleLen": evalNumElementsOfTuple,
+func unboundEmbeddedFunctions[T any]() map[string]EmbeddedFunction[T] {
+	return map[string]EmbeddedFunction[T]{
+		// short base
+		"fail":      evalFail[T],
+		"slice":     evalSlice[T],
+		"byte":      evalByte[T],
+		"tail":      evalTail[T],
+		"equal":     evalEqual[T],
+		"hasPrefix": evalHasPrefix[T],
+		"len":       evalLen[T],
+		"not":       evalNot[T],
+		"if":        evalIf[T],
+		"isZero":    evalIsZero[T],
+		// long base
+		"concat":            evalConcat[T],
+		"and":               evalAnd[T],
+		"or":                evalOr[T],
+		"repeat":            evalRepeat[T],
+		"firstCaseIndex":    evalFirstCaseIndex[T],
+		"firstEqualIndex":   evalFirstEqualIndex[T],
+		"selectCaseByIndex": evalSelectCaseByIndex[T],
+		// arithmetics short
+		"add":        evalAddUint[T],
+		"sub":        evalSubUint[T],
+		"mul":        evalMulUint[T],
+		"div":        evalDivUint[T],
+		"mod":        evalModuloUint[T],
+		"uint8Bytes": evalUint8Bytes[T],
+		// bitwise and compare short
+		"lessThan":   evalLessThan[T],
+		"bitwiseOR":  evalBitwiseOR[T],
+		"bitwiseAND": evalBitwiseAND[T],
+		"bitwiseNOT": evalBitwiseNOT[T],
+		"bitwiseXOR": evalBitwiseXOR[T],
+		// bitwise long
+		"lshift64": evalLShift64[T],
+		"rshift64": evalRShift64[T],
+		// base crypto
+		"validSignatureED25519": evalValidSigED25519[T],
+		"blake2b":               evalBlake2b[T],
+		// tuples
+		"atTuple8": evalAtTuple8[T],
+		"tupleLen": evalNumElementsOfTuple[T],
+	}
 }
-
-func EmbeddedFunctions(targetLib *Library) func(sym string) EmbeddedFunction {
-	return func(sym string) EmbeddedFunction {
-		if ret, found := unboundEmbeddedFunctions[sym]; found {
+func EmbeddedFunctions[T any](targetLib *Library[T]) func(sym string) EmbeddedFunction[T] {
+	embTyped := unboundEmbeddedFunctions[T]()
+	return func(sym string) EmbeddedFunction[T] {
+		if ret, found := embTyped[sym]; found {
 			return ret
 		}
 		// function bound to a particular target library
@@ -84,7 +86,7 @@ func EmbeddedFunctions(targetLib *Library) func(sym string) EmbeddedFunction {
 }
 
 // evalCallLocalLibrary not tested here, only in Proxima
-func (lib *Library) evalCallLocalLibrary(ctx *CallParams) []byte {
+func (lib *Library[T]) evalCallLocalLibrary(ctx *CallParams[T]) []byte {
 	// arg 0 - local library binary (as a lazy array)
 	// arg 1 - 1-byte index of then function in the library
 	// arg 2 ... arg 15 optional arguments
@@ -108,7 +110,7 @@ func isNil(p interface{}) bool {
 	return p == nil || (reflect.ValueOf(p).Kind() == reflect.Ptr && reflect.ValueOf(p).IsNil())
 }
 
-func evalFail(par *CallParams) []byte {
+func evalFail[T any](par *CallParams[T]) []byte {
 	c := par.Arg(0)
 	if len(c) == 1 {
 		par.TracePanic("SCRIPT FAIL: error #%d", c[0])
@@ -118,7 +120,7 @@ func evalFail(par *CallParams) []byte {
 }
 
 // slices first argument 'from' 'to' inclusive 'to'
-func evalSlice(par *CallParams) []byte {
+func evalSlice[T any](par *CallParams[T]) []byte {
 	data := par.Arg(0)
 	from := par.Arg(1)
 	to := par.Arg(2)
@@ -137,7 +139,7 @@ func evalSlice(par *CallParams) []byte {
 	return ret
 }
 
-func evalByte(par *CallParams) []byte {
+func evalByte[T any](par *CallParams[T]) []byte {
 	data := par.Arg(0)
 	idx := par.Arg(1)
 	if len(idx) != 1 || int(idx[0]) >= len(data) {
@@ -148,7 +150,7 @@ func evalByte(par *CallParams) []byte {
 	return ret
 }
 
-func evalTail(par *CallParams) []byte {
+func evalTail[T any](par *CallParams[T]) []byte {
 	data := par.Arg(0)
 	from := par.Arg(1)
 	if len(from) != 1 || int(from[0]) >= len(data) {
@@ -159,7 +161,7 @@ func evalTail(par *CallParams) []byte {
 	return ret
 }
 
-func evalEqual(par *CallParams) []byte {
+func evalEqual[T any](par *CallParams[T]) []byte {
 	var ret []byte
 	p0 := par.Arg(0)
 	p1 := par.Arg(1)
@@ -170,7 +172,7 @@ func evalEqual(par *CallParams) []byte {
 	return ret
 }
 
-func evalHasPrefix(par *CallParams) []byte {
+func evalHasPrefix[T any](par *CallParams[T]) []byte {
 	var ret []byte
 	data := par.Arg(0)
 	prefix := par.Arg(1)
@@ -181,7 +183,7 @@ func evalHasPrefix(par *CallParams) []byte {
 	return ret
 }
 
-func evalRepeat(par *CallParams) []byte {
+func evalRepeat[T any](par *CallParams[T]) []byte {
 	fragment := par.Arg(0)
 	n := par.Arg(1)
 	if len(n) != 1 {
@@ -192,7 +194,7 @@ func evalRepeat(par *CallParams) []byte {
 	return ret
 }
 
-func evalLen(par *CallParams) []byte {
+func evalLen[T any](par *CallParams[T]) []byte {
 	data := par.Arg(0)
 	ret := par.Alloc(8)
 	binary.BigEndian.PutUint64(ret, uint64(len(data)))
@@ -200,7 +202,7 @@ func evalLen(par *CallParams) []byte {
 	return ret[:]
 }
 
-func evalIf(par *CallParams) []byte {
+func evalIf[T any](par *CallParams[T]) []byte {
 	cond := par.Arg(0)
 	if len(cond) != 0 {
 		yes := par.Arg(1)
@@ -213,7 +215,7 @@ func evalIf(par *CallParams) []byte {
 }
 
 // evalFirstCaseIndex evaluates and returns first argument with not-nil value
-func evalFirstCaseIndex(par *CallParams) []byte {
+func evalFirstCaseIndex[T any](par *CallParams[T]) []byte {
 	for i := byte(0); i < par.Arity(); i++ {
 		if c := par.Arg(i); len(c) > 0 {
 			par.Trace("firstCaseIndex:: -> %d", i)
@@ -224,7 +226,7 @@ func evalFirstCaseIndex(par *CallParams) []byte {
 	return nil
 }
 
-func evalFirstEqualIndex(par *CallParams) []byte {
+func evalFirstEqualIndex[T any](par *CallParams[T]) []byte {
 	if par.Arity() == 0 {
 		return nil
 	}
@@ -240,7 +242,7 @@ func evalFirstEqualIndex(par *CallParams) []byte {
 	return nil
 }
 
-func evalSelectCaseByIndex(par *CallParams) []byte {
+func evalSelectCaseByIndex[T any](par *CallParams[T]) []byte {
 	if par.Arity() == 0 {
 		par.TracePanic("evalSelectCaseByIndex: must be at least 1 argument")
 	}
@@ -251,7 +253,7 @@ func evalSelectCaseByIndex(par *CallParams) []byte {
 	return par.Arg(idx[0] + 1)
 }
 
-func evalIsZero(par *CallParams) []byte {
+func evalIsZero[T any](par *CallParams[T]) []byte {
 	arg := par.Arg(0)
 	for _, b := range arg {
 		if b != 0 {
@@ -263,7 +265,7 @@ func evalIsZero(par *CallParams) []byte {
 	return par.AllocData(0xff)
 }
 
-func evalNot(par *CallParams) []byte {
+func evalNot[T any](par *CallParams[T]) []byte {
 	arg := par.Arg(0)
 	if len(arg) == 0 {
 		par.Trace("not:: %s -> true", easyfl_util.FmtLazy(arg))
@@ -273,7 +275,7 @@ func evalNot(par *CallParams) []byte {
 	return nil
 }
 
-func evalConcat(par *CallParams) []byte {
+func evalConcat[T any](par *CallParams[T]) []byte {
 	var args [MaxParameters][]byte
 	a := args[:par.Arity()]
 	totalSize := 0
@@ -290,7 +292,7 @@ func evalConcat(par *CallParams) []byte {
 	return ret
 }
 
-func evalAnd(par *CallParams) []byte {
+func evalAnd[T any](par *CallParams[T]) []byte {
 	for i := byte(0); i < par.Arity(); i++ {
 		if len(par.Arg(i)) == 0 {
 			par.Trace("and:: param %d nil -> nil", i)
@@ -301,7 +303,7 @@ func evalAnd(par *CallParams) []byte {
 	return par.AllocData(0xff)
 }
 
-func evalOr(par *CallParams) []byte {
+func evalOr[T any](par *CallParams[T]) []byte {
 	for i := byte(0); i < par.Arity(); i++ {
 		if len(par.Arg(i)) != 0 {
 			par.Trace("or:: param %d -> true", i)
@@ -326,7 +328,7 @@ func ensure8Bytes(spool *slicepool.SlicePool, data []byte) ([]byte, bool) {
 
 // Must2ArithmeticOperands makes uint64 from both params (big-endian)
 // Parameters must have with size <= 8. They are padded with 0 in upper bytes, if necessary
-func Must2ArithmeticOperands(par *CallParams, name string) (op0 uint64, op1 uint64) {
+func Must2ArithmeticOperands[T any](par *CallParams[T], name string) (op0 uint64, op1 uint64) {
 	var err error
 	a0 := par.Arg(0)
 	if op0, err = easyfl_util.Uint64FromBytes(a0); err != nil {
@@ -341,7 +343,7 @@ func Must2ArithmeticOperands(par *CallParams, name string) (op0 uint64, op1 uint
 	return
 }
 
-func evalAddUint(par *CallParams) []byte {
+func evalAddUint[T any](par *CallParams[T]) []byte {
 	a0, a1 := Must2ArithmeticOperands(par, "addUint")
 	if a0 > math.MaxUint64-a1 {
 		par.TracePanic("evalAddUint:: %d + %d -> overflow in addition", a0, a1)
@@ -351,7 +353,7 @@ func evalAddUint(par *CallParams) []byte {
 	return ret
 }
 
-func evalSubUint(par *CallParams) []byte {
+func evalSubUint[T any](par *CallParams[T]) []byte {
 	a0, a1 := Must2ArithmeticOperands(par, "subUint")
 	if a0 < a1 {
 		par.TracePanic("evalSubUint:: %d - %d -> underflow in subtraction", a0, a1)
@@ -361,7 +363,7 @@ func evalSubUint(par *CallParams) []byte {
 	return ret
 }
 
-func evalMulUint(par *CallParams) []byte {
+func evalMulUint[T any](par *CallParams[T]) []byte {
 	a0, a1 := Must2ArithmeticOperands(par, "mulUint")
 	if a0 == 0 || a1 == 0 {
 		return par.Alloc(8)
@@ -374,7 +376,7 @@ func evalMulUint(par *CallParams) []byte {
 	return ret
 }
 
-func evalDivUint(par *CallParams) []byte {
+func evalDivUint[T any](par *CallParams[T]) []byte {
 	a0, a1 := Must2ArithmeticOperands(par, "divUint")
 	if a1 == 0 {
 		par.TracePanic("evalDivUint:: %d / %d -> divide by zero", a0, a1)
@@ -384,7 +386,7 @@ func evalDivUint(par *CallParams) []byte {
 	return ret
 }
 
-func evalModuloUint(par *CallParams) []byte {
+func evalModuloUint[T any](par *CallParams[T]) []byte {
 	a0, a1 := Must2ArithmeticOperands(par, "moduloUint")
 	if a1 == 0 {
 		par.TracePanic("evalModuloUint:: %d / %d -> divide by zero", a0, a1)
@@ -394,7 +396,7 @@ func evalModuloUint(par *CallParams) []byte {
 	return ret
 }
 
-func evalUint8Bytes(par *CallParams) []byte {
+func evalUint8Bytes[T any](par *CallParams[T]) []byte {
 	ret, ok := ensure8Bytes(par.ctx.spool, par.Arg(0))
 	if !ok {
 		par.TracePanic("%s:: wrong size of parameter", "uint64Bytes")
@@ -403,7 +405,7 @@ func evalUint8Bytes(par *CallParams) []byte {
 }
 
 // lexicographical comparison of two slices of equal length
-func evalLessThan(par *CallParams) []byte {
+func evalLessThan[T any](par *CallParams[T]) []byte {
 	a0 := par.Arg(0)
 	a1 := par.Arg(1)
 
@@ -424,7 +426,7 @@ func evalLessThan(par *CallParams) []byte {
 	return nil // equal -> false
 }
 
-func evalValidSigED25519(par *CallParams) []byte {
+func evalValidSigED25519[T any](par *CallParams[T]) []byte {
 	msg := par.Arg(0)
 	signature := par.Arg(1)
 	pubKey := par.Arg(2)
@@ -439,7 +441,7 @@ func evalValidSigED25519(par *CallParams) []byte {
 	return nil
 }
 
-func evalBlake2b(par *CallParams) []byte {
+func evalBlake2b[T any](par *CallParams[T]) []byte {
 	var buf bytes.Buffer
 	for i := byte(0); i < par.Arity(); i++ {
 		buf.Write(par.Arg(i))
@@ -449,7 +451,7 @@ func evalBlake2b(par *CallParams) []byte {
 	return par.AllocData(ret[:]...) // true
 }
 
-func evalBitwiseAND(par *CallParams) []byte {
+func evalBitwiseAND[T any](par *CallParams[T]) []byte {
 	a0 := par.Arg(0)
 	a1 := par.Arg(1)
 	if len(a0) != len(a1) {
@@ -464,7 +466,7 @@ func evalBitwiseAND(par *CallParams) []byte {
 	return ret
 }
 
-func evalBitwiseOR(par *CallParams) []byte {
+func evalBitwiseOR[T any](par *CallParams[T]) []byte {
 	a0 := par.Arg(0)
 	a1 := par.Arg(1)
 	if len(a0) != len(a1) {
@@ -478,7 +480,7 @@ func evalBitwiseOR(par *CallParams) []byte {
 	return ret
 }
 
-func evalBitwiseXOR(par *CallParams) []byte {
+func evalBitwiseXOR[T any](par *CallParams[T]) []byte {
 	a0 := par.Arg(0)
 	a1 := par.Arg(1)
 	if len(a0) != len(a1) {
@@ -492,7 +494,7 @@ func evalBitwiseXOR(par *CallParams) []byte {
 	return ret
 }
 
-func evalBitwiseNOT(par *CallParams) []byte {
+func evalBitwiseNOT[T any](par *CallParams[T]) []byte {
 	a0 := par.Arg(0)
 	ret := par.Alloc(uint16(len(a0))) // true
 	for i := range a0 {
@@ -502,21 +504,21 @@ func evalBitwiseNOT(par *CallParams) []byte {
 	return ret
 }
 
-func evalLShift64(par *CallParams) []byte {
+func evalLShift64[T any](par *CallParams[T]) []byte {
 	a0, a1 := Must2ArithmeticOperands(par, "lshift64")
 	ret := par.Alloc(8) // true
 	binary.BigEndian.PutUint64(ret, a0<<a1)
 	return ret
 }
 
-func evalRShift64(par *CallParams) []byte {
+func evalRShift64[T any](par *CallParams[T]) []byte {
 	a0, a1 := Must2ArithmeticOperands(par, "lshift64")
 	ret := par.Alloc(8) // true
 	binary.BigEndian.PutUint64(ret, a0>>a1)
 	return ret
 }
 
-func evalAtTuple8(par *CallParams) []byte {
+func evalAtTuple8[T any](par *CallParams[T]) []byte {
 	arr, err := tuples.TupleFromBytes(par.Arg(0))
 	if err != nil {
 		par.TracePanic("evalAtTuple8: %v", err)
@@ -532,7 +534,7 @@ func evalAtTuple8(par *CallParams) []byte {
 	return ret
 }
 
-func evalNumElementsOfTuple(par *CallParams) []byte {
+func evalNumElementsOfTuple[T any](par *CallParams[T]) []byte {
 	arr, err := tuples.TupleFromBytes(par.Arg(0))
 	if err != nil {
 		par.TracePanic("evalNumElementsOfTuple: %v", err)
@@ -542,7 +544,7 @@ func evalNumElementsOfTuple(par *CallParams) []byte {
 	return ret
 }
 
-func (lib *Library) evalParseInlineData(par *CallParams) []byte {
+func (lib *Library[T]) evalParseInlineData(par *CallParams[T]) []byte {
 	dataBytecode := par.Arg(0)
 	if !HasInlineDataPrefix(dataBytecode) {
 		par.TracePanic("evalParseInlineData: not an inline data function call: %s", easyfl_util.FmtLazy(dataBytecode))
@@ -552,7 +554,7 @@ func (lib *Library) evalParseInlineData(par *CallParams) []byte {
 
 // evalParseArgumentBytecode takes bytecode of the argument as is.
 // Note: data prefix is not stripped. To get the data, it must be evaluated
-func (lib *Library) evalParseArgumentBytecode(par *CallParams) []byte {
+func (lib *Library[T]) evalParseArgumentBytecode(par *CallParams[T]) []byte {
 	a0 := par.Arg(0)
 	sym, prefix, args, err := lib.ParseBytecodeOneLevel(a0)
 	if err != nil {
@@ -577,7 +579,7 @@ func (lib *Library) evalParseArgumentBytecode(par *CallParams) []byte {
 	return ret
 }
 
-func (lib *Library) evalParsePrefixBytecode(par *CallParams) []byte {
+func (lib *Library[T]) evalParsePrefixBytecode(par *CallParams[T]) []byte {
 	code := par.Arg(0)
 	prefix, err := lib.ParsePrefixBytecode(code)
 	if err != nil {

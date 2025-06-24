@@ -8,7 +8,7 @@ import (
 )
 
 func TestLibraryRenewYAML(t *testing.T) {
-	lib := NewLibrary()
+	lib := NewLibrary[any]()
 	fromYAML, err := ReadLibraryFromYAML([]byte(baseLibraryDefinitions))
 	require.NoError(t, err)
 	err = lib.Upgrade(fromYAML)
@@ -20,7 +20,7 @@ func TestLibraryRenewYAML(t *testing.T) {
 }
 
 func TestLibrary_ToYAML_not_compiled(t *testing.T) {
-	lib := NewBaseLibrary()
+	lib := NewBaseLibrary[any]()
 	lib.PrintLibraryStats()
 	yamlData := lib.ToYAML(false, "# ------------- base library for testing")
 	t.Logf("----------------------------\n%s", string(yamlData))
@@ -32,7 +32,7 @@ func TestLibrary_ToYAML_not_compiled(t *testing.T) {
 }
 
 func TestLibrary_base_compiled(t *testing.T) {
-	lib := NewBaseLibrary()
+	lib := NewBaseLibrary[any]()
 	lib.PrintLibraryStats()
 	yamlData := lib.ToYAML(true, "# ------------- base library for testing")
 	t.Logf("----------------------------\n%s", string(yamlData))
@@ -42,7 +42,7 @@ func TestLibrary_base_compiled(t *testing.T) {
 }
 
 func TestLibrary_ToYAML_validate(t *testing.T) {
-	lib := NewBaseLibrary()
+	lib := NewBaseLibrary[any]()
 	lib.PrintLibraryStats()
 	// not compiled
 	yamlData := lib.ToYAML(true, "# ------------- base library for testing")
@@ -50,12 +50,12 @@ func TestLibrary_ToYAML_validate(t *testing.T) {
 
 	compiled, err := ReadLibraryFromYAML(yamlData)
 	require.NoError(t, err)
-	err = compiled.ValidateCompiled()
+	err = ValidateCompiled[any](compiled)
 	require.NoError(t, err)
 }
 
 func TestLibrary_ToYAML_upgrade(t *testing.T) {
-	lib := NewBaseLibrary()
+	lib := NewBaseLibrary[any]()
 	lib.PrintLibraryStats()
 
 	yamlData := `

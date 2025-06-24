@@ -36,22 +36,22 @@ const (
 )
 
 type (
-	Expression struct {
+	Expression[T any] struct {
 		// for evaluation
-		Args     []*Expression
-		EvalFunc EvalFunction
+		Args     []*Expression[T]
+		EvalFunc EvalFunction[T]
 		// for code parsing
 		FunctionName string
 		CallPrefix   []byte
 	}
 
-	EmbeddedFunction func(glb *CallParams) []byte
-	EvalFunction     struct {
-		EmbeddedFunction
+	EmbeddedFunction[T any] func(glb *CallParams[T]) []byte
+	EvalFunction[T any]     struct {
+		EmbeddedFunction[T]
 		bytecode []byte
 	}
 
-	funDescriptor struct {
+	funDescriptor[T any] struct {
 		// source name of the function
 		sym string
 		// code of the function
@@ -62,7 +62,7 @@ type (
 		requiredNumParams int
 		// for embedded functions it is hardcoded function, for extended functions is
 		// interpreter closure of the bytecode
-		embeddedFun EmbeddedFunction
+		embeddedFun EmbeddedFunction[T]
 		// only needed for generating YAML
 		source string
 		// any text
@@ -78,9 +78,11 @@ type (
 		NumParams  int
 	}
 
-	Library struct {
-		funByName        map[string]*funDescriptor
-		funByFunCode     map[uint16]*funDescriptor
+	// Library type parameter T is type of the data context
+
+	Library[T any] struct {
+		funByName        map[string]*funDescriptor[T]
+		funByFunCode     map[uint16]*funDescriptor[T]
 		numEmbeddedShort uint16
 		numEmbeddedLong  uint16
 		numExtended      uint16
@@ -94,19 +96,19 @@ var (
 	expressionPool      sync.Pool
 )
 
-func newArgArray(argNum int) (ret []*Expression) {
+func newArgArray[T any](argNum int) (ret []*Expression[T]) {
 	easyfl_util.Assertf(argNum <= MaxParameters, "size<=MaxParameters")
 	if argNum > 0 {
 		if retAny := expressionArrayPool[argNum].Get(); retAny != nil {
-			ret = retAny.([]*Expression)
+			ret = retAny.([]*Expression[T])
 		} else {
-			ret = make([]*Expression, argNum)
+			ret = make([]*Expression[T], argNum)
 		}
 	}
 	return ret
 }
 
-func disposeArgArray(argArr []*Expression) {
+func disposeArgArray[T any](argArr []*Expression[T]) {
 	for i := range argArr {
 		disposeExpression(argArr[i])
 		argArr[i] = nil
@@ -114,55 +116,26 @@ func disposeArgArray(argArr []*Expression) {
 	expressionArrayPool[len(argArr)].Put(argArr)
 }
 
-func newExpression(funName string, callPrefix []byte, numArg int) (ret *Expression) {
+func newExpression[T any](funName string, callPrefix []byte, numArg int) (ret *Expression[T]) {
 	if retAny := expressionPool.Get(); retAny != nil {
-		ret = retAny.(*Expression)
+		ret = retAny.(*Expression[T])
 	} else {
-		ret = &Expression{}
+		ret = &Expression[T]{}
 	}
 	ret.FunctionName = funName
 	ret.CallPrefix = callPrefix
-	ret.Args = newArgArray(numArg)
+	ret.Args = newArgArray[T](numArg)
 	return
 }
 
-func disposeExpression(expr *Expression) {
+func disposeExpression[T any](expr *Expression[T]) {
 	disposeArgArray(expr.Args)
-	*expr = Expression{}
+	*expr = Expression[T]{}
 	expressionPool.Put(expr)
 }
 
-// TODO optimize heap allocations with these small slices
-
-//const smallByteArrayMax = 64
-//
-//var smallByteArrayPool [smallByteArrayMax]sync.Pool
+// TODO optimize heap allocation for small objects
 
 func makeSmallByteArray(sz int) []byte {
 	return make([]byte, sz)
-	//if sz == 0 {
-	//	return nil
-	//}
-	//if sz > smallByteArrayMax {
-	//	return make([]byte, sz)
-	//}
-	//if retAny := smallByteArrayPool[sz-1].Get(); retAny != nil {
-	//	return retAny.([]byte)
-	//}
-	//return make([]byte, sz)
-}
-
-// disposeSmallByteArray does not make zeroes
-func disposeSmallByteArray(arr []byte) {
-	//if len(arr) == 0 || len(arr) > smallByteArrayMax {
-	//	return
-	//}
-	//smallByteArrayPool[len(arr)-1].Put(arr)
-}
-
-func nulls(data []byte) []byte {
-	for i := range data {
-		data[i] = 0
-	}
-	return data
 }

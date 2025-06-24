@@ -10,37 +10,37 @@ import (
 	"github.com/lunfardo314/easyfl/slicepool"
 )
 
-// GlobalData represents the data to be evaluated. It is wrapped into the interface
-// which offers some tracing options
-type GlobalData interface {
-	Data() interface{} // return data being evaluated. It is interpreted by the transaction host
-	Trace() bool       // should return true if tracing enabled
-	PutTrace(string)   // hook for tracing messages. Called only if enabled
+// GlobalData represents the data to be evaluated. It is wrapped into the interface which offers some tracing options
+// Type parameter T is type of data provided in the eval context
+type GlobalData[T any] interface {
+	Data() T         // return data being evaluated. It is interpreted by the transaction host
+	Trace() bool     // should return true if tracing enabled
+	PutTrace(string) // hook for tracing messages. Called only if enabled
 }
 
 // evalContext is the structure through which the EasyFL script accesses data structure it is validating
-type evalContext struct {
-	glb      GlobalData
+type evalContext[T any] struct {
+	glb      GlobalData[T]
 	spool    *slicepool.SlicePool
-	varScope []*call
+	varScope []*call[T]
 }
 
 // CallParams is a structure through which the function accesses its evaluation context and call arguments
-type CallParams struct {
-	ctx  *evalContext
-	args []*Expression
+type CallParams[T any] struct {
+	ctx  *evalContext[T]
+	args []*Expression[T]
 }
 
 // call is EvalFunction with params
-type call struct {
-	f      EvalFunction
-	params *CallParams
+type call[T any] struct {
+	f      EvalFunction[T]
+	params *CallParams[T]
 	cache  []byte
 	cached bool
 }
 
-func newEvalContext(varScope []*call, glb GlobalData, spool *slicepool.SlicePool) *evalContext {
-	return &evalContext{
+func newEvalContext[T any](varScope []*call[T], glb GlobalData[T], spool *slicepool.SlicePool) *evalContext[T] {
+	return &evalContext[T]{
 		varScope: varScope,
 		spool:    spool,
 		glb:      glb,
@@ -52,15 +52,15 @@ var (
 	varScopePool [MaxParameters + 1]sync.Pool
 )
 
-func newCall(f EvalFunction, args []*Expression, ctx *evalContext) (ret *call) {
+func newCall[T any](f EvalFunction[T], args []*Expression[T], ctx *evalContext[T]) (ret *call[T]) {
 	if retAny := callPool.Get(); retAny != nil {
-		ret = retAny.(*call)
+		ret = retAny.(*call[T])
 	} else {
-		ret = &call{}
+		ret = &call[T]{}
 	}
-	*ret = call{
+	*ret = call[T]{
 		f: f,
-		params: &CallParams{
+		params: &CallParams[T]{
 			ctx:  ctx,
 			args: args,
 		},
@@ -68,23 +68,23 @@ func newCall(f EvalFunction, args []*Expression, ctx *evalContext) (ret *call) {
 	return
 }
 
-func disposeCall(c *call) {
-	*c = call{}
+func disposeCall[T any](c *call[T]) {
+	*c = call[T]{}
 	callPool.Put(c)
 }
 
-func newVarScope(sz int) []*call {
+func newVarScope[T any](sz int) []*call[T] {
 	if sz == 0 {
 		return nil
 	}
 	easyfl_util.Assertf(sz <= MaxParameters, "sz <= MaxParameters")
 	if retAny := varScopePool[sz-1].Get(); retAny != nil {
-		return retAny.([]*call)
+		return retAny.([]*call[T])
 	}
-	return make([]*call, sz)
+	return make([]*call[T], sz)
 }
 
-func disposeVarScope(vs []*call) {
+func disposeVarScope[T any](vs []*call[T]) {
 	if len(vs) == 0 {
 		return
 	}
@@ -96,7 +96,7 @@ func disposeVarScope(vs []*call) {
 }
 
 // Eval evaluates the expression by calling it eval function with the parameter
-func (c *call) Eval() []byte {
+func (c *call[T]) Eval() []byte {
 	if c.cached {
 		return c.cache
 	}
@@ -106,24 +106,24 @@ func (c *call) Eval() []byte {
 }
 
 // DataContext accesses the data context inside the embedded function
-func (p *CallParams) DataContext() interface{} {
+func (p *CallParams[T]) DataContext() any {
 	return p.ctx.glb.Data()
 }
 
 // Slice makes CallParams with the slice of arguments
-func (p *CallParams) Slice(from, to byte) *CallParams {
-	return &CallParams{
+func (p *CallParams[T]) Slice(from, to byte) *CallParams[T] {
+	return &CallParams[T]{
 		ctx:  p.ctx,
 		args: p.args[from:to],
 	}
 }
 
 // Arity return actual number of call parameters
-func (p *CallParams) Arity() byte {
+func (p *CallParams[T]) Arity() byte {
 	return byte(len(p.args))
 }
 
-func (ctx *evalContext) eval(f *Expression) []byte {
+func (ctx *evalContext[T]) eval(f *Expression[T]) []byte {
 	c := newCall(f.EvalFunc, f.Args, ctx)
 	defer disposeCall(c)
 
@@ -131,7 +131,7 @@ func (ctx *evalContext) eval(f *Expression) []byte {
 }
 
 // Arg evaluates argument if the call inside embedded function
-func (p *CallParams) Arg(n byte) []byte {
+func (p *CallParams[T]) Arg(n byte) []byte {
 	if traceYN {
 		fmt.Printf("Arg(%d) -- IN\n", n)
 	}
@@ -143,46 +143,46 @@ func (p *CallParams) Arg(n byte) []byte {
 	return ret
 }
 
-func (p *CallParams) Trace(format string, args ...any) {
+func (p *CallParams[T]) Trace(format string, args ...any) {
 	if isNil(p.ctx.glb) || !p.ctx.glb.Trace() {
 		return
 	}
 	p.ctx.glb.PutTrace(fmt.Sprintf(format, easyfl_util.EvalLazyArgs(args...)...))
 }
 
-func (p *CallParams) TracePanic(format string, args ...any) {
+func (p *CallParams[T]) TracePanic(format string, args ...any) {
 	p.Trace("panic: "+format, args...)
 	panic(fmt.Sprintf("panic: "+format, easyfl_util.EvalLazyArgs(args...)...))
 }
 
-func (p *CallParams) Alloc(size uint16) []byte {
+func (p *CallParams[T]) Alloc(size uint16) []byte {
 	return p.ctx.spool.Alloc(size)
 }
 
-func (p *CallParams) AllocData(data ...byte) []byte {
+func (p *CallParams[T]) AllocData(data ...byte) []byte {
 	return p.ctx.spool.AllocData(data...)
 }
 
-func (p *CallParams) EvalParam(paramNr byte) []byte {
+func (p *CallParams[T]) EvalParam(paramNr byte) []byte {
 	return p.ctx.varScope[paramNr].Eval()
 }
 
-func (p *CallParams) GetBytecode(paramNr byte) []byte {
+func (p *CallParams[T]) GetBytecode(paramNr byte) []byte {
 	return p.ctx.varScope[paramNr].f.bytecode
 }
 
-func evalExpression(glb GlobalData, spool *slicepool.SlicePool, f *Expression, varScope []*call) []byte {
+func evalExpression[T any](glb GlobalData[T], spool *slicepool.SlicePool, f *Expression[T], varScope []*call[T]) []byte {
 	return newEvalContext(varScope, glb, spool).eval(f)
 }
 
 // EvalExpression evaluates the expression, in the context of any data context and given values of parameters
-func EvalExpression(glb GlobalData, f *Expression, args ...[]byte) []byte {
-	argsForData := make([]*call, len(args))
+func EvalExpression[T any](glb GlobalData[T], f *Expression[T], args ...[]byte) []byte {
+	argsForData := make([]*call[T], len(args))
 
 	spool := slicepool.New()
 	ctx := newEvalContext(nil, glb, spool)
 	for i, d := range args {
-		argsForData[i] = newCall(dataFunction(d), nil, ctx)
+		argsForData[i] = newCall[T](dataFunction[T](d), nil, ctx)
 	}
 	retp := evalExpression(glb, spool, f, argsForData)
 	ret := make([]byte, len(retp))
@@ -194,12 +194,12 @@ func EvalExpression(glb GlobalData, f *Expression, args ...[]byte) []byte {
 
 // EvalExpressionWithSlicePool evaluates expression, in the context of any data context and given values of parameters
 // It must be provided slice pool for allocation of interim  data
-func EvalExpressionWithSlicePool(glb GlobalData, spool *slicepool.SlicePool, f *Expression, args ...[]byte) []byte {
-	argsForData := make([]*call, len(args))
+func EvalExpressionWithSlicePool[T any](glb GlobalData[T], spool *slicepool.SlicePool, f *Expression[T], args ...[]byte) []byte {
+	argsForData := make([]*call[T], len(args))
 
 	ctx := newEvalContext(nil, glb, spool)
 	for i, d := range args {
-		argsForData[i] = newCall(dataFunction(d), nil, ctx)
+		argsForData[i] = newCall[T](dataFunction[T](d), nil, ctx)
 	}
 	retp := evalExpression(glb, spool, f, argsForData)
 	ret := make([]byte, len(retp))
@@ -210,7 +210,7 @@ func EvalExpressionWithSlicePool(glb GlobalData, spool *slicepool.SlicePool, f *
 
 // EvalFromSource compiles the source of the expression and evaluates it
 // Never panics
-func (lib *Library) EvalFromSource(glb GlobalData, source string, args ...[]byte) ([]byte, error) {
+func (lib *Library[T]) EvalFromSource(glb GlobalData[T], source string, args ...[]byte) ([]byte, error) {
 	var ret []byte
 	err := easyfl_util.CatchPanicOrError(func() error {
 		f, requiredNumArgs, _, err := lib.CompileExpression(source)
@@ -220,7 +220,7 @@ func (lib *Library) EvalFromSource(glb GlobalData, source string, args ...[]byte
 		if requiredNumArgs != len(args) {
 			return fmt.Errorf("required number of parameters is %d, got %d", requiredNumArgs, len(args))
 		}
-		ret = EvalExpression(glb, f, args...)
+		ret = EvalExpression[T](glb, f, args...)
 		return nil
 	})
 	if err != nil {
@@ -230,7 +230,7 @@ func (lib *Library) EvalFromSource(glb GlobalData, source string, args ...[]byte
 }
 
 // MustEvalFromSource evaluates the source of the expression and panics on any error
-func (lib *Library) MustEvalFromSource(glb GlobalData, source string, args ...[]byte) []byte {
+func (lib *Library[T]) MustEvalFromSource(glb GlobalData[T], source string, args ...[]byte) []byte {
 	ret, err := lib.EvalFromSource(glb, source, args...)
 	if err != nil {
 		panic(err)
@@ -239,7 +239,7 @@ func (lib *Library) MustEvalFromSource(glb GlobalData, source string, args ...[]
 }
 
 // MustEvalFromBytecode interprets expression in the bytecode form. Will panic on any compile and runtime error
-func (lib *Library) MustEvalFromBytecode(glb GlobalData, code []byte, args ...[]byte) []byte {
+func (lib *Library[T]) MustEvalFromBytecode(glb GlobalData[T], code []byte, args ...[]byte) []byte {
 	expr, err := lib.ExpressionFromBytecode(code)
 	if err != nil {
 		panic(err)
@@ -249,7 +249,7 @@ func (lib *Library) MustEvalFromBytecode(glb GlobalData, code []byte, args ...[]
 	return EvalExpression(glb, expr, args...)
 }
 
-func (lib *Library) MustEvalFromBytecodeWithSlicePool(glb GlobalData, spool *slicepool.SlicePool, code []byte, args ...[]byte) []byte {
+func (lib *Library[T]) MustEvalFromBytecodeWithSlicePool(glb GlobalData[T], spool *slicepool.SlicePool, code []byte, args ...[]byte) []byte {
 	expr, err := lib.ExpressionFromBytecode(code)
 	if err != nil {
 		panic(err)
@@ -260,7 +260,7 @@ func (lib *Library) MustEvalFromBytecodeWithSlicePool(glb GlobalData, spool *sli
 }
 
 // EvalFromBytecode evaluates the expression, never panics but return an error
-func (lib *Library) EvalFromBytecode(glb GlobalData, code []byte, args ...[]byte) ([]byte, error) {
+func (lib *Library[T]) EvalFromBytecode(glb GlobalData[T], code []byte, args ...[]byte) ([]byte, error) {
 	var ret []byte
 	err := easyfl_util.CatchPanicOrError(func() error {
 		ret = lib.MustEvalFromBytecode(glb, code, args...)
@@ -270,7 +270,7 @@ func (lib *Library) EvalFromBytecode(glb GlobalData, code []byte, args ...[]byte
 }
 
 // EvalFromBytecodeWithSlicePool evaluates expression, never panics but return an error
-func (lib *Library) EvalFromBytecodeWithSlicePool(glb GlobalData, spool *slicepool.SlicePool, code []byte, args ...[]byte) ([]byte, error) {
+func (lib *Library[T]) EvalFromBytecodeWithSlicePool(glb GlobalData[T], spool *slicepool.SlicePool, code []byte, args ...[]byte) ([]byte, error) {
 	var ret []byte
 	err := easyfl_util.CatchPanicOrError(func() error {
 		ret = lib.MustEvalFromBytecodeWithSlicePool(glb, spool, code, args...)
@@ -279,7 +279,7 @@ func (lib *Library) EvalFromBytecodeWithSlicePool(glb GlobalData, spool *slicepo
 	return ret, err
 }
 
-func (lib *Library) expressionFromLibrary(libraryBin [][]byte, funIndex int) (*Expression, error) {
+func (lib *Library[T]) expressionFromLibrary(libraryBin [][]byte, funIndex int) (*Expression[T], error) {
 	libLoc, err := lib.LocalLibraryFromBytes(libraryBin[:funIndex])
 	if err != nil {
 		return nil, err
@@ -291,7 +291,7 @@ func (lib *Library) expressionFromLibrary(libraryBin [][]byte, funIndex int) (*E
 	return expr, nil
 }
 
-func (lib *Library) MustEvalFromLibrary(glb GlobalData, libraryBin [][]byte, funIndex int, args ...[]byte) []byte {
+func (lib *Library[T]) MustEvalFromLibrary(glb GlobalData[T], libraryBin [][]byte, funIndex int, args ...[]byte) []byte {
 	if funIndex < 0 || funIndex >= len(libraryBin) {
 		panic("function index is out of library bounds")
 	}
@@ -307,7 +307,7 @@ func (lib *Library) MustEvalFromLibrary(glb GlobalData, libraryBin [][]byte, fun
 	return EvalExpression(glb, expr, args...)
 }
 
-func (lib *Library) EvalFromLibrary(glb GlobalData, libraryBin [][]byte, funIndex int, args ...[]byte) ([]byte, error) {
+func (lib *Library[T]) EvalFromLibrary(glb GlobalData[T], libraryBin [][]byte, funIndex int, args ...[]byte) ([]byte, error) {
 	var ret []byte
 	err := easyfl_util.CatchPanicOrError(func() error {
 		ret = lib.MustEvalFromLibrary(glb, libraryBin, funIndex, args...)
@@ -317,7 +317,7 @@ func (lib *Library) EvalFromLibrary(glb GlobalData, libraryBin [][]byte, funInde
 }
 
 // CallLocalLibrary to be called from the extension outside the easyfl.
-func (lib *Library) CallLocalLibrary(ctx *CallParams, libBin [][]byte, idx int) []byte {
+func (lib *Library[T]) CallLocalLibrary(ctx *CallParams[T], libBin [][]byte, idx int) []byte {
 	if idx < 0 || idx >= len(libBin) {
 		panic("function index is out of library bounds")
 	}
@@ -325,7 +325,7 @@ func (lib *Library) CallLocalLibrary(ctx *CallParams, libBin [][]byte, idx int) 
 	if err != nil {
 		ctx.TracePanic("error while parsing local library: %v", err)
 	}
-	varScope := make([]*call, len(ctx.args))
+	varScope := make([]*call[T], len(ctx.args))
 	for i := range varScope {
 		varScope[i] = newCall(ctx.args[i].EvalFunc, ctx.args[i].Args, ctx.ctx)
 	}
@@ -340,7 +340,7 @@ func (lib *Library) CallLocalLibrary(ctx *CallParams, libBin [][]byte, idx int) 
 	return ret
 }
 
-func (lib *Library) MustEqual(source1, source2 string) {
+func (lib *Library[T]) MustEqual(source1, source2 string) {
 	res1, err := lib.EvalFromSource(nil, source1)
 	easyfl_util.Assertf(err == nil, "expression '%s' resulted in error: '%v'", source1, err)
 	res2, err := lib.EvalFromSource(nil, source2)
@@ -351,13 +351,13 @@ func (lib *Library) MustEqual(source1, source2 string) {
 		func() string { return easyfl_util.Fmt(res1) }, func() string { return easyfl_util.Fmt(res2) })
 }
 
-func (lib *Library) MustTrue(source string) {
+func (lib *Library[T]) MustTrue(source string) {
 	res, err := lib.EvalFromSource(nil, source)
 	easyfl_util.Assertf(err == nil, "expression '%s' resulted in error: '%v'", source, err)
 	easyfl_util.Assertf(len(res) > 0, "expression '%s' must be true", res)
 }
 
-func (lib *Library) MustError(source string, mustContain ...string) {
+func (lib *Library[T]) MustError(source string, mustContain ...string) {
 	_, err := lib.EvalFromSource(nil, source)
 	easyfl_util.Assertf(err != nil, "expression '%s' is expected to return an error", source)
 	if len(mustContain) > 0 {

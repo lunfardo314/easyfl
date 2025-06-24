@@ -9,21 +9,21 @@ import (
 )
 
 type (
-	LocalLibrary struct {
-		funByName    map[string]*funDescriptor
-		funByFunCode []*funDescriptor // code of the function respective to the baseline of numExtended+FirstExtended+1
+	LocalLibrary[T any] struct {
+		funByName    map[string]*funDescriptor[T]
+		funByFunCode []*funDescriptor[T] // code of the function respective to the baseline of numExtended+FirstExtended+1
 	}
 )
 
-func NewLocalLibrary() *LocalLibrary {
-	return &LocalLibrary{
-		funByName:    make(map[string]*funDescriptor),
-		funByFunCode: make([]*funDescriptor, 0),
+func NewLocalLibrary[T any]() *LocalLibrary[T] {
+	return &LocalLibrary[T]{
+		funByName:    make(map[string]*funDescriptor[T]),
+		funByFunCode: make([]*funDescriptor[T], 0),
 	}
 }
 
-func (lib *Library) CompileLocalLibrary(source string) ([][]byte, error) {
-	libLoc := NewLocalLibrary()
+func (lib *Library[T]) CompileLocalLibrary(source string) ([][]byte, error) {
+	libLoc := NewLocalLibrary[T]()
 	ret := make([][]byte, 0)
 	parsed, err := parseFunctions(source)
 	if err != nil {
@@ -48,7 +48,7 @@ func (lib *Library) CompileLocalLibrary(source string) ([][]byte, error) {
 			embeddedFun = wrapWithTracing(embeddedFun, pf.Sym)
 		}
 		funCode := FirstLocalFunCode + uint16(len(libLoc.funByName))
-		dscr := &funDescriptor{
+		dscr := &funDescriptor[T]{
 			sym:               pf.Sym,
 			funCode:           funCode,
 			requiredNumParams: numParam,
@@ -62,7 +62,7 @@ func (lib *Library) CompileLocalLibrary(source string) ([][]byte, error) {
 }
 
 // CompileLocalLibraryToTuple compiles local library and serializes it as lazy array
-func (lib *Library) CompileLocalLibraryToTuple(source string) ([]byte, error) {
+func (lib *Library[T]) CompileLocalLibraryToTuple(source string) ([]byte, error) {
 	libBin, err := lib.CompileLocalLibrary(source)
 	if err != nil {
 		return nil, err
@@ -71,11 +71,11 @@ func (lib *Library) CompileLocalLibraryToTuple(source string) ([]byte, error) {
 	return ret.Bytes(), nil
 }
 
-func (lib *Library) LocalLibraryFromBytes(bin [][]byte) (*LocalLibrary, error) {
+func (lib *Library[T]) LocalLibraryFromBytes(bin [][]byte) (*LocalLibrary[T], error) {
 	if len(bin) > 255 {
 		return nil, fmt.Errorf("local library can contain up to 255 elements")
 	}
-	ret := NewLocalLibrary()
+	ret := NewLocalLibrary[T]()
 
 	for i, data := range bin {
 		expr, remaining, maxParam, err := lib.expressionFromBytecode(data, ret)
@@ -91,7 +91,7 @@ func (lib *Library) LocalLibraryFromBytes(bin [][]byte) (*LocalLibrary, error) {
 			numParams = int(maxParam) + 1
 		}
 		easyfl_util.Assertf(numParams <= 15, "numParams <= 15")
-		dscr := &funDescriptor{
+		dscr := &funDescriptor[T]{
 			sym:               sym,
 			funCode:           uint16(FirstLocalFunCode + i),
 			requiredNumParams: numParams,
