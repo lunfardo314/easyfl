@@ -13,9 +13,10 @@ import (
 // GlobalData represents the data to be evaluated. It is wrapped into the interface which offers some tracing options
 // Type parameter T is type of data provided in the eval context
 type GlobalData[T any] interface {
-	Data() T         // return data being evaluated. It is interpreted by the transaction host
-	Trace() bool     // should return true if tracing enabled
-	PutTrace(string) // hook for tracing messages. Called only if enabled
+	Data() T              // return data being evaluated. It is interpreted by the transaction host
+	Trace() bool          // should return true if tracing enabled
+	PutTrace(string)      // hook for tracing messages. Called only if enabled
+	Library() *Library[T] // returns library
 }
 
 // evalContext is the structure through which the EasyFL script accesses data structure it is validating
