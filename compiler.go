@@ -837,12 +837,12 @@ func makeEmbeddedFunForExpression[T any](sym string, expr *Expression[T]) Embedd
 		varScope := newVarScope[T](len(par.args))
 
 		for i := range varScope {
-			varScope[i] = newCall(par.args[i].EvalFunc, par.args[i].Args, par.ctx)
+			varScope[i] = newCall(par.args[i].EvalFunc, par.args[i].Args, par.evalContext)
 		}
 		defer disposeVarScope(varScope)
 
 		spool := slicepool.New()
-		retp := evalExpression(par.ctx.glb, spool, expr, varScope)
+		retp := evalExpression(par.glb, spool, expr, varScope)
 		ret := make([]byte, len(retp))
 		copy(ret, retp)
 		spool.Dispose()

@@ -397,7 +397,7 @@ func evalModuloUint[T any](par *CallParams[T]) []byte {
 }
 
 func evalUint8Bytes[T any](par *CallParams[T]) []byte {
-	ret, ok := ensure8Bytes(par.ctx.spool, par.Arg(0))
+	ret, ok := ensure8Bytes(par.spool, par.Arg(0))
 	if !ok {
 		par.TracePanic("%s:: wrong size of parameter", "uint64Bytes")
 	}
@@ -555,6 +555,7 @@ func (lib *Library[T]) evalParseInlineData(par *CallParams[T]) []byte {
 // evalParseArgumentBytecode takes bytecode of the argument as is.
 // Note: data prefix is not stripped. To get the data, it must be evaluated
 func (lib *Library[T]) evalParseArgumentBytecode(par *CallParams[T]) []byte {
+
 	a0 := par.Arg(0)
 	sym, prefix, args, err := lib.ParseBytecodeOneLevel(a0)
 	if err != nil {

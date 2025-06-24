@@ -28,7 +28,7 @@ type evalContext[T any] struct {
 
 // CallParams is a structure through which the function accesses its evaluation context and call arguments
 type CallParams[T any] struct {
-	ctx  *evalContext[T]
+	*evalContext[T]
 	args []*Expression[T]
 }
 
@@ -62,8 +62,8 @@ func newCall[T any](f EvalFunction[T], args []*Expression[T], ctx *evalContext[T
 	*ret = call[T]{
 		f: f,
 		params: &CallParams[T]{
-			ctx:  ctx,
-			args: args,
+			evalContext: ctx,
+			args:        args,
 		},
 	}
 	return
@@ -107,15 +107,15 @@ func (c *call[T]) Eval() []byte {
 }
 
 // DataContext accesses the data context inside the embedded function
-func (p *CallParams[T]) DataContext() any {
-	return p.ctx.glb.Data()
+func (p *CallParams[T]) DataContext() T {
+	return p.glb.Data()
 }
 
 // Slice makes CallParams with the slice of arguments
 func (p *CallParams[T]) Slice(from, to byte) *CallParams[T] {
 	return &CallParams[T]{
-		ctx:  p.ctx,
-		args: p.args[from:to],
+		evalContext: p.evalContext,
+		args:        p.args[from:to],
 	}
 }
 
@@ -136,7 +136,7 @@ func (p *CallParams[T]) Arg(n byte) []byte {
 	if traceYN {
 		fmt.Printf("Arg(%d) -- IN\n", n)
 	}
-	ret := p.ctx.eval(p.args[n])
+	ret := p.evalContext.eval(p.args[n])
 
 	if traceYN {
 		fmt.Printf("Arg(%d) -- OUT ret: %v\n", n, ret)
@@ -145,10 +145,10 @@ func (p *CallParams[T]) Arg(n byte) []byte {
 }
 
 func (p *CallParams[T]) Trace(format string, args ...any) {
-	if isNil(p.ctx.glb) || !p.ctx.glb.Trace() {
+	if isNil(p.glb) || !p.glb.Trace() {
 		return
 	}
-	p.ctx.glb.PutTrace(fmt.Sprintf(format, easyfl_util.EvalLazyArgs(args...)...))
+	p.glb.PutTrace(fmt.Sprintf(format, easyfl_util.EvalLazyArgs(args...)...))
 }
 
 func (p *CallParams[T]) TracePanic(format string, args ...any) {
@@ -157,19 +157,19 @@ func (p *CallParams[T]) TracePanic(format string, args ...any) {
 }
 
 func (p *CallParams[T]) Alloc(size uint16) []byte {
-	return p.ctx.spool.Alloc(size)
+	return p.spool.Alloc(size)
 }
 
 func (p *CallParams[T]) AllocData(data ...byte) []byte {
-	return p.ctx.spool.AllocData(data...)
+	return p.spool.AllocData(data...)
 }
 
 func (p *CallParams[T]) EvalParam(paramNr byte) []byte {
-	return p.ctx.varScope[paramNr].Eval()
+	return p.varScope[paramNr].Eval()
 }
 
 func (p *CallParams[T]) GetBytecode(paramNr byte) []byte {
-	return p.ctx.varScope[paramNr].f.bytecode
+	return p.varScope[paramNr].f.bytecode
 }
 
 func evalExpression[T any](glb GlobalData[T], spool *slicepool.SlicePool, f *Expression[T], varScope []*call[T]) []byte {
@@ -328,11 +328,11 @@ func (lib *Library[T]) CallLocalLibrary(ctx *CallParams[T], libBin [][]byte, idx
 	}
 	varScope := make([]*call[T], len(ctx.args))
 	for i := range varScope {
-		varScope[i] = newCall(ctx.args[i].EvalFunc, ctx.args[i].Args, ctx.ctx)
+		varScope[i] = newCall(ctx.args[i].EvalFunc, ctx.args[i].Args, ctx.evalContext)
 	}
 
 	spool := slicepool.New()
-	retp := evalExpression(ctx.ctx.glb, spool, expr, varScope)
+	retp := evalExpression(ctx.glb, spool, expr, varScope)
 	ret := make([]byte, len(retp))
 	copy(ret, retp)
 	spool.Dispose()
