@@ -545,7 +545,11 @@ func evalNumElementsOfTuple[T any](par *CallParams[T]) []byte {
 func (lib *Library[T]) evalParseInlineData(par *CallParams[T]) []byte {
 	dataBytecode := par.Arg(0)
 	if !HasInlineDataPrefix(dataBytecode) {
-		par.TracePanic("evalParseInlineData: not an inline data function call: %s", easyfl_util.FmtLazy(dataBytecode))
+		deco, err := lib.DecompileBytecode(dataBytecode)
+		if err != nil {
+			deco = err.Error()
+		}
+		par.TracePanic("evalParseInlineData: not an inline data function call: %s (%v)", easyfl_util.FmtLazy(dataBytecode), deco)
 	}
 	return dataBytecode[1:]
 }
