@@ -549,7 +549,8 @@ func (lib *Library[T]) evalParseInlineData(par *CallParams[T]) []byte {
 		if err != nil {
 			deco = err.Error()
 		}
-		par.TracePanic("evalParseInlineData: not an inline data function call: %s (%v)", easyfl_util.FmtLazy(dataBytecode), deco)
+		par.TracePanic("evalParseInlineData: not an inline data function call: %s (decompiled='%v')",
+			easyfl_util.FmtLazy(dataBytecode), deco)
 	}
 	return dataBytecode[1:]
 }
