@@ -255,14 +255,12 @@ func evalSelectCaseByIndex[T any](par *CallParams[T]) []byte {
 
 func evalIsZero[T any](par *CallParams[T]) []byte {
 	arg := par.Arg(0)
-	for _, b := range arg {
-		if b != 0 {
-			par.Trace("isZero:: %s -> nil", easyfl_util.FmtLazy(arg))
-			return nil
-		}
+	if easyfl_util.IsZero(arg) {
+		par.Trace("isZero:: %s -> true", easyfl_util.FmtLazy(arg))
+		return par.AllocData(0xff)
 	}
-	par.Trace("isZero:: %s -> true", easyfl_util.FmtLazy(arg))
-	return par.AllocData(0xff)
+	par.Trace("isZero:: %s -> nil", easyfl_util.FmtLazy(arg))
+	return nil
 }
 
 func evalNot[T any](par *CallParams[T]) []byte {

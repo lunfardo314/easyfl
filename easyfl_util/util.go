@@ -108,6 +108,16 @@ func Fmt(data []byte) string {
 	return Hex(data)
 }
 
+// IsZero returns false if at least 1 of bytes != 0
+func IsZero(data []byte) bool {
+	for _, b := range data {
+		if b != 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func FmtLazy(data []byte) func() string {
 	return func() string {
 		return Hex(data)
