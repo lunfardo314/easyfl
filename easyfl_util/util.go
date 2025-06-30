@@ -124,7 +124,7 @@ func FmtLazy(data []byte) func() string {
 	}
 }
 
-// Uint64FromBytes takes any 8 or less bytes, padds with 0 prefix up to 8 bytes size and makes uin64 big-endian
+// Uint64FromBytes takes any 8 (or less) bytes, padds with prefix 0 up to 8-byte size and makes uin64 big-endian
 func Uint64FromBytes(data []byte) (uint64, error) {
 	if len(data) > 8 {
 		return 0, fmt.Errorf("Uint64FromBytes: can't be more than 8 bytes")
@@ -133,6 +133,36 @@ func Uint64FromBytes(data []byte) (uint64, error) {
 	copy(paddedData[8-len(data):], data)
 
 	return binary.BigEndian.Uint64(paddedData[:]), nil
+}
+
+func Uint32FromBytes(data []byte) (uint32, error) {
+	if len(data) > 4 {
+		return 0, fmt.Errorf("Uint32FromBytes: can't be more than 4 bytes")
+	}
+	var paddedData [4]byte
+	copy(paddedData[4-len(data):], data)
+
+	return binary.BigEndian.Uint32(paddedData[:]), nil
+}
+
+func Uint16FromBytes(data []byte) (uint16, error) {
+	if len(data) > 2 {
+		return 0, fmt.Errorf("Uint16FromBytes: can't be more than 2 bytes")
+	}
+	var paddedData [2]byte
+	copy(paddedData[2-len(data):], data)
+
+	return binary.BigEndian.Uint16(paddedData[:]), nil
+}
+
+func ByteFromBytes(data []byte) (byte, error) {
+	if len(data) > 1 {
+		return 0, fmt.Errorf("ByteFromBytes: can't be more than 1 byte")
+	}
+	if len(data) == 0 {
+		return 0, nil
+	}
+	return data[0], nil
 }
 
 func MustUint64FromBytes(data []byte) uint64 {
