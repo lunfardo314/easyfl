@@ -367,6 +367,23 @@ func parseLiteral[T any](lib *Library[T], sym string, w io.Writer) (bool, int, e
 			return false, 0, err
 		}
 		return true, 0, nil
+	case strings.HasPrefix(sym, "z1/"):
+		// it is u16 constant big endian
+		n, err = strconv.Atoi(strings.TrimPrefix(sym, "z1/"))
+		if err != nil {
+			return false, 0, fmt.Errorf("%v: '%s'", err, sym)
+		}
+		if n < 0 || n > 255 {
+			return false, 0, fmt.Errorf("wrong z1 constant: '%s'", sym)
+		}
+		var d []byte
+		if n > 0 {
+			d = []byte{byte(n)}
+		}
+		if err = writeDataWithPrefix(w, d); err != nil {
+			return false, 0, err
+		}
+		return true, 0, nil
 	case strings.HasPrefix(sym, "z16/"):
 		// it is u16 constant big endian
 		n, err = strconv.Atoi(strings.TrimPrefix(sym, "z16/"))
