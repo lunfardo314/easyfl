@@ -568,14 +568,19 @@ func (lib *Library[T]) expressionFromBytecode(bytecode []byte, localLib ...*Loca
 	}
 	if itIsData {
 		var sym string
-		switch len(dataPrefix[1:]) {
-		case 0:
-			sym = "nil"
-		case 1:
+		if len(dataPrefix[1:]) == 1 {
 			sym = fmt.Sprintf("%d", dataPrefix[1])
-		default:
+		} else {
 			sym = fmt.Sprintf("0x%s", hex.EncodeToString(dataPrefix[1:]))
 		}
+		//switch len(dataPrefix[1:]) {
+		//case 0:
+		//	sym = "nil"
+		//case 1:
+		//	sym = fmt.Sprintf("%d", dataPrefix[1])
+		//default:
+		//	sym = fmt.Sprintf("0x%s", hex.EncodeToString(dataPrefix[1:]))
+		//}
 		ret := newExpression[T](sym, dataPrefix, 0)
 		ret.EvalFunc = dataFunction[T](dataPrefix[1:])
 		return ret, bytecode[len(dataPrefix):], 0xff, nil

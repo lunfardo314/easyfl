@@ -924,6 +924,15 @@ func TestDecompile(t *testing.T) {
 		require.EqualValues(t, bin, easyfl_util.Concat(pieces...))
 
 	})
+	t.Run("nils", func(t *testing.T) {
+		const src = "or(nil, 0x)"
+		_, _, code, err := lib.CompileExpression(src)
+		require.NoError(t, err)
+		srcBack, err := lib.DecompileBytecode(code)
+		require.NoError(t, err)
+		t.Logf("\n    original: %s\n    decompiled: '%s'", src, srcBack)
+		require.EqualValues(t, "or(0x,0x)", srcBack)
+	})
 }
 
 func TestLocalLibrary(t *testing.T) {
