@@ -156,6 +156,12 @@ func (p *CallParams[T]) TracePanic(format string, args ...any) {
 	panic(fmt.Sprintf("panic: "+format, easyfl_util.EvalLazyArgs(args...)...))
 }
 
+func (p *CallParams[T]) Assertf(cond bool, format string, args ...any) {
+	if !cond {
+		p.TracePanic(format, args...)
+	}
+}
+
 func (p *CallParams[T]) Alloc(size uint16) []byte {
 	return p.spool.Alloc(size)
 }
