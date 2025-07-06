@@ -162,6 +162,13 @@ func (p *CallParams[T]) Require(cond bool, format string, args ...any) {
 	}
 }
 
+func (p *CallParams[T]) RequireNoError(err error) {
+	if err == nil {
+		return
+	}
+	p.TracePanic("error occurred: %v", err)
+}
+
 func (p *CallParams[T]) Alloc(size uint16) []byte {
 	return p.spool.Alloc(size)
 }
