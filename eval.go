@@ -156,7 +156,7 @@ func (p *CallParams[T]) TracePanic(format string, args ...any) {
 	panic(fmt.Sprintf("panic: "+format, easyfl_util.EvalLazyArgs(args...)...))
 }
 
-func (p *CallParams[T]) Assertf(cond bool, format string, args ...any) {
+func (p *CallParams[T]) Require(cond bool, format string, args ...any) {
 	if !cond {
 		p.TracePanic(format, args...)
 	}
