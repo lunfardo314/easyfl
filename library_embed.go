@@ -596,9 +596,10 @@ func (lib *Library[T]) evalParsePrefixBytecode(par *CallParams[T]) []byte {
 }
 
 func (lib *Library[T]) evalParseNumArgs(par *CallParams[T]) []byte {
-	nargs, err := lib.ParseNumArgs(par.Arg(0))
+	bytecode := par.Arg(0)
+	nargs, err := lib.ParseNumArgs(bytecode)
 	if err != nil {
-		par.TracePanic("evalParseNumArgs: %v", err)
+		par.TracePanic("evalParseNumArgs(0x%s): %v", hex.EncodeToString(bytecode), err)
 	}
 	easyfl_util.Assertf(nargs <= MaxParameters, "nargs<=MaxParameters")
 	return par.AllocData(byte(nargs))
