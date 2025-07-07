@@ -1,7 +1,7 @@
 package easyfl
 
 const baseLibraryDefinitions = `# Base EasyFL library
-hash: 6ec4a1b7217c7f1992f82b332bdc8e50c97b95a34828218c3760547479563036
+hash: 9d7e0773d5d8c2d249dedf2c3347c64343161ff4d1e40f80ff59fe57d4e43375
 functions:
 # BEGIN EMBEDDED function definitions
 #    function codes (opcodes) from 0 to 14 are reserved for predefined parameter access functions $i
@@ -242,21 +242,27 @@ functions:
       numArgs: 1
       embedded: true
    -
+      sym: "parseNumArgs"
+      description: "treats $0 as bytecode of the inline data call. Returns number of parameters in the call as 1 byte"
+      funCode: 78
+      numArgs: 1
+      embedded: true
+   -
       sym: "callLocalLibrary"
       description: "calls local library"
-      funCode: 78
+      funCode: 79
       numArgs: -1
       embedded: true
    -
       sym: "atTuple8"
       description: "returns element of the serialized tuple at index $0 which must be 1 byte-long"
-      funCode: 79
+      funCode: 80
       numArgs: 2
       embedded: true
    -
       sym: "tupleLen"
       description: "returns number of elements of a tuple as 8 byte-long big-endian value"
-      funCode: 80
+      funCode: 81
       numArgs: 1
       embedded: true
 # END LONG EMBEDDED function definitions

@@ -1051,6 +1051,22 @@ func TestParseDataArgument(t *testing.T) {
 		runSrcFail("concat", "concat", 0, "wrong parameter index")
 
 	})
+	t.Run("parseNumArgs", func(t *testing.T) {
+		runNumArgs := func(src string, expectedNumArgs int) {
+			_, _, bytecode, err := lib.CompileExpression(src)
+			require.NoError(t, err)
+			t.Logf("src: %s\nbytecode: %s", src, easyfl_util.Fmt(bytecode))
+			srcToEval := fmt.Sprintf("parseNumArgs(0x%s)", hex.EncodeToString(bytecode))
+			lib.MustEqual(srcToEval, fmt.Sprintf("%d", expectedNumArgs))
+		}
+		runNumArgs("concat", 0)
+		runNumArgs("concat(1)", 1)
+		runNumArgs("concat(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)", 15)
+		runNumArgs("or(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)", 15)
+		runNumArgs("if(1,2,3)", 3)
+		runNumArgs("nil", 0)
+		runNumArgs("0x11223344", 0)
+	})
 }
 
 func TestCases(t *testing.T) {

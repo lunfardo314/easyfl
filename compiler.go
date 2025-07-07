@@ -736,6 +736,27 @@ func (lib *Library[T]) parseCallPrefix(code []byte, localLib ...*LocalLibrary[T]
 	return callPrefix, evalFun, arity, sym, nil
 }
 
+func (lib *Library[T]) ParseNumArgs(code []byte) (arity int, err error) {
+	if HasInlineDataPrefix(code) {
+		return 0, nil
+	}
+	if len(code) == 0 {
+		return 0, fmt.Errorf("parseCallPrefix: not a function call")
+	}
+
+	if code[0]&FirstByteLongCallMask == 0 {
+		// short call
+		_, arity, _, err = lib.functionByCode(uint16(code[0]))
+		return
+	}
+	// long call
+	if len(code) < 2 {
+		return 0, io.EOF
+	}
+	arity = int((code[0] & FirstByteLongCallArityMask) >> 2)
+	return
+}
+
 // ParseBytecodeInlineDataPrefix attempts to parse beginning of the code as inline data
 // Function used is binary code analysis
 // Returns:

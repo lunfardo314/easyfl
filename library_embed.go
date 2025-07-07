@@ -78,6 +78,8 @@ func EmbeddedFunctions[T any](targetLib *Library[T]) func(sym string) EmbeddedFu
 			return targetLib.evalParsePrefixBytecode
 		case "parseInlineData":
 			return targetLib.evalParseInlineData
+		case "parseNumArgs":
+			return targetLib.evalParseNumArgs
 		case "callLocalLibrary":
 			return targetLib.evalCallLocalLibrary
 		}
@@ -591,4 +593,13 @@ func (lib *Library[T]) evalParsePrefixBytecode(par *CallParams[T]) []byte {
 	}
 	par.Trace("parseBytecodePrefix::%s -> %s", easyfl_util.FmtLazy(code), easyfl_util.FmtLazy(prefix))
 	return prefix
+}
+
+func (lib *Library[T]) evalParseNumArgs(par *CallParams[T]) []byte {
+	nargs, err := lib.ParseNumArgs(par.Arg(0))
+	if err != nil {
+		par.TracePanic("evalParseNumArgs: %v", err)
+	}
+	easyfl_util.Assertf(nargs <= MaxParameters, "nargs<=MaxParameters")
+	return par.AllocData(byte(nargs))
 }
