@@ -1323,3 +1323,26 @@ func TestManyParams(t *testing.T) {
 	})
 
 }
+
+func TestParseInlineDataArgumentAnyPrefix(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+	const src = "concat(1,2,3,4)"
+	_, _, bytecode, err := lib.CompileExpression(src)
+	require.NoError(t, err)
+	src2 := fmt.Sprintf("parseInlineDataArgumentAnyPrefix(0x%s, 0)", hex.EncodeToString(bytecode))
+	lib.MustEqual(src2, "1")
+	src2 = fmt.Sprintf("parseInlineDataArgumentAnyPrefix(0x%s, 1)", hex.EncodeToString(bytecode))
+	lib.MustEqual(src2, "2")
+	src2 = fmt.Sprintf("parseInlineDataArgumentAnyPrefix(0x%s, 3)", hex.EncodeToString(bytecode))
+	lib.MustEqual(src2, "4")
+
+	const src1 = "or(1,2,3,4)"
+	_, _, bytecode, err = lib.CompileExpression(src1)
+	require.NoError(t, err)
+	src2 = fmt.Sprintf("parseInlineDataArgumentAnyPrefix(0x%s, 0)", hex.EncodeToString(bytecode))
+	lib.MustEqual(src2, "1")
+	src2 = fmt.Sprintf("parseInlineDataArgumentAnyPrefix(0x%s, 1)", hex.EncodeToString(bytecode))
+	lib.MustEqual(src2, "2")
+	src2 = fmt.Sprintf("parseInlineDataArgumentAnyPrefix(0x%s, 3)", hex.EncodeToString(bytecode))
+	lib.MustEqual(src2, "4")
+}

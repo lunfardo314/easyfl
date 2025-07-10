@@ -1,7 +1,7 @@
 package easyfl
 
 const baseLibraryDefinitions = `# Base EasyFL library
-hash: 9d7e0773d5d8c2d249dedf2c3347c64343161ff4d1e40f80ff59fe57d4e43375
+hash: 9f6b7ed49e0871f33cebd027366907a9de95260bb725d8f2b3bee089fae97e2c
 functions:
 # BEGIN EMBEDDED function definitions
 #    function codes (opcodes) from 0 to 14 are reserved for predefined parameter access functions $i
@@ -332,9 +332,18 @@ functions:
          parseInlineData(parseArgumentBytecode($0,$1,$2))         
          
    -
+      sym: "parseInlineDataArgumentAnyPrefix"
+      description: "in bytecode $0, parses argument with index $1, treats it as inline data call, returns the inline data"
+      funCode: 326
+      numArgs: 2
+      bytecode: 4d4500444c0001
+      source: >
+         parseInlineDataArgument($0,parsePrefixBytecode($0),$1)
+         
+   -
       sym: "lessThanUint"
       description: "returns $0<$1 for arguments of any size <= 8. Each of arguments ar expanded fit leading 0-s up to 8 bytes and compare lexicographically"
-      funCode: 326
+      funCode: 327
       numArgs: 2
       bytecode: 1f1e001e01
       source: >
@@ -343,7 +352,7 @@ functions:
    -
       sym: "equalUint"
       description: "returns $0==$1 preliminary expanding each operand with leading 0-s to 8 bytes"
-      funCode: 327
+      funCode: 328
       numArgs: 2
       bytecode: 131e001e01
       source: >
@@ -352,7 +361,7 @@ functions:
    -
       sym: "max"
       description: "returns bigger one out of 2 operands of equal size"
-      funCode: 328
+      funCode: 329
       numArgs: 2
       bytecode: 171f00010100
       source: >
@@ -361,7 +370,7 @@ functions:
    -
       sym: "min"
       description: "returns smaller one out of 2 operands of equal size"
-      funCode: 329
+      funCode: 330
       numArgs: 2
       bytecode: 171f00010001
       source: >
