@@ -171,6 +171,18 @@ func MustUint64FromBytes(data []byte) uint64 {
 	return ret
 }
 
+func MustUint32FromBytes(data []byte) uint32 {
+	ret, err := Uint32FromBytes(data)
+	AssertNoError(err)
+	return ret
+}
+
+func MustUint16FromBytes(data []byte) uint16 {
+	ret, err := Uint16FromBytes(data)
+	AssertNoError(err)
+	return ret
+}
+
 // TrimLeadingZeroBytes returns sub-slice without leading zeroes
 func TrimLeadingZeroBytes(data []byte) []byte {
 	for i := 0; i < len(data); i++ {
