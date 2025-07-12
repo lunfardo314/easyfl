@@ -53,9 +53,9 @@ func TestLiterals(t *testing.T) {
 	lib.MustEqual("u64/100000000000", "0x000000174876e800")
 	lib.MustError("u64/999999999999999999999999999", "value out of range")
 
-	lib.MustEqual("z1/0", "0x")
-	lib.MustEqual("z1/255", "0xff")
-	lib.MustError("z1/300", "wrong z1 constant")
+	lib.MustEqual("z8/0", "0x")
+	lib.MustEqual("z8/255", "0xff")
+	lib.MustError("z8/300", "wrong z1 constant")
 
 	lib.MustEqual("z16/0", "0x")
 	lib.MustEqual("z16/1024", "0x0400")

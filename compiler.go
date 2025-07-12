@@ -342,7 +342,7 @@ func parseLiteral[T any](lib *Library[T], sym string, w io.Writer) (bool, int, e
 		}
 		return true, 0, nil
 	case strings.HasPrefix(sym, "u32/"):
-		// it is u16 constant big endian
+		// it is u32 constant big endian
 		n, err = strconv.Atoi(strings.TrimPrefix(sym, "u32/"))
 		if err != nil {
 			return false, 0, fmt.Errorf("%v: '%s'", err, sym)
@@ -357,7 +357,7 @@ func parseLiteral[T any](lib *Library[T], sym string, w io.Writer) (bool, int, e
 		}
 		return true, 0, nil
 	case strings.HasPrefix(sym, "u64/"):
-		// it is u16 constant big endian
+		// it is u64 constant big endian
 		if un, err = strconv.ParseUint(strings.TrimPrefix(sym, "u64/"), 10, 64); err != nil {
 			return false, 0, fmt.Errorf("%v: '%s'", err, sym)
 		}
@@ -367,9 +367,9 @@ func parseLiteral[T any](lib *Library[T], sym string, w io.Writer) (bool, int, e
 			return false, 0, err
 		}
 		return true, 0, nil
-	case strings.HasPrefix(sym, "z1/"):
-		// it is u16 constant big endian
-		n, err = strconv.Atoi(strings.TrimPrefix(sym, "z1/"))
+	case strings.HasPrefix(sym, "z8/"):
+		// it is z8 constant big endian
+		n, err = strconv.Atoi(strings.TrimPrefix(sym, "z8/"))
 		if err != nil {
 			return false, 0, fmt.Errorf("%v: '%s'", err, sym)
 		}
@@ -385,7 +385,7 @@ func parseLiteral[T any](lib *Library[T], sym string, w io.Writer) (bool, int, e
 		}
 		return true, 0, nil
 	case strings.HasPrefix(sym, "z16/"):
-		// it is u16 constant big endian
+		// it is z16 constant big endian
 		n, err = strconv.Atoi(strings.TrimPrefix(sym, "z16/"))
 		if err != nil {
 			return false, 0, fmt.Errorf("%v: '%s'", err, sym)
@@ -400,7 +400,7 @@ func parseLiteral[T any](lib *Library[T], sym string, w io.Writer) (bool, int, e
 		}
 		return true, 0, nil
 	case strings.HasPrefix(sym, "z32/"):
-		// it is u16 constant big endian
+		// it is z32 constant big endian
 		n, err = strconv.Atoi(strings.TrimPrefix(sym, "z32/"))
 		if err != nil {
 			return false, 0, fmt.Errorf("%v: '%s'", err, sym)
@@ -415,7 +415,7 @@ func parseLiteral[T any](lib *Library[T], sym string, w io.Writer) (bool, int, e
 		}
 		return true, 0, nil
 	case strings.HasPrefix(sym, "z64/"):
-		// it is u16 constant big endian
+		// it is z64 constant big endian
 		if un, err = strconv.ParseUint(strings.TrimPrefix(sym, "z64/"), 10, 64); err != nil {
 			return false, 0, fmt.Errorf("%v: '%s'", err, sym)
 		}
@@ -573,14 +573,6 @@ func (lib *Library[T]) expressionFromBytecode(bytecode []byte, localLib ...*Loca
 		} else {
 			sym = fmt.Sprintf("0x%s", hex.EncodeToString(dataPrefix[1:]))
 		}
-		//switch len(dataPrefix[1:]) {
-		//case 0:
-		//	sym = "nil"
-		//case 1:
-		//	sym = fmt.Sprintf("%d", dataPrefix[1])
-		//default:
-		//	sym = fmt.Sprintf("0x%s", hex.EncodeToString(dataPrefix[1:]))
-		//}
 		ret := newExpression[T](sym, dataPrefix, 0)
 		ret.EvalFunc = dataFunction[T](dataPrefix[1:])
 		return ret, bytecode[len(dataPrefix):], 0xff, nil
