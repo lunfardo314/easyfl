@@ -35,7 +35,7 @@ func (lib *Library[T]) CompileLocalLibrary(source string) ([][]byte, error) {
 			return nil, fmt.Errorf("error while compiling '%s': %v", pf.Sym, err)
 		}
 
-		easyfl_util.Assertf(len(lib.funByName) <= 255, "a local library can contain up to 255 functions")
+		easyfl_util.Assertf(len(libLoc.funByName) <= 255, "a local library can contain up to 255 functions")
 
 		if lib.existsFunction(pf.Sym, libLoc) {
 			return nil, errors.New("repeating symbol '" + pf.Sym + "'")
