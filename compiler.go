@@ -809,12 +809,15 @@ func HasInlineDataPrefix(data []byte) bool {
 
 // StripDataPrefix if the first byte is a data prefix, strips it. Usually used for the data prefix returned by parseBytecodeInlineData
 func StripDataPrefix(data []byte) []byte {
-	if HasInlineDataPrefix(data) {
-		// if it is data, skip the prefix
-		return data[1:]
+	_, isInlineData, dataSize, err := parseBytecodeInlineData(data)
+	if !isInlineData || err != nil {
+		return nil
 	}
-	// no change otherwise
-	return data
+	prefixSize := 1
+	if dataSize >= 127 {
+		prefixSize = 3
+	}
+	return data[prefixSize:]
 }
 
 // ParsePrefixBytecode tries to parse first 1, 2 or 3 bytes as a prefix, which contains
