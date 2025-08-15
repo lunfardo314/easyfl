@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"go/token"
 	"io"
@@ -185,8 +184,8 @@ func splitArgs(argsStr string) ([]string, error) {
 //  -- bits 9-0 of uint16 is the long code of the called function (values 0-1023)
 
 const (
-	FirstByteDataMask          = byte(0x01) << 7
-	FirstByteDataLenMask       = ^FirstByteDataMask
+	FirstByteDataMask          = byte(0b10000000) // byte(0x01) << 7
+	FirstByteShortDataLenMask  = ^FirstByteDataMask
 	FirstByteLongCallMask      = byte(0x01) << 6
 	FirstByteLongCallArityMask = byte(0x0f) << 2
 	Uint16LongCallCodeMask     = ^(uint16(FirstByteDataMask|FirstByteLongCallMask|FirstByteLongCallArityMask) << 8)
@@ -235,16 +234,28 @@ func (f *parsedExpression[T]) bytecodeFromParsedExpression(lib *Library[T], w io
 	return numArgs, nil
 }
 
-func writeDataWithPrefix(w io.Writer, data []byte) error {
-	if len(data) > 127 {
-		return errors.New("too long inline data")
+// if data len < 127, data prefix is one byte FirstByteDataMask | byte(len(data))
+// if data len >= 127, data prefix is 3 bytes where first byte is 0xff and next two bytes is big-endian uint16 of the data size
+
+func writeDataWithPrefix(w io.Writer, data []byte) (err error) {
+	var prefix []byte
+	if len(data) < 127 {
+		prefix = []byte{FirstByteDataMask | byte(len(data))}
+	} else {
+		// len >= 127
+		if len(data) > math.MaxUint16 {
+			return fmt.Errorf("too many bytes: %d", len(data))
+		}
+		prefix = []byte{0xff}
+		var sz [2]byte
+		binary.BigEndian.PutUint16(sz[:], uint16(len(data)))
+		prefix = append(prefix, sz[:]...)
 	}
-	_, err := w.Write([]byte{FirstByteDataMask | byte(len(data))})
-	if err != nil {
-		return err
+	if _, err = w.Write(prefix); err != nil {
+		return
 	}
 	_, err = w.Write(data)
-	return err
+	return
 }
 
 func mustDataWithPrefix(data []byte) []byte {
@@ -273,19 +284,6 @@ func parseLiteral[T any](lib *Library[T], sym string, w io.Writer) (bool, int, e
 			return false, 0, err
 		}
 		return true, 0, nil
-	//case strings.HasPrefix(sym, "$$"):
-	//	// bytecode parameter reference function
-	//	n, err = strconv.Atoi(sym[2:])
-	//	if err != nil {
-	//		return false, 0, err
-	//	}
-	//	if n < 0 || n > MaxParameters {
-	//		return false, 0, fmt.Errorf("wrong bytecode parameter reference '%s'", sym)
-	//	}
-	//	if _, err = w.Write([]byte{BytecodeParameterFlag | byte(n)}); err != nil {
-	//		return false, 0, err
-	//	}
-	//	return true, n + 1, nil
 	case strings.HasPrefix(sym, "$"):
 		// eval parameter reference function
 		n, err = strconv.Atoi(sym[1:])
@@ -308,9 +306,6 @@ func parseLiteral[T any](lib *Library[T], sym string, w io.Writer) (bool, int, e
 		// it is hexadecimal constant
 		if b, err = hex.DecodeString(sym[2:]); err != nil {
 			return false, 0, fmt.Errorf("%v: '%s'", err, sym)
-		}
-		if len(b) > 127 {
-			return false, 0, fmt.Errorf("hexadecimal constant can't be longer than 127 bytes: '%s'", sym)
 		}
 		if err = writeDataWithPrefix(w, b); err != nil {
 			return false, 0, err
@@ -478,9 +473,6 @@ func (lib *Library[T]) ExpressionSourceToBytecode(formulaSource string, localLib
 	}
 
 	var buf bytes.Buffer
-	if formulaSource == "concat($15)" {
-		println("")
-	}
 	numArgs, err := f.bytecodeFromParsedExpression(lib, &buf, localLib...)
 	if err != nil {
 		return nil, 0, err
@@ -562,20 +554,25 @@ func (lib *Library[T]) expressionFromBytecode(bytecode []byte, localLib ...*Loca
 		return nil, nil, 0xff, io.EOF
 	}
 
-	dataPrefix, itIsData, err := ParseBytecodeInlineDataPrefix(bytecode)
+	dataWithPrefix, itIsData, dataSize, err := parseBytecodeInlineData(bytecode)
 	if err != nil {
 		return nil, nil, 0xff, err
 	}
+	prefixSize := 1
+	if dataSize >= 127 {
+		prefixSize = 3
+	}
 	if itIsData {
 		var sym string
-		if len(dataPrefix[1:]) == 1 {
-			sym = fmt.Sprintf("%d", dataPrefix[1])
+		data := dataWithPrefix[prefixSize : prefixSize+dataSize]
+		if len(data) == 1 {
+			sym = fmt.Sprintf("%d", data[0])
 		} else {
-			sym = fmt.Sprintf("0x%s", hex.EncodeToString(dataPrefix[1:]))
+			sym = fmt.Sprintf("0x%s", hex.EncodeToString(dataWithPrefix[prefixSize:]))
 		}
-		ret := newExpression[T](sym, dataPrefix, 0)
-		ret.EvalFunc = dataFunction[T](dataPrefix[1:])
-		return ret, bytecode[len(dataPrefix):], 0xff, nil
+		ret := newExpression[T](sym, dataWithPrefix, 0)
+		ret.EvalFunc = dataFunction[T](dataWithPrefix[prefixSize:])
+		return ret, bytecode[len(dataWithPrefix):], 0xff, nil
 	}
 	maxParameterNumber := byte(0xff)
 
@@ -749,24 +746,40 @@ func (lib *Library[T]) ParseNumArgs(code []byte) (arity int, err error) {
 	return
 }
 
-// ParseBytecodeInlineDataPrefix attempts to parse beginning of the code as inline data
+// parseBytecodeInlineData attempts to parse beginning of the code as inline data
 // Function used is binary code analysis
 // Returns:
-// - parsed data including the 1-byte prefix, if it is data, otherwise nil
+// - parsed data including the 1 or 3-byte prefix, if it is data, otherwise nil
 // - true if it is data, false if not (it is a function call)
+// - size of the data:
 // - EOF if not enough data
-func ParseBytecodeInlineDataPrefix(code []byte) ([]byte, bool, error) {
+func parseBytecodeInlineData(code []byte) ([]byte, bool, int, error) {
 	if !HasInlineDataPrefix(code) {
 		// not data
-		return nil, false, nil
+		return nil, false, 0, nil
 	}
 	// it is data
-	size := int(code[0] & FirstByteDataLenMask)
-	if len(code) < size+1 {
-		// too short
-		return nil, false, io.EOF
+	var size int
+	if code[0] != 0xff {
+		// short data
+		size = int(code[0] & FirstByteShortDataLenMask)
+		if len(code) < size+1 {
+			// too short
+			return nil, false, 0, io.EOF
+		}
+		return code[0 : 1+size], true, size, nil
 	}
-	return code[0 : 1+size], true, nil
+	// long data
+	if len(code) < 3 {
+		// too short
+		return nil, false, 0, io.EOF
+	}
+	size = int(binary.BigEndian.Uint16(code[1:3]))
+	if len(code) < size+3 {
+		// too short
+		return nil, false, 0, io.EOF
+	}
+	return code[0 : 3+size], true, size, nil
 }
 
 func HasInlineDataPrefix(data []byte) bool {
@@ -776,7 +789,7 @@ func HasInlineDataPrefix(data []byte) bool {
 	return data[0]&FirstByteDataMask != 0
 }
 
-// StripDataPrefix if the first byte is a data prefix, strips it. Usually used for the data prefix returned by ParseBytecodeInlineDataPrefix
+// StripDataPrefix if the first byte is a data prefix, strips it. Usually used for the data prefix returned by parseBytecodeInlineData
 func StripDataPrefix(data []byte) []byte {
 	if HasInlineDataPrefix(data) {
 		// if it is data, skip the prefix
