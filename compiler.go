@@ -244,21 +244,21 @@ func (f *parsedExpression[T]) bytecodeFromParsedExpression(lib *Library[T], w io
 // if data len >= 127, data prefix is 3 bytes where first byte is 0xff and next two bytes is big-endian uint16 of the data size
 
 func writeDataWithPrefix(w io.Writer, data []byte) (err error) {
-	var prefix []byte
 	if len(data) < 127 {
-		prefix = []byte{FirstByteDataMask | byte(len(data))}
+		if _, err = w.Write([]byte{FirstByteDataMask | byte(len(data))}); err != nil {
+			return err
+		}
 	} else {
 		// len >= 127
 		if len(data) > math.MaxUint16 {
 			return fmt.Errorf("too many bytes: %d", len(data))
 		}
-		prefix = []byte{0xff}
-		var sz [2]byte
-		binary.BigEndian.PutUint16(sz[:], uint16(len(data)))
-		prefix = append(prefix, sz[:]...)
-	}
-	if _, err = w.Write(prefix); err != nil {
-		return
+		if _, err = w.Write([]byte{0xff}); err != nil {
+			return err
+		}
+		if err = binary.Write(w, binary.BigEndian, uint16(len(data))); err != nil {
+			return err
+		}
 	}
 	_, err = w.Write(data)
 	return
@@ -818,6 +818,13 @@ func StripDataPrefix(data []byte) []byte {
 		prefixSize = 3
 	}
 	return data[prefixSize:]
+}
+
+func InlineDataBytecode(data []byte) []byte {
+	var buf bytes.Buffer
+	err := writeDataWithPrefix(&buf, data)
+	easyfl_util.AssertNoError(err)
+	return buf.Bytes()
 }
 
 // ParsePrefixBytecode tries to parse first 1, 2 or 3 bytes as a prefix, which contains
