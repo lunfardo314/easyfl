@@ -181,12 +181,6 @@ func evalEvalParamFun[T any](paramNr byte) EmbeddedFunction[T] {
 	}
 }
 
-//func evalBytecodeParamFun[T any](paramNr byte) EmbeddedFunction[T] {
-//	return func(par *CallParams[T]) []byte {
-//		return par.GetBytecode(paramNr)
-//	}
-//}
-
 func (lib *Library[T]) ExtendErr(sym string, source string, description ...string) (uint16, error) {
 	f, numParam, bytecode, err := lib.CompileExpression(source)
 	if err != nil {

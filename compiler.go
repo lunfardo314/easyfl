@@ -31,7 +31,10 @@ type parsedExpression[T any] struct {
 
 // parseFunctions parses many function definitions
 func parseFunctions(s string) ([]*funParsed, error) {
-	lines := splitLinesStripComments(s)
+	lines, err := splitLinesStripComments(s)
+	if err != nil {
+		return nil, err
+	}
 	ret, err := parseDefs(lines)
 	if err != nil {
 		return nil, err
@@ -39,14 +42,17 @@ func parseFunctions(s string) ([]*funParsed, error) {
 	return ret, nil
 }
 
-func splitLinesStripComments(s string) []string {
+func splitLinesStripComments(s string) ([]string, error) {
+	if len(s) > MaxSourceSize {
+		return nil, fmt.Errorf("source is too long. Maximum size is %d, got %d", MaxSourceSize, len(s))
+	}
 	var lines []string
 	sc := bufio.NewScanner(strings.NewReader(s))
 	for sc.Scan() {
 		line, _, _ := strings.Cut(sc.Text(), "//")
 		lines = append(lines, strings.TrimSpace(line))
 	}
-	return lines
+	return lines, nil
 }
 
 func parseDefs(lines []string) ([]*funParsed, error) {
@@ -571,7 +577,10 @@ func (lib *Library[T]) expressionFromBytecode(bytecode []byte, localLib ...*Loca
 			sym = fmt.Sprintf("0x%s", hex.EncodeToString(dataWithPrefix[prefixSize:]))
 		}
 		ret := newExpression[T](sym, dataWithPrefix, 0)
-		ret.EvalFunc = dataFunction[T](dataWithPrefix[prefixSize:])
+		ret.EvalFunc, err = dataFunction[T](dataWithPrefix[prefixSize:])
+		if err != nil {
+			return nil, nil, 0, err
+		}
 		return ret, bytecode[len(dataWithPrefix):], 0xff, nil
 	}
 	maxParameterNumber := byte(0xff)
@@ -614,7 +623,11 @@ func (lib *Library[T]) expressionFromBytecode(bytecode []byte, localLib ...*Loca
 
 // CompileExpression compiles from sources directly into the evaluation form
 func (lib *Library[T]) CompileExpression(source string, localLib ...*LocalLibrary[T]) (*Expression[T], int, []byte, error) {
-	src := strings.Join(splitLinesStripComments(source), "")
+	lines, err := splitLinesStripComments(source)
+	if err != nil {
+		return nil, 0, nil, err
+	}
+	src := strings.Join(lines, "")
 	bytecode, numParams, err := lib.ExpressionSourceToBytecode(stripSpaces(src), localLib...)
 	if err != nil {
 		return nil, 0, nil, err
@@ -635,15 +648,20 @@ func (lib *Library[T]) DecompileBytecode(code []byte) (string, error) {
 	return ExpressionToSource(f), nil
 }
 
-func dataFunction[T any](data []byte) EvalFunction[T] {
+func dataFunction[T any](data []byte) (ret EvalFunction[T], err error) {
+	if len(data) > MaxDataSize {
+		err = fmt.Errorf("EasyFL: data too large. Max is %d, got %d", MaxDataSize, len(data))
+		return
+	}
 	d := data
-	return EvalFunction[T]{
+	ret = EvalFunction[T]{
 		EmbeddedFunction: func(par *CallParams[T]) []byte {
 			par.Trace("-> %s", easyfl_util.Fmt(d))
 			return data
 		},
 		bytecode: mustDataWithPrefix(data),
 	}
+	return
 }
 
 // parseCallPrefix analyzes the prefix of the bytecode. The prefix contains information about functions to call and the number of arguments

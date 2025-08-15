@@ -743,6 +743,51 @@ func TestInlineCode(t *testing.T) {
 		t.Logf("result: %s", easyfl_util.Fmt(res))
 		require.EqualValues(t, []byte{0, 2}, res)
 	})
+	t.Run("too long inline", func(t *testing.T) {
+		data := strings.Repeat("f", MaxSourceSize-1)
+		src := fmt.Sprintf("0x%s", data)
+		_, _, _, err := lib.CompileExpression(src)
+		easyfl_util.RequireErrorWith(t, err, "source is too long")
+	})
+	t.Run("long inline", func(t *testing.T) {
+		data := strings.Repeat("f", MaxSourceSize-2)
+		src := fmt.Sprintf("0x%s", data)
+		_, _, _, err := lib.CompileExpression(src)
+		require.NoError(t, err)
+	})
+	t.Run("inline 126-127", func(t *testing.T) {
+		data126 := strings.Repeat("f", 126*2)
+		src126 := fmt.Sprintf("0x%s", data126)
+		_, _, code126, err := lib.CompileExpression(src126)
+		require.NoError(t, err)
+		require.EqualValues(t, 126+1, len(code126))
+
+		data127 := strings.Repeat("f", 127*2)
+		src127 := fmt.Sprintf("0x%s", data127)
+		_, _, code127, err := lib.CompileExpression(src127)
+		require.NoError(t, err)
+		require.EqualValues(t, 127+3, len(code127))
+
+	})
+	t.Run("concat long inline", func(t *testing.T) {
+		data1 := strings.Repeat("1", 10*1024)
+		data2 := strings.Repeat("2", 5*1024)
+		data3 := strings.Repeat("3", 7*1024)
+		src := fmt.Sprintf("concat(0x%s,0x%s,0x%s)", data1, data2, data3)
+		//t.Logf("source: %s", src)
+		res, err := lib.EvalFromSource(nil, src)
+		require.NoError(t, err)
+		require.EqualValues(t, (10+5+7)*1024/2, len(res))
+	})
+	t.Run("or long inline", func(t *testing.T) {
+		data1 := strings.Repeat("1", 10*1024)
+		data2 := strings.Repeat("2", 5*1024)
+		data3 := strings.Repeat("3", 7*1024)
+		src := fmt.Sprintf("or(0x%s,0x%s,0x%s)", data1, data2, data3)
+		//t.Logf("source: %s", src)
+		lib.MustTrue(src)
+	})
+
 }
 
 func TestDecompile(t *testing.T) {

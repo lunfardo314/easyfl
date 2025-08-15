@@ -1,6 +1,8 @@
 package easyfl
 
 import (
+	"bufio"
+	"math"
 	"sync"
 
 	"github.com/lunfardo314/easyfl/easyfl_util"
@@ -9,7 +11,8 @@ import (
 const (
 
 	// ---- embedded parameter access codes
-
+	MaxSourceSize         = bufio.MaxScanTokenSize - 10
+	MaxDataSize           = math.MaxUint16
 	FirstEmbeddedReserved = 0x00
 	// MaxParameters maximum number of parameters in the function definition and the call.
 	MaxParameters        = 0x0f

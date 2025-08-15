@@ -196,7 +196,9 @@ func EvalExpression[T any](glb GlobalData[T], f *Expression[T], args ...[]byte) 
 	spool := slicepool.New()
 	ctx := newEvalContext(nil, glb, spool)
 	for i, d := range args {
-		argsForData[i] = newCall[T](dataFunction[T](d), nil, ctx)
+		dfun, err := dataFunction[T](d)
+		easyfl_util.AssertNoError(err)
+		argsForData[i] = newCall[T](dfun, nil, ctx)
 	}
 	retp := evalExpression(glb, spool, f, argsForData)
 	ret := make([]byte, len(retp))
@@ -213,7 +215,9 @@ func EvalExpressionWithSlicePool[T any](glb GlobalData[T], spool *slicepool.Slic
 
 	ctx := newEvalContext(nil, glb, spool)
 	for i, d := range args {
-		argsForData[i] = newCall[T](dataFunction[T](d), nil, ctx)
+		dfun, err := dataFunction[T](d)
+		easyfl_util.AssertNoError(err)
+		argsForData[i] = newCall[T](dfun, nil, ctx)
 	}
 	retp := evalExpression(glb, spool, f, argsForData)
 	ret := make([]byte, len(retp))
