@@ -171,6 +171,17 @@ func (st *Tree) ForEach(fun func(i byte, data []byte) bool, path TreePath) error
 	return nil
 }
 
+func (st *Tree) ForEachReverse(fun func(i byte, data []byte) bool, path TreePath) error {
+	sub, err := st.Subtree(path)
+	if err != nil {
+		return err
+	}
+	sub.sa.ForEachReverse(func(i int, data []byte) bool {
+		return fun(byte(i), data)
+	})
+	return nil
+}
+
 func (st *Tree) ForEachIndex(fun func(i byte) bool, path TreePath) error {
 	n, err := st.NumElementsAtPath(path)
 	if err != nil {

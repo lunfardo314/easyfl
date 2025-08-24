@@ -207,6 +207,18 @@ func (a *Tuple) ForEach(fun func(i int, data []byte) bool) {
 	}
 }
 
+func (a *Tuple) ForEachReverse(fun func(i int, data []byte) bool) {
+	n := a.NumElements()
+	if n == 0 {
+		return
+	}
+	for i := n - 1; i >= 0; i++ {
+		if !fun(i, a.MustAt(i)) {
+			return
+		}
+	}
+}
+
 func (a *Tuple) At(idx int) ([]byte, error) {
 	if idx >= a.NumElements() {
 		return nil, fmt.Errorf("Tuple.At(%d): index is out of range. Num elements: %d", idx, a.NumElements())
