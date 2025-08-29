@@ -557,7 +557,7 @@ func writeExpressionSource[T any](w io.Writer, f *Expression[T]) error {
 // expressionFromBytecode parses bytecode into the executable expression tree
 func (lib *Library[T]) expressionFromBytecode(bytecode []byte, localLib ...*LocalLibrary[T]) (*Expression[T], []byte, byte, error) {
 	if len(bytecode) == 0 {
-		return nil, nil, 0xff, io.EOF
+		return nil, nil, 0xff, io.ErrUnexpectedEOF
 	}
 
 	dataWithPrefix, itIsData, dataSize, err := parseBytecodeInlineData(bytecode)
@@ -708,7 +708,7 @@ func (lib *Library[T]) parseCallPrefix(code []byte, localLib ...*LocalLibrary[T]
 	} else {
 		// long call
 		if len(code) < 2 {
-			return nil, EvalFunction[T]{}, 0, "", io.EOF
+			return nil, EvalFunction[T]{}, 0, "", io.ErrUnexpectedEOF
 		}
 		arity = int((code[0] & FirstByteLongCallArityMask) >> 2)
 		t := binary.BigEndian.Uint16(code[:2])
@@ -723,7 +723,7 @@ func (lib *Library[T]) parseCallPrefix(code []byte, localLib ...*LocalLibrary[T]
 				return nil, EvalFunction[T]{}, 0, "", fmt.Errorf("local library not provided")
 			}
 			if len(code) < 3 {
-				return nil, EvalFunction[T]{}, 0, "", io.EOF
+				return nil, EvalFunction[T]{}, 0, "", io.ErrUnexpectedEOF
 			}
 			idx = uint16(FirstLocalFunCode) + uint16(code[2])
 			callPrefix = code[:3]
@@ -758,7 +758,7 @@ func (lib *Library[T]) ParseNumArgs(code []byte) (arity int, err error) {
 	}
 	// long call
 	if len(code) < 2 {
-		return 0, io.EOF
+		return 0, io.ErrUnexpectedEOF
 	}
 	arity = int((code[0] & FirstByteLongCallArityMask) >> 2)
 	return
@@ -783,19 +783,19 @@ func parseBytecodeInlineData(code []byte) ([]byte, bool, int, error) {
 		size = int(code[0] & FirstByteShortDataLenMask)
 		if len(code) < size+1 {
 			// too short
-			return nil, false, 0, io.EOF
+			return nil, false, 0, io.ErrUnexpectedEOF
 		}
 		return code[0 : 1+size], true, size, nil
 	}
 	// long data
 	if len(code) < 3 {
 		// too short
-		return nil, false, 0, io.EOF
+		return nil, false, 0, io.ErrUnexpectedEOF
 	}
 	size = int(binary.BigEndian.Uint16(code[1:3]))
 	if len(code) < size+3 {
 		// too short
-		return nil, false, 0, io.EOF
+		return nil, false, 0, io.ErrUnexpectedEOF
 	}
 	return code[0 : 3+size], true, size, nil
 }

@@ -381,7 +381,7 @@ func encodeArray(data [][]byte, w io.Writer) error {
 
 func parseArray(data []byte, maxNumElements int) ([]_slice, byte, error) {
 	if len(data) < 2 {
-		return nil, 0, errors.New("unexpected EOF")
+		return nil, 0, fmt.Errorf("%w (len(data)=%d)", io.ErrUnexpectedEOF, len(data))
 	}
 	prefix := lenPrefixType(binary.BigEndian.Uint16(data[:2]))
 	if prefix.numElements() > maxNumElements {
