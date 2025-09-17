@@ -1,7 +1,7 @@
 package easyfl
 
 const baseLibraryDefinitions = `# Base EasyFL library
-hash: 9f6b7ed49e0871f33cebd027366907a9de95260bb725d8f2b3bee089fae97e2c
+hash: fca628f525ebe6d529271119b4fa6610925dcaeab2672e46c1fe90764d53eb0f
 functions:
 # BEGIN EMBEDDED function definitions
 #    function codes (opcodes) from 0 to 14 are reserved for predefined parameter access functions $i
@@ -224,45 +224,39 @@ functions:
       numArgs: -1
       embedded: true
    -
-      sym: "parseArgumentBytecode"
-      description: "parseArgumentBytecode($0,$1,$2) treats $0 as bytecode. It check if its call prefix is equal to $1 and takes bytecode argument with index $2"
+      sym: "parseBytecode"
+      description: "parseBytecode($0,$1 [,$2...]) treats $0 as bytecode and $1 is either 1-byte index of the argument or 0x for the call prefix. It check if its call prefix is equal to $2 list if any"
       funCode: 75
-      numArgs: 3
-      embedded: true
-   -
-      sym: "parsePrefixBytecode"
-      description: "treats $0 as bytecode. Returns its call prefix"
-      funCode: 76
-      numArgs: 1
+      numArgs: -1
       embedded: true
    -
       sym: "parseInlineData"
       description: "treats $0 as bytecode of the inline data call. Strips the call prefix, returns the data"
-      funCode: 77
+      funCode: 76
       numArgs: 1
       embedded: true
    -
       sym: "parseNumArgs"
       description: "treats $0 as bytecode of the inline data call. Returns number of parameters in the call as 1 byte"
-      funCode: 78
+      funCode: 77
       numArgs: 1
       embedded: true
    -
       sym: "callLocalLibrary"
       description: "calls local library"
-      funCode: 79
+      funCode: 78
       numArgs: -1
       embedded: true
    -
       sym: "atTuple8"
       description: "returns element of the serialized tuple at index $0 which must be 1 byte-long"
-      funCode: 80
+      funCode: 79
       numArgs: 2
       embedded: true
    -
       sym: "tupleLen"
       description: "returns number of elements of a tuple as 8 byte-long big-endian value"
-      funCode: 81
+      funCode: 80
       numArgs: 1
       embedded: true
 # END LONG EMBEDDED function definitions
@@ -323,27 +317,9 @@ functions:
          not(lessThan($0,$1))         
          
    -
-      sym: "parseInlineDataArgument"
-      description: "in bytecode $0, parses argument with index $2, treats it as inline data call, returns the inline data, Enforces call prefix is equal to $1"
-      funCode: 325
-      numArgs: 3
-      bytecode: 444d4c4b000102
-      source: >
-         parseInlineData(parseArgumentBytecode($0,$1,$2))         
-         
-   -
-      sym: "parseInlineDataArgumentAnyPrefix"
-      description: "in bytecode $0, parses argument with index $1, treats it as inline data call, returns the inline data"
-      funCode: 326
-      numArgs: 2
-      bytecode: 4d4500444c0001
-      source: >
-         parseInlineDataArgument($0,parsePrefixBytecode($0),$1)
-         
-   -
       sym: "lessThanUint"
       description: "returns $0<$1 for arguments of any size <= 8. Each of arguments ar expanded fit leading 0-s up to 8 bytes and compare lexicographically"
-      funCode: 327
+      funCode: 325
       numArgs: 2
       bytecode: 1f1e001e01
       source: >
@@ -352,7 +328,7 @@ functions:
    -
       sym: "equalUint"
       description: "returns $0==$1 preliminary expanding each operand with leading 0-s to 8 bytes"
-      funCode: 328
+      funCode: 326
       numArgs: 2
       bytecode: 131e001e01
       source: >
@@ -361,7 +337,7 @@ functions:
    -
       sym: "max"
       description: "returns bigger one out of 2 operands of equal size"
-      funCode: 329
+      funCode: 327
       numArgs: 2
       bytecode: 171f00010100
       source: >
@@ -370,7 +346,7 @@ functions:
    -
       sym: "min"
       description: "returns smaller one out of 2 operands of equal size"
-      funCode: 330
+      funCode: 328
       numArgs: 2
       bytecode: 171f00010001
       source: >

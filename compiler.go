@@ -192,8 +192,8 @@ func splitArgs(argsStr string) ([]string, error) {
 const (
 	FirstByteDataMask          = byte(0b10000000) // byte(0x01) << 7
 	FirstByteShortDataLenMask  = ^FirstByteDataMask
-	FirstByteLongCallMask      = byte(0x01) << 6
-	FirstByteLongCallArityMask = byte(0x0f) << 2
+	FirstByteLongCallMask      = byte(0b01000000) // byte(0x01) << 6
+	FirstByteLongCallArityMask = byte(0b00111100) // byte(0x0f) << 2
 	Uint16LongCallCodeMask     = ^(uint16(FirstByteDataMask|FirstByteLongCallMask|FirstByteLongCallArityMask) << 8)
 )
 
@@ -427,7 +427,7 @@ func parseLiteral[T any](lib *Library[T], sym string, w io.Writer) (bool, int, e
 		}
 		return true, 0, nil
 	case strings.HasPrefix(sym, "#"):
-		// function call prefix literal
+		// function call prefix literal. Value for the functions calls is prefix with arity set to 0
 		funName := strings.TrimPrefix(sym, "#")
 		if fi, err = lib.functionByName(funName); err != nil {
 			return false, 0, err
@@ -469,6 +469,20 @@ func parseLiteral[T any](lib *Library[T], sym string, w io.Writer) (bool, int, e
 		return true, 0, nil
 	}
 	return false, 0, nil
+}
+
+func (lib *Library[T]) matchesPrefixes(prefix1, prefix2 []byte) (ret bool, err error) {
+	if ret = bytes.Equal(prefix1, prefix2); ret {
+		return
+	}
+	var n1, n2 string
+	if n1, err = lib.FunctionNameByCallPrefix(prefix1); err != nil {
+		return
+	}
+	if n2, err = lib.FunctionNameByCallPrefix(prefix2); err != nil {
+		return
+	}
+	return n1 == n2, nil
 }
 
 // ExpressionSourceToBytecode compiles expression from source form into the canonical bytecode representation

@@ -1054,7 +1054,7 @@ func TestParseDataArgument(t *testing.T) {
 			require.NoError(t, err)
 			t.Logf("src: %s\ncode: %s", src, easyfl_util.Fmt(code))
 
-			prefix, err := lib.EvalFromSource(nil, fmt.Sprintf("parsePrefixBytecode(0x%s)", hex.EncodeToString(code)))
+			prefix, err := lib.EvalFromSource(nil, fmt.Sprintf("parseBytecode(0x%s,0x)", hex.EncodeToString(code)))
 			require.NoError(t, err)
 			t.Logf("prefix: %s", easyfl_util.Fmt(prefix))
 
@@ -1077,14 +1077,14 @@ func TestParseDataArgument(t *testing.T) {
 			_, _, code, err := lib.CompileExpression(src)
 			require.NoError(t, err)
 			t.Logf("src: %s\ncode: %s", src, easyfl_util.Fmt(code))
-			srcToEval := fmt.Sprintf("parseInlineData(parseArgumentBytecode(0x%s, #%s, %d))", hex.EncodeToString(code), prefixFun, nArg)
+			srcToEval := fmt.Sprintf("parseInlineData(parseBytecode(0x%s, %d, #%s))", hex.EncodeToString(code), nArg, prefixFun)
 			lib.MustEqual(srcToEval, expected)
 		}
 		runSrcFail := func(src string, prefixFun string, nArg byte, expectedErr ...string) {
 			_, _, code, err := lib.CompileExpression(src)
 			require.NoError(t, err)
 			t.Logf("src: %s\ncode: %s", src, easyfl_util.Fmt(code))
-			srcToEval := fmt.Sprintf("parseInlineData(parseArgumentBytecode(0x%s, #%s, %d))", hex.EncodeToString(code), prefixFun, nArg)
+			srcToEval := fmt.Sprintf("parseInlineData(parseBytecode(0x%s, %d, #%s))", hex.EncodeToString(code), nArg, prefixFun)
 			lib.MustError(srcToEval, expectedErr...)
 		}
 
@@ -1094,7 +1094,7 @@ func TestParseDataArgument(t *testing.T) {
 		runSrc("slice(0x010203030201, 1, 1)", "slice", 2, "1")
 
 		runSrcFail("slice(0x010203030201, 1, 1)", "slice", 3, "wrong parameter index")
-		runSrcFail("slice(0x010203030201, 1, 1)", "concat", 3, "unexpected function prefix")
+		runSrcFail("slice(0x010203030201, 1, 1)", "concat", 2, "unexpected call prefix")
 		runSrcFail("concat", "concat", 0, "wrong parameter index")
 
 	})
@@ -1314,13 +1314,13 @@ func TestEmbed(t *testing.T) {
 	t.Run("bytecode manipulation", func(t *testing.T) {
 		_, _, binCode, err := lib.CompileExpression("slice(0x01020304,1,2)")
 		easyfl_util.AssertNoError(err)
-		src := fmt.Sprintf("parseInlineDataArgument(0x%s, #slice, %d)", hex.EncodeToString(binCode), 0)
+		src := fmt.Sprintf("parseInlineData(parseBytecode(0x%s, %d, #slice))", hex.EncodeToString(binCode), 0)
 		lib.MustEqual(src, "0x01020304")
-		src = fmt.Sprintf("parseInlineDataArgument(0x%s, #slice, %d)", hex.EncodeToString(binCode), 1)
+		src = fmt.Sprintf("parseInlineData(parseBytecode(0x%s, %d, #slice))", hex.EncodeToString(binCode), 1)
 		lib.MustEqual(src, "1")
-		src = fmt.Sprintf("parseInlineDataArgument(0x%s, #slice, %d)", hex.EncodeToString(binCode), 2)
+		src = fmt.Sprintf("parseInlineData(parseBytecode(0x%s, %d, #slice))", hex.EncodeToString(binCode), 2)
 		lib.MustEqual(src, "2")
-		src = fmt.Sprintf("parsePrefixBytecode(0x%s)", hex.EncodeToString(binCode))
+		src = fmt.Sprintf("parseBytecode(0x%s, 0x)", hex.EncodeToString(binCode))
 		lib.MustEqual(src, "#slice")
 	})
 }
@@ -1376,20 +1376,20 @@ func TestParseInlineDataArgumentAnyPrefix(t *testing.T) {
 	const src = "concat(1,2,3,4)"
 	_, _, bytecode, err := lib.CompileExpression(src)
 	require.NoError(t, err)
-	src2 := fmt.Sprintf("parseInlineDataArgumentAnyPrefix(0x%s, 0)", hex.EncodeToString(bytecode))
+	src2 := fmt.Sprintf("parseInlineData(parseBytecode(0x%s, 0))", hex.EncodeToString(bytecode))
 	lib.MustEqual(src2, "1")
-	src2 = fmt.Sprintf("parseInlineDataArgumentAnyPrefix(0x%s, 1)", hex.EncodeToString(bytecode))
+	src2 = fmt.Sprintf("parseInlineData(parseBytecode(0x%s, 1))", hex.EncodeToString(bytecode))
 	lib.MustEqual(src2, "2")
-	src2 = fmt.Sprintf("parseInlineDataArgumentAnyPrefix(0x%s, 3)", hex.EncodeToString(bytecode))
+	src2 = fmt.Sprintf("parseInlineData(parseBytecode(0x%s, 3))", hex.EncodeToString(bytecode))
 	lib.MustEqual(src2, "4")
 
 	const src1 = "or(1,2,3,4)"
 	_, _, bytecode, err = lib.CompileExpression(src1)
 	require.NoError(t, err)
-	src2 = fmt.Sprintf("parseInlineDataArgumentAnyPrefix(0x%s, 0)", hex.EncodeToString(bytecode))
+	src2 = fmt.Sprintf("parseInlineData(parseBytecode(0x%s, 0))", hex.EncodeToString(bytecode))
 	lib.MustEqual(src2, "1")
-	src2 = fmt.Sprintf("parseInlineDataArgumentAnyPrefix(0x%s, 1)", hex.EncodeToString(bytecode))
+	src2 = fmt.Sprintf("parseInlineData(parseBytecode(0x%s, 1))", hex.EncodeToString(bytecode))
 	lib.MustEqual(src2, "2")
-	src2 = fmt.Sprintf("parseInlineDataArgumentAnyPrefix(0x%s, 3)", hex.EncodeToString(bytecode))
+	src2 = fmt.Sprintf("parseInlineData(parseBytecode(0x%s, 3))", hex.EncodeToString(bytecode))
 	lib.MustEqual(src2, "4")
 }

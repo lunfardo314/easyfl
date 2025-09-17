@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"encoding/binary"
 	"encoding/hex"
+	"fmt"
 	"math"
 	"reflect"
 
@@ -72,10 +73,8 @@ func EmbeddedFunctions[T any](targetLib *Library[T]) func(sym string) EmbeddedFu
 		}
 		// function bound to a particular target library
 		switch sym {
-		case "parseArgumentBytecode":
-			return targetLib.evalParseArgumentBytecode
-		case "parsePrefixBytecode":
-			return targetLib.evalParsePrefixBytecode
+		case "parseBytecode":
+			return targetLib.evalParseBytecode
 		case "parseInlineData":
 			return targetLib.evalParseInlineData
 		case "parseNumArgs":
@@ -551,48 +550,49 @@ func (lib *Library[T]) evalParseInlineData(par *CallParams[T]) []byte {
 		if err != nil {
 			deco = err.Error()
 		}
-		par.TracePanic("evalParseInlineData: not an inline data function call: %s (decompiled='%v')",
+		par.TracePanic("evalParseInlineData: not an inline data function: %s (got decompiled='%v')",
 			easyfl_util.FmtLazy(dataBytecode), deco)
 	}
 	return dataBytecode[1:]
 }
 
-// evalParseArgumentBytecode takes bytecode of the argument as is.
+// evalParseBytecode takes bytecode of the argument as is.
 // Note: data prefix is not stripped. To get the data, it must be evaluated
-func (lib *Library[T]) evalParseArgumentBytecode(par *CallParams[T]) []byte {
-
+// arg0 - bytecode
+// arg1 - argument to parse index 1 byte, or nil to parse call prefix
+// arg2, ... zero or more arguments interpreted as a list of prefixes. If list is not empty,
+// function enforces the call prefix is equal to at least one of elements in te list
+func (lib *Library[T]) evalParseBytecode(par *CallParams[T]) (ret []byte) {
+	par.Require(par.Arity() >= 2, "evalParseBytecode: wrong number of arguments")
 	a0 := par.Arg(0)
 	sym, prefix, args, err := lib.ParseBytecodeOneLevel(a0)
 	if err != nil {
-		par.TracePanic("evalParseArgumentBytecode:: %v", err)
+		err = fmt.Errorf("evalParseBytecode: %v", err)
 	}
-	expectedPrefix := par.Arg(1)
-	_, _, _, symExpectedPrefix, err := lib.parseCallPrefix(expectedPrefix)
-	if err != nil {
-		par.TracePanic("evalParseArgumentBytecode: can't parse prefix '%s': %v", easyfl_util.FmtLazy(expectedPrefix), err)
-	}
+	par.RequireNoError(err)
 
-	if sym != symExpectedPrefix {
-		par.TracePanic("evalParseArgumentBytecode: unexpected function prefix. Expected '%s'('%s'), got '%s'('%s')",
-			easyfl_util.FmtLazy(expectedPrefix), symExpectedPrefix, easyfl_util.FmtLazy(prefix), sym)
+	a1 := par.Arg(1)
+	if len(a1) == 0 {
+		// parse prefix
+		ret = prefix
+	} else {
+		par.Require(len(a1) == 1, "evalParseBytecode: expected argument1 length 1 byte")
+		par.Require(int(a1[0]) < len(args), "wrong parameter index")
+		ret = args[a1[0]]
 	}
-	idx := par.Arg(2)
-	if len(idx) != 1 || len(args) <= int(idx[0]) {
-		par.TracePanic("evalParseArgumentBytecode: wrong parameter index")
+	if par.Arity() == 2 {
+		// no  check of enforced prefixes
+		return
 	}
-	ret := args[idx[0]]
-	par.Trace("unwrapBytecodeArg:: %s, %s, %s -> %s", easyfl_util.FmtLazy(a0), easyfl_util.FmtLazy(expectedPrefix), easyfl_util.FmtLazy(idx), easyfl_util.FmtLazy(ret))
-	return ret
-}
-
-func (lib *Library[T]) evalParsePrefixBytecode(par *CallParams[T]) []byte {
-	code := par.Arg(0)
-	prefix, err := lib.ParsePrefixBytecode(code)
-	if err != nil {
-		par.TracePanic("evalParsePrefixBytecode: %v", err)
+	for i := byte(2); i < par.Arity(); i++ {
+		match, err := lib.matchesPrefixes(prefix, par.Arg(i))
+		par.RequireNoError(err)
+		if match {
+			return
+		}
 	}
-	par.Trace("parseBytecodePrefix::%s -> %s", easyfl_util.FmtLazy(code), easyfl_util.FmtLazy(prefix))
-	return prefix
+	par.Require(false, "evalParseBytecode: unexpected call prefix '%s'", sym)
+	return
 }
 
 func (lib *Library[T]) evalParseNumArgs(par *CallParams[T]) []byte {

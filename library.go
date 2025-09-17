@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/lunfardo314/easyfl/easyfl_util"
 )
@@ -371,4 +372,48 @@ func (lib *Library[T]) FunctionCallPrefixByName(sym string, numArgs byte) ([]byt
 
 func (lib *Library[T]) NumFunctions() uint16 {
 	return lib.numEmbeddedShort + lib.numEmbeddedLong + lib.numExtended
+}
+
+func (lib *Library[T]) FunctionNameByCallPrefix(prefix []byte, localLib ...*LocalLibrary[T]) (sym string, err error) {
+	if prefix[0]&FirstByteLongCallMask == 0 {
+		// short call
+		if prefix[0] <= LastEmbeddedReserved {
+			// this is a param reference
+			// eval param reference
+			sym = fmt.Sprintf("$%d", prefix[0])
+		} else {
+			if _, _, sym, err = lib.functionByCode(uint16(prefix[0])); err != nil {
+				return
+			}
+		}
+	} else {
+		// long call
+		if len(prefix) < 2 {
+			err = io.ErrUnexpectedEOF
+			return
+		}
+		t := binary.BigEndian.Uint16(prefix[:2])
+		idx := t & Uint16LongCallCodeMask
+		if idx > FirstLocalFunCode {
+			err = fmt.Errorf("wrong call prefix")
+			return
+		}
+		if idx == FirstLocalFunCode {
+			// it is a local library call
+			if len(localLib) == 0 {
+				err = fmt.Errorf("local library not provided")
+				return
+			}
+			if len(prefix) < 3 {
+				err = io.ErrUnexpectedEOF
+				return
+			}
+			idx = uint16(FirstLocalFunCode) + uint16(prefix[2])
+		}
+
+		if _, _, sym, err = lib.functionByCode(idx, localLib...); err != nil {
+			return
+		}
+	}
+	return
 }
