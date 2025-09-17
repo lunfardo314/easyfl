@@ -1386,10 +1386,21 @@ func TestParseInlineDataArgumentAnyPrefix(t *testing.T) {
 	const src1 = "or(1,2,3,4)"
 	_, _, bytecode, err = lib.CompileExpression(src1)
 	require.NoError(t, err)
-	src2 = fmt.Sprintf("parseInlineData(parseBytecode(0x%s, 0))", hex.EncodeToString(bytecode))
+
+	src2 = fmt.Sprintf("parseInlineDataArgument(0x%s, 0)", hex.EncodeToString(bytecode))
 	lib.MustEqual(src2, "1")
-	src2 = fmt.Sprintf("parseInlineData(parseBytecode(0x%s, 1))", hex.EncodeToString(bytecode))
+	src2 = fmt.Sprintf("parseInlineDataArgument(0x%s, 0, #or)", hex.EncodeToString(bytecode))
+	lib.MustEqual(src2, "1")
+	src2 = fmt.Sprintf("parseInlineDataArgument(0x%s, 0, #add)", hex.EncodeToString(bytecode))
+	lib.MustError(src2, "unexpected call prefix 'or'")
+
+	src2 = fmt.Sprintf("parseInlineDataArgument(0x%s, 1)", hex.EncodeToString(bytecode))
 	lib.MustEqual(src2, "2")
-	src2 = fmt.Sprintf("parseInlineData(parseBytecode(0x%s, 3))", hex.EncodeToString(bytecode))
+	src2 = fmt.Sprintf("parseInlineDataArgument(0x%s, 1, #sub, #and, #or)", hex.EncodeToString(bytecode))
+	lib.MustEqual(src2, "2")
+	src2 = fmt.Sprintf("parseInlineDataArgument(0x%s, 1, #sub)", hex.EncodeToString(bytecode))
+	lib.MustError(src2, "unexpected call prefix 'or'")
+
+	src2 = fmt.Sprintf("parseInlineDataArgument(0x%s, 3)", hex.EncodeToString(bytecode))
 	lib.MustEqual(src2, "4")
 }

@@ -77,6 +77,8 @@ func EmbeddedFunctions[T any](targetLib *Library[T]) func(sym string) EmbeddedFu
 			return targetLib.evalParseBytecode
 		case "parseInlineData":
 			return targetLib.evalParseInlineData
+		case "parseInlineDataArgument":
+			return targetLib.evalParseInlineDataArgument
 		case "parseNumArgs":
 			return targetLib.evalParseNumArgs
 		case "callLocalLibrary":
@@ -593,6 +595,12 @@ func (lib *Library[T]) evalParseBytecode(par *CallParams[T]) (ret []byte) {
 	}
 	par.Require(false, "evalParseBytecode: unexpected call prefix '%s'", sym)
 	return
+}
+
+func (lib *Library[T]) evalParseInlineDataArgument(par *CallParams[T]) (ret []byte) {
+	ret = lib.evalParseBytecode(par)
+	par.Require(HasInlineDataPrefix(ret), "evalParseInlineDataArgument: not an inline data function")
+	return ret[1:]
 }
 
 func (lib *Library[T]) evalParseNumArgs(par *CallParams[T]) []byte {
