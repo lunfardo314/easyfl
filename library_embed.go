@@ -579,7 +579,7 @@ func (lib *Library[T]) evalParseBytecode(par *CallParams[T]) (ret []byte) {
 		ret = prefix
 	} else {
 		par.Require(len(a1) == 1, "evalParseBytecode: expected argument1 length 1 byte")
-		par.Require(int(a1[0]) < len(args), "wrong parameter index")
+		par.Require(int(a1[0]) < len(args), "evalParseBytecode: wrong parameter index: number of params %d, got index %d", len(args), a1[0])
 		ret = args[a1[0]]
 	}
 	if par.Arity() == 2 {
