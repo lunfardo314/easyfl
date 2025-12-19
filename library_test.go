@@ -1455,5 +1455,18 @@ func TestForAll(t *testing.T) {
 
 func TestSumAll(t *testing.T) {
 	lib := NewBaseLibrary[any]()
+	_, nargs, bytecode, err := lib.CompileExpression("$0")
+	require.NoError(t, err)
+	require.EqualValues(t, 1, nargs)
+	bytecodeStr := hex.EncodeToString(bytecode)
+
 	lib.MustEqual("sumAll(0x, 0x)", "u64/0")
+	lib.MustEqual(fmt.Sprintf("sumAll(0x010203, 0x%s)", bytecodeStr), "u64/6")
+	lib.MustEqual(fmt.Sprintf("sumAll(slice(byteRange,1,100), 0x%s)", bytecodeStr), "u64/5050")
+
+	_, nargs, bytecode, err = lib.CompileExpression("add($0,1)")
+	require.NoError(t, err)
+	require.EqualValues(t, 1, nargs)
+	bytecodeStr = hex.EncodeToString(bytecode)
+	lib.MustEqual(fmt.Sprintf("sumAll(slice(byteRange,1,100), 0x%s)", bytecodeStr), "u64/5150")
 }
