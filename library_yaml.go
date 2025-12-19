@@ -1,7 +1,7 @@
 package easyfl
 
 const baseLibraryDefinitions = `# Base EasyFL library
-hash: fd14c0949447f03908fd2685210f6eb672e83a64d077c0d266b7b0e2cd2f8c50
+hash: ca68e7f27587f5613e42da85379f202be7ebb8209d57f274c628a5350048a2d3
 functions:
 # BEGIN EMBEDDED function definitions
 #    function codes (opcodes) from 0 to 14 are reserved for predefined parameter access functions $i
@@ -265,6 +265,18 @@ functions:
       funCode: 81
       numArgs: 1
       embedded: true
+   -
+      sym: "forAll"
+      description: "$0 is range of 1-byte parameters, $1 is bytecode of the 1-arg predicate, returns 'forAll' quantified value'"
+      funCode: 82
+      numArgs: 2
+      embedded: true
+   -
+      sym: "sumAll"
+      description: "$0 is range of 1-byte parameters, $1 is bytecode of the 1-arg call which is interpreted as int64 and summed up"
+      funCode: 83
+      numArgs: 2
+      embedded: true
 # END LONG EMBEDDED function definitions
 # BEGIN EXTENDED function definitions (defined by EasyFL formulas)
 #    function codes (opcodes) from 319 and up to maximum 1022 are reserved for 'EXTENDED function codes'
@@ -357,6 +369,24 @@ functions:
       bytecode: 171f00010001
       source: >
          if(lessThan($0,$1),$0,$1)         
+         
+   -
+      sym: "byteRange"
+      description: "returns 256 bytes long slice with all byte values"
+      funCode: 329
+      numArgs: 0
+      bytecode: ff0100000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff
+      source: >
+         0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff
+         
+   -
+      sym: "exists"
+      description: "'exist' quantifier'"
+      funCode: 330
+      numArgs: 2
+      bytecode: 164852004840811601
+      source: >
+         not(forAll($0, concat(#not, $1)))
          
 # END EXTENDED function definitions (defined by EasyFL formulas)
 # END all function definitions

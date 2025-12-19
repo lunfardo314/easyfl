@@ -81,6 +81,10 @@ func EmbeddedFunctions[T any](targetLib *Library[T]) func(sym string) EmbeddedFu
 			return targetLib.evalParseInlineDataArgument
 		case "parseNumArgs":
 			return targetLib.evalParseNumArgs
+		case "forAll":
+			return targetLib.evalForAll
+		case "sumAll":
+			return targetLib.evalSumAll
 		case "callLocalLibrary":
 			return targetLib.evalCallLocalLibrary
 		}
@@ -611,4 +615,57 @@ func (lib *Library[T]) evalParseNumArgs(par *CallParams[T]) []byte {
 	}
 	easyfl_util.Assertf(nargs <= MaxParameters, "nargs<=MaxParameters")
 	return par.AllocData(byte(nargs))
+}
+
+func (lib *Library[T]) evalForAll(par *CallParams[T]) []byte {
+	rangeBytes := par.Arg(0)
+	if len(rangeBytes) == 0 {
+		return []byte{0xff}
+	}
+	bytecode := par.Arg(1)
+	expr, err := lib.ExpressionFromBytecode(bytecode)
+	if err != nil {
+		par.TracePanic("evalForAll(0x%s, 0x%s): compiling bytecode failed: %s",
+			hex.EncodeToString(rangeBytes), hex.EncodeToString(bytecode), err)
+		return nil
+	}
+	var argBytes [1]byte
+	for _, arg := range rangeBytes {
+		argBytes[0] = arg
+		ret := EvalExpression(par.glb, expr, argBytes[:])
+		if len(ret) == 0 {
+			return nil
+		}
+	}
+	return []byte{0xff}
+}
+
+func (lib *Library[T]) evalSumAll(par *CallParams[T]) []byte {
+	rangeBytes := par.Arg(0)
+	if len(rangeBytes) == 0 {
+		return par.Alloc(8)
+	}
+	bytecode := par.Arg(1)
+	expr, err := lib.ExpressionFromBytecode(bytecode)
+	if err != nil {
+		par.TracePanic("evalForAll(0x%s, 0x%s): compiling bytecode failed: %s",
+			hex.EncodeToString(rangeBytes), hex.EncodeToString(bytecode), err)
+		return nil
+	}
+	var argBytes [1]byte
+	var sum int64
+	var v uint64
+
+	for _, arg := range rangeBytes {
+		argBytes[0] = arg
+		ret := EvalExpression(par.glb, expr, argBytes[:])
+		if v, err = easyfl_util.Uint64FromBytes(ret); err != nil {
+			par.TracePanic("evalSumAll uint64 value expected")
+			return nil
+		}
+		sum += int64(v)
+	}
+	ret := par.Alloc(8)
+	binary.BigEndian.PutUint64(ret, uint64(sum))
+	return ret
 }

@@ -1,6 +1,7 @@
 package easyfl
 
 import (
+	"encoding/hex"
 	"os"
 	"testing"
 
@@ -93,4 +94,12 @@ functions:
 	lib.MustEqual("newfun2", "uint8Bytes(12)")
 	back := lib.ToYAML(true, "upgraded library")
 	t.Logf("------------- UPGRADED (%d bytes)\n%s", len(back), string(back))
+}
+
+func TestPrintByteRangeConst(t *testing.T) {
+	var b [256]byte
+	for i := range b {
+		b[i] = byte(i)
+	}
+	t.Logf("%s", hex.EncodeToString(b[:]))
 }

@@ -1404,3 +1404,56 @@ func TestParseInlineDataArgumentAnyPrefix(t *testing.T) {
 	src2 = fmt.Sprintf("parseInlineDataArgument(0x%s, 3)", hex.EncodeToString(bytecode))
 	lib.MustEqual(src2, "4")
 }
+
+func TestForAll(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+	lib.MustTrue("forAll(0x, 0x)")
+	t.Run("1", func(t *testing.T) {
+		_, nargs, bytecode, err := lib.CompileExpression("or($0,true)")
+		require.NoError(t, err)
+		require.EqualValues(t, 1, nargs)
+		lib.MustTrue(fmt.Sprintf("forAll(0x00, 0x%s)", hex.EncodeToString(bytecode)))
+		lib.MustTrue(fmt.Sprintf("forAll(0x00010203040506ffffffff, 0x%s)", hex.EncodeToString(bytecode)))
+	})
+	t.Run("2", func(t *testing.T) {
+		_, nargs, bytecode, err := lib.CompileExpression("isZero(mod($0,2))")
+		require.NoError(t, err)
+		require.EqualValues(t, 1, nargs)
+		bytecodeStr := hex.EncodeToString(bytecode)
+		lib.MustTrue(fmt.Sprintf("forAll(0x, 0x%s)", bytecodeStr))
+		lib.MustTrue(fmt.Sprintf("forAll(0x000204, 0x%s)", bytecodeStr))
+
+	})
+	t.Run("3", func(t *testing.T) {
+		_, nargs, bytecode, err := lib.CompileExpression("lessThan($0,100)")
+		require.NoError(t, err)
+		require.EqualValues(t, 1, nargs)
+		bytecodeStr := hex.EncodeToString(bytecode)
+		lib.MustTrue(fmt.Sprintf("forAll(0x, 0x%s)", bytecodeStr))
+		lib.MustTrue(fmt.Sprintf("forAll(slice(byteRange,0,99), 0x%s)", bytecodeStr))
+		lib.MustTrue(fmt.Sprintf("not(forAll(slice(byteRange,0,100), 0x%s))", bytecodeStr))
+	})
+	t.Run("4", func(t *testing.T) {
+		_, nargs, bytecode, err := lib.CompileExpression("lessThan($0,100)")
+		require.NoError(t, err)
+		require.EqualValues(t, 1, nargs)
+		bytecodeStr := hex.EncodeToString(bytecode)
+		lib.MustTrue(fmt.Sprintf("not(exists(0x, 0x%s))", bytecodeStr))
+		lib.MustTrue(fmt.Sprintf("exists(slice(byteRange,10,99), 0x%s)", bytecodeStr))
+		lib.MustTrue(fmt.Sprintf("not(exists(slice(byteRange,100,199), 0x%s))", bytecodeStr))
+	})
+	t.Run("5", func(t *testing.T) {
+		_, nargs, bytecode, err := lib.CompileExpression("equalUint($0,100)")
+		require.NoError(t, err)
+		require.EqualValues(t, 1, nargs)
+		bytecodeStr := hex.EncodeToString(bytecode)
+		lib.MustTrue(fmt.Sprintf("not(exists(0x, 0x%s))", bytecodeStr))
+		lib.MustTrue(fmt.Sprintf("not(exists(slice(byteRange,10,99), 0x%s))", bytecodeStr))
+		lib.MustTrue(fmt.Sprintf("exists(slice(byteRange,55,155), 0x%s)", bytecodeStr))
+	})
+}
+
+func TestSumAll(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+	lib.MustEqual("sumAll(0x, 0x)", "u64/0")
+}
