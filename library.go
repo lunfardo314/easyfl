@@ -10,6 +10,8 @@ import (
 	"github.com/lunfardo314/easyfl/easyfl_util"
 )
 
+// TODO tools for incremental updates of the library
+
 func NewLibrary[T any]() *Library[T] {
 	return newLibrary[T]()
 }
