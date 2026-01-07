@@ -11,6 +11,10 @@ EasyFL is part of the [Proxima project](https://github.com/lunfardo314/proxima),
 - Full language documentation: https://lunfardo314.github.io/#/txdocs/easyfl
 - Usage in Proxima ledger: https://lunfardo314.github.io/#/ledgerdocs/library
 
+## Commit Preferences
+
+Do not include "Generated with Claude Code" or "Co-Authored-By: Claude" in commit messages.
+
 ## Build and Test Commands
 
 ```bash

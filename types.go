@@ -66,6 +66,8 @@ type (
 		// for embedded functions it is hardcoded function, for extended functions is
 		// interpreter closure of the bytecode
 		embeddedFun EmbeddedFunction[T]
+		// key for resolving Go implementation (empty for extended functions)
+		embeddedAs string
 		// only needed for generating YAML
 		source string
 		// any text

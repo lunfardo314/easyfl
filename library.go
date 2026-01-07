@@ -84,13 +84,13 @@ func (lib *Library[T]) addDescriptor(fd *funDescriptor[T]) {
 }
 
 // embedShort embeds short-callable function into the library
-func (lib *Library[T]) embedShort(sym string, requiredNumPar int, embeddedFun EmbeddedFunction[T], description ...string) byte {
-	ret, err := lib.embedShortErr(sym, requiredNumPar, embeddedFun, description...)
+func (lib *Library[T]) embedShort(sym string, requiredNumPar int, embeddedFun EmbeddedFunction[T], embeddedAs string, description ...string) byte {
+	ret, err := lib.embedShortErr(sym, requiredNumPar, embeddedFun, embeddedAs, description...)
 	easyfl_util.AssertNoError(err)
 	return ret
 }
 
-func (lib *Library[T]) embedShortErr(sym string, requiredNumPar int, embeddedFun EmbeddedFunction[T], description ...string) (byte, error) {
+func (lib *Library[T]) embedShortErr(sym string, requiredNumPar int, embeddedFun EmbeddedFunction[T], embeddedAs string, description ...string) (byte, error) {
 	if lib.numEmbeddedShort >= MaxNumEmbeddedAndReservedShort {
 		return 0, fmt.Errorf("EasyFL: too many embedded short functions")
 	}
@@ -111,6 +111,7 @@ func (lib *Library[T]) embedShortErr(sym string, requiredNumPar int, embeddedFun
 		funCode:           lib.numEmbeddedShort,
 		requiredNumParams: requiredNumPar,
 		embeddedFun:       embeddedFun,
+		embeddedAs:        embeddedAs,
 	}
 	if len(description) > 0 {
 		dscr.description = description[0]
@@ -124,13 +125,13 @@ func (lib *Library[T]) embedShortErr(sym string, requiredNumPar int, embeddedFun
 	return byte(dscr.funCode), nil
 }
 
-func (lib *Library[T]) embedLong(sym string, requiredNumPar int, embeddedFun EmbeddedFunction[T], description ...string) uint16 {
-	ret, err := lib.embedLongErr(sym, requiredNumPar, embeddedFun, description...)
+func (lib *Library[T]) embedLong(sym string, requiredNumPar int, embeddedFun EmbeddedFunction[T], embeddedAs string, description ...string) uint16 {
+	ret, err := lib.embedLongErr(sym, requiredNumPar, embeddedFun, embeddedAs, description...)
 	easyfl_util.AssertNoError(err)
 	return ret
 }
 
-func (lib *Library[T]) embedLongErr(sym string, requiredNumPar int, embeddedFun EmbeddedFunction[T], description ...string) (uint16, error) {
+func (lib *Library[T]) embedLongErr(sym string, requiredNumPar int, embeddedFun EmbeddedFunction[T], embeddedAs string, description ...string) (uint16, error) {
 	if lib.numEmbeddedLong > MaxNumEmbeddedLong {
 		return 0, fmt.Errorf("EasyFL: too many embedded long functions")
 	}
@@ -149,6 +150,7 @@ func (lib *Library[T]) embedLongErr(sym string, requiredNumPar int, embeddedFun 
 		funCode:           lib.numEmbeddedLong + FirstEmbeddedLong,
 		requiredNumParams: requiredNumPar,
 		embeddedFun:       embeddedFun,
+		embeddedAs:        embeddedAs,
 	}
 	if len(description) > 0 {
 		dscr.description = description[0]

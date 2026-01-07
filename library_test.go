@@ -271,7 +271,7 @@ func TestEval(t *testing.T) {
 		blake2bInvokedNum++
 		par.Trace("blake2b-test:: %v -> %v", a0, h[:])
 		return h[:]
-	})
+	}, "blake2b-test")
 	t.Run("23", func(t *testing.T) {
 		blake2bInvokedNum = 0
 		ret, err := lib.EvalFromSource(lib.NewGlobalDataTracePrint(nil), "blake2b-test($0)", []byte{1, 2, 3})
@@ -560,7 +560,7 @@ func TestTracing(t *testing.T) {
 			counter++
 			fmt.Printf("counter incremented\n")
 			return []byte{1}
-		})
+		}, "prn")
 		tr := lib.NewGlobalDataTracePrint(nil)
 		res, err := lib.EvalFromSource(tr, "c6(c6(prn))")
 		require.NoError(t, err)

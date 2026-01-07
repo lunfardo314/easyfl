@@ -22,15 +22,16 @@ type (
 		Functions []FuncDescriptorYAMLAble `yaml:"functions"`
 	}
 
-	// FuncDescriptorYAMLAble contains all information about embed ior extended function
+	// FuncDescriptorYAMLAble contains all information about embedded or extended function
 	// Mandatory fields:
 	// - for compiled library: Sym, FunCode, NumArgs. Bytecode and Source only for extended functions
 	// - for not compiled library Sym, NumArgs. Source only for extended functions
+	// EmbeddedAs is the key for resolving Go implementation. If empty, function is extended (not embedded)
 	FuncDescriptorYAMLAble struct {
 		Sym         string `yaml:"sym"`
 		FunCode     uint16 `yaml:"funCode,omitempty"`
 		NumArgs     int    `yaml:"numArgs"`
-		Embedded    bool   `yaml:"embedded,omitempty"`
+		EmbeddedAs  string `yaml:"embedded_as,omitempty"`
 		Short       bool   `yaml:"short,omitempty"`
 		Source      string `yaml:"source,omitempty"`
 		Bytecode    string `yaml:"bytecode,omitempty"`
@@ -135,7 +136,7 @@ func (lib *Library[T]) ToYAML(compiled bool, prefix ...string) []byte {
 		prn(&buf, "#    function codes (opcodes) from %d to %d are reserved for 'SHORT EMBEDDED function codes'\n", FirstEmbeddedShort, LastEmbeddedShort)
 	}
 	for _, dscr := range functions {
-		if dscr.Embedded && dscr.Short {
+		if dscr.EmbeddedAs != "" && dscr.Short {
 			prnFuncDescription(&buf, dscr, compiled)
 		}
 	}
@@ -146,7 +147,7 @@ func (lib *Library[T]) ToYAML(compiled bool, prefix ...string) []byte {
 		prn(&buf, "#    function codes (opcodes) from %d to %d are reserved for 'LONG EMBEDDED function codes'\n", FirstEmbeddedLong, LastEmbeddedLong)
 	}
 	for _, dscr := range functions {
-		if dscr.Embedded && !dscr.Short {
+		if dscr.EmbeddedAs != "" && !dscr.Short {
 			prnFuncDescription(&buf, dscr, compiled)
 		}
 	}
@@ -157,7 +158,7 @@ func (lib *Library[T]) ToYAML(compiled bool, prefix ...string) []byte {
 		prn(&buf, "#    function codes (opcodes) from %d and up to maximum %d are reserved for 'EXTENDED function codes'\n", FirstExtended, LastGlobalFunCode)
 	}
 	for _, dscr := range functions {
-		if !dscr.Embedded {
+		if dscr.EmbeddedAs == "" {
 			prnFuncDescription(&buf, dscr, compiled)
 		}
 	}
@@ -188,13 +189,13 @@ func prnFuncDescription(w io.Writer, f *FuncDescriptorYAMLAble, compiled bool) {
 		prn(w, ident2+"funCode: %d\n", f.FunCode)
 	}
 	prn(w, ident2+"numArgs: %d\n", f.NumArgs)
-	if f.Embedded {
-		prn(w, ident2+"embedded: true\n")
+	if f.EmbeddedAs != "" {
+		prn(w, ident2+"embedded_as: \"%s\"\n", f.EmbeddedAs)
 	}
 	if f.Short {
 		prn(w, ident2+"short: true\n")
 	}
-	if !f.Embedded {
+	if f.EmbeddedAs == "" {
 		if compiled {
 			prn(w, ident2+"bytecode: %s\n", f.Bytecode)
 		}
@@ -210,7 +211,7 @@ func (lib *Library[T]) mustFunYAMLAbleByName(sym string) *FuncDescriptorYAMLAble
 		Description: d.description,
 		Sym:         d.sym,
 		FunCode:     d.funCode,
-		Embedded:    fi.IsEmbedded,
+		EmbeddedAs:  d.embeddedAs,
 		Short:       fi.IsShort,
 		NumArgs:     d.requiredNumParams,
 		Source:      d.source,
@@ -237,18 +238,19 @@ func (lib *Library[T]) Upgrade(fromYAML *LibraryFromYAML, embed ...func(sym stri
 	var ef EmbeddedFunction[T]
 
 	for _, d := range fromYAML.Functions {
-		if d.Embedded {
+		if d.EmbeddedAs != "" {
+			// embedded function - resolve using EmbeddedAs key
 			if len(embed) > 0 {
-				if ef = embed[0](d.Sym); ef == nil {
-					return fmt.Errorf("missing embedded function: '%s'", d.Sym)
+				if ef = embed[0](d.EmbeddedAs); ef == nil {
+					return fmt.Errorf("missing embedded function for key '%s' (sym: '%s')", d.EmbeddedAs, d.Sym)
 				}
 			}
 			if d.Short {
-				if _, err = lib.embedShortErr(d.Sym, d.NumArgs, ef, d.Description); err != nil {
+				if _, err = lib.embedShortErr(d.Sym, d.NumArgs, ef, d.EmbeddedAs, d.Description); err != nil {
 					return err
 				}
 			} else {
-				if _, err = lib.embedLongErr(d.Sym, d.NumArgs, ef, d.Description); err != nil {
+				if _, err = lib.embedLongErr(d.Sym, d.NumArgs, ef, d.EmbeddedAs, d.Description); err != nil {
 					return err
 				}
 			}
@@ -280,7 +282,7 @@ func ValidateCompiled[T any](libYAML *LibraryFromYAML) error {
 	}
 
 	for _, d := range libYAML.Functions {
-		if !d.Embedded {
+		if d.EmbeddedAs == "" {
 			fd, found := lib.funByFunCode[d.FunCode]
 			easyfl_util.Assertf(found, "ValidateCompiled: func code %d (name: '%s') not found", d.FunCode, d.Sym)
 			easyfl_util.Assertf(fd.sym == d.Sym, "ValidateCompiled: func code %d is wrong (conflicting function names '%s' and '%s')", d.FunCode, d.Sym, fd.sym)
