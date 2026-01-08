@@ -178,6 +178,60 @@ func (lib *Library[T]) extend(sym string, source string, description ...string) 
 	return ret
 }
 
+// replaceEmbedded replaces an existing embedded function's implementation while preserving its funCode
+func (lib *Library[T]) replaceEmbedded(sym string, requiredNumPar int, embeddedFun EmbeddedFunction[T], embeddedAs string, description string) error {
+	fd, found := lib.funByName[sym]
+	if !found {
+		return fmt.Errorf("replaceEmbedded: function '%s' not found", sym)
+	}
+	if fd.embeddedAs == "" {
+		return fmt.Errorf("replaceEmbedded: function '%s' is not embedded", sym)
+	}
+	if requiredNumPar > 15 {
+		return fmt.Errorf("replaceEmbedded: can't be more than 15 parameters")
+	}
+	if traceYN {
+		embeddedFun = wrapWithTracing(embeddedFun, sym)
+	}
+	// Update the descriptor in place, preserving funCode
+	fd.requiredNumParams = requiredNumPar
+	fd.embeddedFun = embeddedFun
+	fd.embeddedAs = embeddedAs
+	fd.description = description
+	return nil
+}
+
+// replaceExtended replaces an existing extended function's implementation while preserving its funCode
+func (lib *Library[T]) replaceExtended(sym string, source string, description string) error {
+	fd, found := lib.funByName[sym]
+	if !found {
+		return fmt.Errorf("replaceExtended: function '%s' not found", sym)
+	}
+	if fd.embeddedAs != "" {
+		return fmt.Errorf("replaceExtended: function '%s' is embedded, not extended", sym)
+	}
+
+	f, numParam, bytecode, err := lib.CompileExpression(source)
+	if err != nil {
+		return fmt.Errorf("replaceExtended: error while compiling '%s': %v", sym, err)
+	}
+	if numParam > 15 {
+		return fmt.Errorf("replaceExtended: can't be more than 15 parameters")
+	}
+
+	embeddedFun := makeEmbeddedFunForExpression(sym, f)
+	if traceYN {
+		embeddedFun = wrapWithTracing(embeddedFun, sym)
+	}
+	// Update the descriptor in place, preserving funCode
+	fd.bytecode = bytecode
+	fd.requiredNumParams = numParam
+	fd.embeddedFun = embeddedFun
+	fd.source = source
+	fd.description = description
+	return nil
+}
+
 func evalEvalParamFun[T any](paramNr byte) EmbeddedFunction[T] {
 	return func(par *CallParams[T]) []byte {
 		return par.EvalParam(paramNr)

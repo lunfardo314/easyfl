@@ -27,12 +27,14 @@ type (
 	// - for compiled library: Sym, FunCode, NumArgs. Bytecode and Source only for extended functions
 	// - for not compiled library Sym, NumArgs. Source only for extended functions
 	// EmbeddedAs is the key for resolving Go implementation. If empty, function is extended (not embedded)
+	// Replace: if true, function must exist in target library and will be replaced; if false/absent, function must not exist
 	FuncDescriptorYAMLAble struct {
 		Sym         string `yaml:"sym"`
 		FunCode     uint16 `yaml:"funCode,omitempty"`
 		NumArgs     int    `yaml:"numArgs"`
 		EmbeddedAs  string `yaml:"embedded_as,omitempty"`
 		Short       bool   `yaml:"short,omitempty"`
+		Replace     bool   `yaml:"replace,omitempty"`
 		Source      string `yaml:"source,omitempty"`
 		Bytecode    string `yaml:"bytecode,omitempty"`
 		Description string `yaml:"description,omitempty"`
@@ -232,12 +234,28 @@ func ReadLibraryFromYAML(data []byte) (*LibraryFromYAML, error) {
 // Upgrade add functions to the library from YAMLAble. It ignores compiled part, compiles and assigns fun codes
 // If embedding functions are available, embeds them and enforces consistency
 // NOTE: if embedded functions are not provided, library is not ready for use, however its consistency
-// has been checked, and it can be serialized to YAML
+// is checked, and it can be serialized to YAML
+// The Replace flag controls behavior:
+// - Replace=true: function must exist in library, its definition will be replaced (funCode preserved)
+// - Replace=false (default): function must not exist, will be added as new
 func (lib *Library[T]) Upgrade(fromYAML *LibraryFromYAML, embed ...func(sym string) EmbeddedFunction[T]) error {
 	var err error
 	var ef EmbeddedFunction[T]
 
 	for _, d := range fromYAML.Functions {
+		exists := lib.existsFunction(d.Sym)
+
+		// Check replace flag consistency
+		if d.Replace {
+			if !exists {
+				return fmt.Errorf("replace=true but function '%s' does not exist in library", d.Sym)
+			}
+		} else {
+			if exists {
+				return fmt.Errorf("function '%s' already exists in library (use replace=true to replace)", d.Sym)
+			}
+		}
+
 		if d.EmbeddedAs != "" {
 			// embedded function - resolve using EmbeddedAs key
 			if len(embed) > 0 {
@@ -245,18 +263,34 @@ func (lib *Library[T]) Upgrade(fromYAML *LibraryFromYAML, embed ...func(sym stri
 					return fmt.Errorf("missing embedded function for key '%s' (sym: '%s')", d.EmbeddedAs, d.Sym)
 				}
 			}
-			if d.Short {
-				if _, err = lib.embedShortErr(d.Sym, d.NumArgs, ef, d.EmbeddedAs, d.Description); err != nil {
+
+			if d.Replace {
+				// Replace existing embedded function
+				if err = lib.replaceEmbedded(d.Sym, d.NumArgs, ef, d.EmbeddedAs, d.Description); err != nil {
 					return err
 				}
 			} else {
-				if _, err = lib.embedLongErr(d.Sym, d.NumArgs, ef, d.EmbeddedAs, d.Description); err != nil {
-					return err
+				// Add new embedded function
+				if d.Short {
+					if _, err = lib.embedShortErr(d.Sym, d.NumArgs, ef, d.EmbeddedAs, d.Description); err != nil {
+						return err
+					}
+				} else {
+					if _, err = lib.embedLongErr(d.Sym, d.NumArgs, ef, d.EmbeddedAs, d.Description); err != nil {
+						return err
+					}
 				}
 			}
 		} else {
-			if _, err = lib.ExtendErr(d.Sym, d.Source, d.Description); err != nil {
-				return err
+			// extended function
+			if d.Replace {
+				if err = lib.replaceExtended(d.Sym, d.Source, d.Description); err != nil {
+					return err
+				}
+			} else {
+				if _, err = lib.ExtendErr(d.Sym, d.Source, d.Description); err != nil {
+					return err
+				}
 			}
 		}
 	}
