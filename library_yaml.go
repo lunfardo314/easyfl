@@ -1,7 +1,7 @@
 package easyfl
 
 const baseLibraryDefinitions = `# Base EasyFL library
-hash: fd14c0949447f03908fd2685210f6eb672e83a64d077c0d266b7b0e2cd2f8c50
+hash: c05b55ae2dae89bd668f935b9ec6e8a2daf70ddd9b191067c60ba311d81e3852
 functions:
 # BEGIN EMBEDDED function definitions
 #    function codes (opcodes) from 0 to 14 are reserved for predefined parameter access functions $i

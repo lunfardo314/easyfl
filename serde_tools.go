@@ -95,6 +95,11 @@ func (fd *funDescriptor[T]) write(w io.Writer) {
 	// bytecode (will be nil for embedded)
 	_ = binary.Write(w, binary.BigEndian, uint16(len(fd.bytecode)))
 	_, _ = w.Write(fd.bytecode)
+
+	// embeddedAs key (empty for extended functions)
+	easyfl_util.Assertf(len(fd.embeddedAs) < 256, "EasyFL: len(fd.embeddedAs)<256")
+	_, _ = w.Write([]byte{byte(len(fd.embeddedAs))})
+	_, _ = w.Write([]byte(fd.embeddedAs))
 }
 
 // ToYAML generates YAML data. Prefix is added at the beginning, usually it is a comment
