@@ -219,7 +219,7 @@ functions:
   -
     sym: add
     numArgs: 2
-    embedded_as: mul
+    embedded_as: evalMulUint
     short: true
     replace: true
     description: "add now does multiplication"
@@ -249,7 +249,7 @@ functions:
   -
     sym: lessOrEqualThan
     numArgs: 2
-    embedded_as: add
+    embedded_as: evalAddUint
     short: true
     replace: true
 `

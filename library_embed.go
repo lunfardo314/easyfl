@@ -23,46 +23,46 @@ import (
 func unboundEmbeddedFunctions[T any]() map[string]EmbeddedFunction[T] {
 	return map[string]EmbeddedFunction[T]{
 		// short base
-		"fail":      evalFail[T],
-		"slice":     evalSlice[T],
-		"byte":      evalByte[T],
-		"tail":      evalTail[T],
-		"equal":     evalEqual[T],
-		"hasPrefix": evalHasPrefix[T],
-		"len":       evalLen[T],
-		"not":       evalNot[T],
-		"if":        evalIf[T],
-		"isZero":    evalIsZero[T],
+		"evalFail":      evalFail[T],
+		"evalSlice":     evalSlice[T],
+		"evalByte":      evalByte[T],
+		"evalTail":      evalTail[T],
+		"evalEqual":     evalEqual[T],
+		"evalHasPrefix": evalHasPrefix[T],
+		"evalLen":       evalLen[T],
+		"evalNot":       evalNot[T],
+		"evalIf":        evalIf[T],
+		"evalIsZero":    evalIsZero[T],
 		// long base
-		"concat":            evalConcat[T],
-		"and":               evalAnd[T],
-		"or":                evalOr[T],
-		"repeat":            evalRepeat[T],
-		"firstCaseIndex":    evalFirstCaseIndex[T],
-		"firstEqualIndex":   evalFirstEqualIndex[T],
-		"selectCaseByIndex": evalSelectCaseByIndex[T],
+		"evalConcat":            evalConcat[T],
+		"evalAnd":               evalAnd[T],
+		"evalOr":                evalOr[T],
+		"evalRepeat":            evalRepeat[T],
+		"evalFirstCaseIndex":    evalFirstCaseIndex[T],
+		"evalFirstEqualIndex":   evalFirstEqualIndex[T],
+		"evalSelectCaseByIndex": evalSelectCaseByIndex[T],
 		// arithmetics short
-		"add":        evalAddUint[T],
-		"sub":        evalSubUint[T],
-		"mul":        evalMulUint[T],
-		"div":        evalDivUint[T],
-		"mod":        evalModuloUint[T],
-		"uint8Bytes": evalUint8Bytes[T],
+		"evalAddUint":    evalAddUint[T],
+		"evalSubUint":    evalSubUint[T],
+		"evalMulUint":    evalMulUint[T],
+		"evalDivUint":    evalDivUint[T],
+		"evalModuloUint": evalModuloUint[T],
+		"evalUint8Bytes": evalUint8Bytes[T],
 		// bitwise and compare short
-		"lessThan":   evalLessThan[T],
-		"bitwiseOR":  evalBitwiseOR[T],
-		"bitwiseAND": evalBitwiseAND[T],
-		"bitwiseNOT": evalBitwiseNOT[T],
-		"bitwiseXOR": evalBitwiseXOR[T],
+		"evalLessThan":   evalLessThan[T],
+		"evalBitwiseOR":  evalBitwiseOR[T],
+		"evalBitwiseAND": evalBitwiseAND[T],
+		"evalBitwiseNOT": evalBitwiseNOT[T],
+		"evalBitwiseXOR": evalBitwiseXOR[T],
 		// bitwise long
-		"lshift64": evalLShift64[T],
-		"rshift64": evalRShift64[T],
+		"evalLShift64": evalLShift64[T],
+		"evalRShift64": evalRShift64[T],
 		// base crypto
-		"validSignatureED25519": evalValidSigED25519[T],
-		"blake2b":               evalBlake2b[T],
+		"evalValidSignatureED25519": evalValidSigED25519[T],
+		"evalBlake2b":               evalBlake2b[T],
 		// tuples
-		"atTuple8": evalAtTuple8[T],
-		"tupleLen": evalNumElementsOfTuple[T],
+		"evalAtTuple8": evalAtTuple8[T],
+		"evalTupleLen": evalNumElementsOfTuple[T],
 	}
 }
 func EmbeddedFunctions[T any](targetLib *Library[T]) func(sym string) EmbeddedFunction[T] {
@@ -73,15 +73,15 @@ func EmbeddedFunctions[T any](targetLib *Library[T]) func(sym string) EmbeddedFu
 		}
 		// function bound to a particular target library
 		switch sym {
-		case "parseBytecode":
+		case "evalParseBytecode":
 			return targetLib.evalParseBytecode
-		case "parseInlineData":
+		case "evalParseInlineData":
 			return targetLib.evalParseInlineData
-		case "parseInlineDataArgument":
+		case "evalParseInlineDataArgument":
 			return targetLib.evalParseInlineDataArgument
-		case "parseNumArgs":
+		case "evalParseNumArgs":
 			return targetLib.evalParseNumArgs
-		case "callLocalLibrary":
+		case "evalCallLocalLibrary":
 			return targetLib.evalCallLocalLibrary
 		}
 		return nil
