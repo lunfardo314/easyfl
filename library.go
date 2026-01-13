@@ -190,11 +190,15 @@ func (lib *Library[T]) replaceEmbedded(sym string, requiredNumPar int, embeddedF
 	if requiredNumPar > 15 {
 		return fmt.Errorf("replaceEmbedded: can't be more than 15 parameters")
 	}
+	// Enforce numArgs does not change for backward compatible serde
+	if fd.requiredNumParams != requiredNumPar {
+		return fmt.Errorf("replaceEmbedded: function '%s' numArgs mismatch: existing %d, new %d (must be equal for backward compatibility)",
+			sym, fd.requiredNumParams, requiredNumPar)
+	}
 	if traceYN {
 		embeddedFun = wrapWithTracing(embeddedFun, sym)
 	}
 	// Update the descriptor in place, preserving funCode
-	fd.requiredNumParams = requiredNumPar
 	fd.embeddedFun = embeddedFun
 	fd.embeddedAs = embeddedAs
 	fd.description = description
@@ -218,6 +222,11 @@ func (lib *Library[T]) replaceExtended(sym string, source string, description st
 	if numParam > 15 {
 		return fmt.Errorf("replaceExtended: can't be more than 15 parameters")
 	}
+	// Enforce numArgs does not change for backward compatible serde
+	if fd.requiredNumParams != numParam {
+		return fmt.Errorf("replaceExtended: function '%s' numArgs mismatch: existing %d, new %d (must be equal for backward compatibility)",
+			sym, fd.requiredNumParams, numParam)
+	}
 
 	embeddedFun := makeEmbeddedFunForExpression(sym, f)
 	if traceYN {
@@ -225,7 +234,6 @@ func (lib *Library[T]) replaceExtended(sym string, source string, description st
 	}
 	// Update the descriptor in place, preserving funCode
 	fd.bytecode = bytecode
-	fd.requiredNumParams = numParam
 	fd.embeddedFun = embeddedFun
 	fd.source = source
 	fd.description = description

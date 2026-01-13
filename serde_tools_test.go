@@ -353,3 +353,59 @@ functions:
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "already exists")
 }
+
+// Test replacing extended function with different numArgs - should fail for backward compatible serde
+func TestUpgrade_ReplaceExtended_NumArgsMismatch_Fail(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	// First add a function with 2 args
+	yamlData := `
+functions:
+  -
+    sym: myFunc
+    numArgs: 2
+    source: add($0, $1)
+`
+	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
+	require.NoError(t, err)
+	err = lib.Upgrade(fromYaml)
+	require.NoError(t, err)
+
+	// Try to replace with different numArgs (1 instead of 2) - should fail
+	yamlReplace := `
+functions:
+  -
+    sym: myFunc
+    numArgs: 1
+    replace: true
+    source: mul($0, 2)
+`
+	fromYamlReplace, err := ReadLibraryFromYAML([]byte(yamlReplace))
+	require.NoError(t, err)
+	err = lib.Upgrade(fromYamlReplace)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "numArgs mismatch")
+}
+
+// Test replacing embedded function with different numArgs - should fail for backward compatible serde
+func TestUpgrade_ReplaceEmbedded_NumArgsMismatch_Fail(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	// "add" has numArgs: 2 in base library
+	// Try to replace with different numArgs (3 instead of 2) - should fail
+	yamlData := `
+functions:
+  -
+    sym: add
+    numArgs: 3
+    embedded_as: evalConcat
+    short: true
+    replace: true
+`
+	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
+	require.NoError(t, err)
+
+	err = lib.Upgrade(fromYaml, EmbeddedFunctions[any](lib))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "numArgs mismatch")
+}
