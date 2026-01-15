@@ -184,6 +184,9 @@ func (lib *Library[T]) replaceEmbedded(sym string, requiredNumPar int, embeddedF
 	if !found {
 		return fmt.Errorf("replaceEmbedded: function '%s' not found", sym)
 	}
+	if fd.immutable {
+		return fmt.Errorf("replaceEmbedded: function '%s' is immutable and cannot be replaced", sym)
+	}
 	if fd.embeddedAs == "" {
 		return fmt.Errorf("replaceEmbedded: function '%s' is not embedded", sym)
 	}
@@ -210,6 +213,9 @@ func (lib *Library[T]) replaceExtended(sym string, source string, description st
 	fd, found := lib.funByName[sym]
 	if !found {
 		return fmt.Errorf("replaceExtended: function '%s' not found", sym)
+	}
+	if fd.immutable {
+		return fmt.Errorf("replaceExtended: function '%s' is immutable and cannot be replaced", sym)
 	}
 	if fd.embeddedAs != "" {
 		return fmt.Errorf("replaceExtended: function '%s' is embedded, not extended", sym)

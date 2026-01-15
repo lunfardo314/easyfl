@@ -28,6 +28,7 @@ type (
 	// - for not compiled library Sym, NumArgs. Source only for extended functions
 	// EmbeddedAs is the key for resolving Go implementation. If empty, function is extended (not embedded)
 	// Replace: if true, function must exist in target library and will be replaced; if false/absent, function must not exist
+	// Immutable: if true, function cannot be replaced/modified in upgrades
 	FuncDescriptorYAMLAble struct {
 		Sym         string `yaml:"sym"`
 		FunCode     uint16 `yaml:"funCode,omitempty"`
@@ -35,6 +36,7 @@ type (
 		EmbeddedAs  string `yaml:"embedded_as,omitempty"`
 		Short       bool   `yaml:"short,omitempty"`
 		Replace     bool   `yaml:"replace,omitempty"`
+		Immutable   bool   `yaml:"immutable,omitempty"`
 		Source      string `yaml:"source,omitempty"`
 		Bytecode    string `yaml:"bytecode,omitempty"`
 		Description string `yaml:"description,omitempty"`
@@ -100,6 +102,13 @@ func (fd *funDescriptor[T]) write(w io.Writer) {
 	easyfl_util.Assertf(len(fd.embeddedAs) < 256, "EasyFL: len(fd.embeddedAs)<256")
 	_, _ = w.Write([]byte{byte(len(fd.embeddedAs))})
 	_, _ = w.Write([]byte(fd.embeddedAs))
+
+	// immutable flag
+	immutableByte := byte(0)
+	if fd.immutable {
+		immutableByte = 1
+	}
+	_, _ = w.Write([]byte{immutableByte})
 }
 
 // ToYAML generates YAML data. Prefix is added at the beginning, usually it is a comment
@@ -202,6 +211,9 @@ func prnFuncDescription(w io.Writer, f *FuncDescriptorYAMLAble, compiled bool) {
 	if f.Short {
 		prn(w, ident2+"short: true\n")
 	}
+	if f.Immutable {
+		prn(w, ident2+"immutable: true\n")
+	}
 	if f.EmbeddedAs == "" {
 		if compiled {
 			prn(w, ident2+"bytecode: %s\n", f.Bytecode)
@@ -220,6 +232,7 @@ func (lib *Library[T]) mustFunYAMLAbleByName(sym string) *FuncDescriptorYAMLAble
 		FunCode:     d.funCode,
 		EmbeddedAs:  d.embeddedAs,
 		Short:       fi.IsShort,
+		Immutable:   d.immutable,
 		NumArgs:     d.requiredNumParams,
 		Source:      d.source,
 		Bytecode:    hex.EncodeToString(d.bytecode),
@@ -243,6 +256,7 @@ func ReadLibraryFromYAML(data []byte) (*LibraryFromYAML, error) {
 // The Replace flag controls behavior:
 // - Replace=true: function must exist in library, its definition will be replaced (funCode preserved)
 // - Replace=false (default): function must not exist, will be added as new
+// The Immutable flag controls whether the function can be replaced in future upgrades
 func (lib *Library[T]) Upgrade(fromYAML *LibraryFromYAML, embed ...func(sym string) EmbeddedFunction[T]) error {
 	var err error
 	var ef EmbeddedFunction[T]
@@ -296,6 +310,13 @@ func (lib *Library[T]) Upgrade(fromYAML *LibraryFromYAML, embed ...func(sym stri
 				if _, err = lib.ExtendErr(d.Sym, d.Source, d.Description); err != nil {
 					return err
 				}
+			}
+		}
+
+		// Set immutable flag if specified
+		if d.Immutable {
+			if fd, found := lib.funByName[d.Sym]; found {
+				fd.immutable = true
 			}
 		}
 	}

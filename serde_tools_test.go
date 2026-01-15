@@ -409,3 +409,196 @@ functions:
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "numArgs mismatch")
 }
+
+// Test adding an immutable extended function
+func TestUpgrade_AddImmutableExtended_Success(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	yamlData := `
+functions:
+  -
+    sym: immutableFunc
+    numArgs: 2
+    immutable: true
+    source: add($0, $1)
+`
+	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
+	require.NoError(t, err)
+
+	err = lib.Upgrade(fromYaml)
+	require.NoError(t, err)
+
+	// Verify function works
+	lib.MustEqual("immutableFunc(3, 5)", "uint8Bytes(8)")
+
+	// Verify immutable flag is set by checking YAML output
+	yamlOutput := lib.ToYAML(true)
+	require.Contains(t, string(yamlOutput), "immutable: true")
+}
+
+// Test replacing an immutable extended function - should fail
+func TestUpgrade_ReplaceImmutableExtended_Fail(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	// First add an immutable function
+	yamlData := `
+functions:
+  -
+    sym: immutableFunc
+    numArgs: 2
+    immutable: true
+    source: add($0, $1)
+`
+	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
+	require.NoError(t, err)
+	err = lib.Upgrade(fromYaml)
+	require.NoError(t, err)
+
+	// Try to replace the immutable function - should fail
+	yamlReplace := `
+functions:
+  -
+    sym: immutableFunc
+    numArgs: 2
+    replace: true
+    source: mul($0, $1)
+`
+	fromYamlReplace, err := ReadLibraryFromYAML([]byte(yamlReplace))
+	require.NoError(t, err)
+	err = lib.Upgrade(fromYamlReplace)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "immutable")
+}
+
+// Test adding an immutable embedded function
+func TestUpgrade_AddImmutableEmbedded_Success(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	yamlData := `
+functions:
+  -
+    sym: immutableEmbedded
+    numArgs: 2
+    embedded_as: evalAddUint
+    immutable: true
+`
+	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
+	require.NoError(t, err)
+
+	err = lib.Upgrade(fromYaml, EmbeddedFunctions[any](lib))
+	require.NoError(t, err)
+
+	// Verify function works
+	lib.MustEqual("immutableEmbedded(3, 5)", "uint8Bytes(8)")
+}
+
+// Test replacing an immutable embedded function - should fail
+func TestUpgrade_ReplaceImmutableEmbedded_Fail(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	// First add an immutable embedded function
+	yamlData := `
+functions:
+  -
+    sym: immutableEmbedded
+    numArgs: 2
+    embedded_as: evalAddUint
+    immutable: true
+`
+	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
+	require.NoError(t, err)
+	err = lib.Upgrade(fromYaml, EmbeddedFunctions[any](lib))
+	require.NoError(t, err)
+
+	// Try to replace the immutable embedded function - should fail
+	yamlReplace := `
+functions:
+  -
+    sym: immutableEmbedded
+    numArgs: 2
+    embedded_as: evalMulUint
+    replace: true
+`
+	fromYamlReplace, err := ReadLibraryFromYAML([]byte(yamlReplace))
+	require.NoError(t, err)
+	err = lib.Upgrade(fromYamlReplace, EmbeddedFunctions[any](lib))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "immutable")
+}
+
+// Test that immutable flag affects library hash
+func TestUpgrade_ImmutableAffectsHash(t *testing.T) {
+	// Create two libraries with same function, one immutable, one not
+	lib1 := NewBaseLibrary[any]()
+	lib2 := NewBaseLibrary[any]()
+
+	// Add non-immutable function to lib1
+	yaml1 := `
+functions:
+  -
+    sym: testFunc
+    numArgs: 2
+    source: add($0, $1)
+`
+	fromYaml1, err := ReadLibraryFromYAML([]byte(yaml1))
+	require.NoError(t, err)
+	err = lib1.Upgrade(fromYaml1)
+	require.NoError(t, err)
+
+	// Add immutable function to lib2
+	yaml2 := `
+functions:
+  -
+    sym: testFunc
+    numArgs: 2
+    immutable: true
+    source: add($0, $1)
+`
+	fromYaml2, err := ReadLibraryFromYAML([]byte(yaml2))
+	require.NoError(t, err)
+	err = lib2.Upgrade(fromYaml2)
+	require.NoError(t, err)
+
+	// Hashes should be different
+	hash1 := lib1.LibraryHash()
+	hash2 := lib2.LibraryHash()
+	require.NotEqual(t, hash1, hash2, "library hashes should differ when immutable flag differs")
+}
+
+// Test that non-immutable function can still be replaced
+func TestUpgrade_NonImmutableCanBeReplaced(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	// Add a non-immutable function (immutable: false is the default)
+	yamlData := `
+functions:
+  -
+    sym: mutableFunc
+    numArgs: 2
+    source: add($0, $1)
+`
+	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
+	require.NoError(t, err)
+	err = lib.Upgrade(fromYaml)
+	require.NoError(t, err)
+
+	// Verify original behavior
+	lib.MustEqual("mutableFunc(3, 5)", "uint8Bytes(8)")
+
+	// Replace the function - should succeed
+	yamlReplace := `
+functions:
+  -
+    sym: mutableFunc
+    numArgs: 2
+    replace: true
+    source: mul($0, $1)
+`
+	fromYamlReplace, err := ReadLibraryFromYAML([]byte(yamlReplace))
+	require.NoError(t, err)
+	err = lib.Upgrade(fromYamlReplace)
+	require.NoError(t, err)
+
+	// Verify new behavior
+	lib.MustEqual("mutableFunc(3, 5)", "uint8Bytes(15)")
+}

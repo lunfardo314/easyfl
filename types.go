@@ -72,6 +72,8 @@ type (
 		source string
 		// any text
 		description string
+		// if true, function cannot be replaced/modified in upgrades
+		immutable bool
 	}
 
 	funInfo struct {
