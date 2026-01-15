@@ -1,5 +1,26 @@
 # Change Log
 
+## Use go:embed for library.yaml
+
+**Commit:** 8e81b7ad31900dee93cb3a74dc5ef49e68c052ba
+**Date:** 2026-01-15 20:49:10 +0200
+
+### Changes Made
+
+**`library_yaml.go`** - Replaced string literal with go:embed directive:
+```go
+package easyfl
+
+import _ "embed"
+
+//go:embed library.yaml
+var baseLibraryDefinitions string
+```
+
+This embeds the `library.yaml` file at compile time instead of maintaining a duplicate string literal in the Go source code.
+
+---
+
 ## Add immutable flag for functions
 
 **Commit:** 5854ef5bcf8c853db6c4d3a6c8e2dced2abac48b
