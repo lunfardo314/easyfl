@@ -290,6 +290,20 @@ func parseLiteral[T any](lib *Library[T], sym string, w io.Writer) (bool, int, e
 			return false, 0, err
 		}
 		return true, 0, nil
+	case sym == "$$":
+		// arity literal - emit call to arity function
+		fi, err = lib.functionByName("arity")
+		if err != nil {
+			return false, 0, fmt.Errorf("arity function not found in library: %v", err)
+		}
+		funCallPrefix, err = fi.callPrefix(0)
+		if err != nil {
+			return false, 0, err
+		}
+		if _, err = w.Write(funCallPrefix); err != nil {
+			return false, 0, err
+		}
+		return true, 0, nil
 	case strings.HasPrefix(sym, "$"):
 		// eval parameter reference function
 		n, err = strconv.Atoi(sym[1:])

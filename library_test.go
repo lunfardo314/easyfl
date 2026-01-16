@@ -1404,3 +1404,63 @@ func TestParseInlineDataArgumentAnyPrefix(t *testing.T) {
 	src2 = fmt.Sprintf("parseInlineDataArgument(0x%s, 3)", hex.EncodeToString(bytecode))
 	lib.MustEqual(src2, "4")
 }
+
+func TestArityLiteral(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	t.Run("$$ with no args", func(t *testing.T) {
+		// Test $$ with no arguments - returns 0 (empty varScope)
+		ret, err := lib.EvalFromSource(nil, "$$")
+		require.NoError(t, err)
+		require.EqualValues(t, []byte{0}, ret)
+	})
+
+	t.Run("$$ in fixed-arg extended function", func(t *testing.T) {
+		// Define an extended function that uses $$ but also references $0
+		// This makes it a 1-arg function
+		lib.extend("arityPlus", "concat($$, $0)")
+
+		// Call with 1 argument - $$ should return 1
+		ret, err := lib.EvalFromSource(nil, "arityPlus(0x42)")
+		require.NoError(t, err)
+		require.EqualValues(t, []byte{1, 0x42}, ret)
+	})
+
+	t.Run("$$ in extended function with 2 args", func(t *testing.T) {
+		// Define an extended function with 2 args
+		lib.extend("arityConcat", "concat($$, $0, $1)")
+
+		// Call with 2 arguments - $$ should return 2
+		ret, err := lib.EvalFromSource(nil, "arityConcat(0x01, 0x02)")
+		require.NoError(t, err)
+		require.EqualValues(t, []byte{2, 0x01, 0x02}, ret)
+	})
+
+	t.Run("$$ compiles correctly", func(t *testing.T) {
+		// Verify $$ compiles to the arity function call
+		_, numParams, code, err := lib.CompileExpression("$$")
+		require.NoError(t, err)
+		require.EqualValues(t, 0, numParams)
+		t.Logf("$$ bytecode: %s", easyfl_util.Fmt(code))
+
+		// Decompile should show "arity"
+		src, err := lib.DecompileBytecode(code)
+		require.NoError(t, err)
+		require.EqualValues(t, "arity", src)
+	})
+
+	t.Run("$$ via EvalExpression directly", func(t *testing.T) {
+		// Use EvalExpression directly to bypass the arg count check
+		// This simulates what vararg functions will do
+		f, _, _, err := lib.CompileExpression("$$")
+		require.NoError(t, err)
+
+		// With 3 args in varScope
+		ret := EvalExpression[any](nil, f, []byte{1}, []byte{2}, []byte{3})
+		require.EqualValues(t, []byte{3}, ret)
+
+		// With 5 args in varScope
+		ret = EvalExpression[any](nil, f, []byte{1}, []byte{2}, []byte{3}, []byte{4}, []byte{5})
+		require.EqualValues(t, []byte{5}, ret)
+	})
+}

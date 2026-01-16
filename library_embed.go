@@ -23,6 +23,7 @@ import (
 func unboundEmbeddedFunctions[T any]() map[string]EmbeddedFunction[T] {
 	return map[string]EmbeddedFunction[T]{
 		// short base
+		"evalArity":     evalArity[T],
 		"evalFail":      evalFail[T],
 		"evalSlice":     evalSlice[T],
 		"evalByte":      evalByte[T],
@@ -111,6 +112,14 @@ func (lib *Library[T]) evalCallLocalLibrary(ctx *CallParams[T]) []byte {
 
 func isNil(p interface{}) bool {
 	return p == nil || (reflect.ValueOf(p).Kind() == reflect.Ptr && reflect.ValueOf(p).IsNil())
+}
+
+// evalArity returns the number of arguments in the enclosing function's var scope.
+// This is the embedded function for the $$ literal.
+func evalArity[T any](par *CallParams[T]) []byte {
+	arity := par.VarScopeArity()
+	par.Trace("arity:: -> %d", arity)
+	return par.AllocData(arity)
 }
 
 func evalFail[T any](par *CallParams[T]) []byte {

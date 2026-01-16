@@ -181,6 +181,12 @@ func (p *CallParams[T]) EvalParam(paramNr byte) []byte {
 	return p.varScope[paramNr].Eval()
 }
 
+// VarScopeArity returns the number of arguments in the current function's var scope.
+// Used by the $$ literal to return the actual arity of the call.
+func (p *CallParams[T]) VarScopeArity() byte {
+	return byte(len(p.varScope))
+}
+
 func (p *CallParams[T]) GetBytecode(paramNr byte) []byte {
 	return p.varScope[paramNr].f.bytecode
 }

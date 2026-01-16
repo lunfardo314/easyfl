@@ -1,5 +1,5 @@
 # Base EasyFL library
-hash: 7094b09462b76e24ce7650aae67145f7a2b80ff7c187c772011e405d54c3cccf
+hash: cedee0127c8b172239180e0acb819bd032cfa33de5e6a576e9aae1af249a5b27
 functions:
 # BEGIN EMBEDDED function definitions
 #    function codes (opcodes) from 0 to 14 are reserved for predefined parameter access functions $i
@@ -152,6 +152,13 @@ functions:
       numArgs: 2
       embedded_as: "evalBitwiseXOR"
       short: true
+   -
+      sym: "arity"
+      description: "returns 1-byte value of the number of arguments in the enclosing function's scope. Used via $$ literal"
+      funCode: 36
+      numArgs: 0
+      embedded_as: "evalArity"
+      short: true
 # END SHORT EMBEDDED function definitions
 # BEGIN LONG EMBEDDED function definitions
 #    function codes (opcodes) from 64 to 318 are reserved for 'LONG EMBEDDED function codes'
@@ -193,7 +200,7 @@ functions:
       embedded_as: "evalFirstEqualIndex"
    -
       sym: "selectCaseByIndex"
-      description: "selectCaseByIndex($0,$1, ..$n) return value if the parameter based on the value of $0+1"
+      description: "selectCaseByIndex($0,$1, ..$n) return value of the parameter based on the value of $0+1"
       funCode: 70
       numArgs: -1
       embedded_as: "evalSelectCaseByIndex"
