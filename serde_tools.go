@@ -307,8 +307,15 @@ func (lib *Library[T]) Upgrade(fromYAML *LibraryFromYAML, embed ...func(sym stri
 					return err
 				}
 			} else {
-				if _, err = lib.ExtendErr(d.Sym, d.Source, d.Description); err != nil {
-					return err
+				// NumArgs == -1 indicates vararg extended function
+				if d.NumArgs == -1 {
+					if _, err = lib.ExtendVarargErr(d.Sym, d.Source, d.Description); err != nil {
+						return err
+					}
+				} else {
+					if _, err = lib.ExtendErr(d.Sym, d.Source, d.Description); err != nil {
+						return err
+					}
 				}
 			}
 		}

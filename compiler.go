@@ -21,6 +21,7 @@ import (
 type funParsed struct {
 	Sym        string
 	SourceCode string
+	IsVararg   bool
 }
 
 // parsedExpression interim representation of the parsed expression
@@ -59,18 +60,29 @@ func parseDefs(lines []string) ([]*funParsed, error) {
 	ret := make([]*funParsed, 0)
 	var current *funParsed
 	for lineno, line := range lines {
-		if strings.HasPrefix(line, "func ") {
+		isVararg := false
+		var sym, body string
+		var found bool
+
+		if strings.HasPrefix(line, "func_vararg ") {
+			isVararg = true
+			sym, body, found = strings.Cut(strings.TrimPrefix(line, "func_vararg "), ":")
+		} else if strings.HasPrefix(line, "func ") {
+			sym, body, found = strings.Cut(strings.TrimPrefix(line, "func "), ":")
+		}
+
+		if strings.HasPrefix(line, "func_vararg ") || strings.HasPrefix(line, "func ") {
 			if current != nil {
 				current.SourceCode = stripSpaces(current.SourceCode)
 				ret = append(ret, current)
 			}
-			sym, body, found := strings.Cut(strings.TrimPrefix(line, "func "), ":")
 			if !found {
 				return nil, fmt.Errorf("':' expectected @ line %d", lineno)
 			}
 			current = &funParsed{
 				Sym:        strings.TrimSpace(sym),
 				SourceCode: body,
+				IsVararg:   isVararg,
 			}
 			if !token.IsIdentifier(current.Sym) {
 				return nil, fmt.Errorf("'%s' is not an identifier", sym)
@@ -290,21 +302,7 @@ func parseLiteral[T any](lib *Library[T], sym string, w io.Writer) (bool, int, e
 			return false, 0, err
 		}
 		return true, 0, nil
-	case sym == "$$":
-		// arity literal - emit call to arity function
-		fi, err = lib.functionByName("arity")
-		if err != nil {
-			return false, 0, fmt.Errorf("arity function not found in library: %v", err)
-		}
-		funCallPrefix, err = fi.callPrefix(0)
-		if err != nil {
-			return false, 0, err
-		}
-		if _, err = w.Write(funCallPrefix); err != nil {
-			return false, 0, err
-		}
-		return true, 0, nil
-	case strings.HasPrefix(sym, "$"):
+	case strings.HasPrefix(sym, "$") && sym != "$$":
 		// eval parameter reference function
 		n, err = strconv.Atoi(sym[1:])
 		if err != nil {

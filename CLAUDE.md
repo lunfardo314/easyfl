@@ -33,7 +33,8 @@ go test ./tuples/...
 
 ## Architecture Overview
 
-EasyFL (Easy Formula/Functional Language) is a simple, non-Turing complete functional programming language designed for UTXO ledger programmability. It operates in three forms:
+EasyFL (Easy Formula/Functional Language) is a simple, non-Turing complete functional programming language without recursion designed for UTXO ledger covenants.
+It is platform-independent. It operates in three forms:
 
 1. **Source form** - Human-readable ASCII expressions
 2. **Bytecode form** - Compact canonical representation for storage/embedding
@@ -49,6 +50,8 @@ EasyFL (Easy Formula/Functional Language) is a simple, non-Turing complete funct
   - **Long embedded** (2-byte call prefix, codes 64-319)
   - **Extended** (2-byte call prefix, compiled from EasyFL source)
   - **Local** (3-byte call prefix, for inline libraries)
+- The library establishes one-to-one mapping between function names and codes
+- Library is constructed that way, that references from function definitions to other function definitions in the library form a directed acyclic graph. That prevent loops and recursion.
 
 **Compiler** (`compiler.go`)
 - `CompileExpression()` - Source to execution form + bytecode
@@ -71,7 +74,7 @@ EasyFL (Easy Formula/Functional Language) is a simple, non-Turing complete funct
 
 **LocalLibrary** (`local_library.go`)
 - Compile multiple functions as inline bytecode array
-- Functions can reference each other and earlier definitions
+- Functions can reference each other and global definitions
 - Used for embedding reusable function sets in data structures
 
 **Tuples Package** (`tuples/`)

@@ -1,5 +1,5 @@
 # Base EasyFL library
-hash: cedee0127c8b172239180e0acb819bd032cfa33de5e6a576e9aae1af249a5b27
+hash: 8f3fa0b7a6ca72befbcb4282217c675e728d5fa75e463c8037049126941fbaaf
 functions:
 # BEGIN EMBEDDED function definitions
 #    function codes (opcodes) from 0 to 14 are reserved for predefined parameter access functions $i
@@ -153,8 +153,8 @@ functions:
       embedded_as: "evalBitwiseXOR"
       short: true
    -
-      sym: "arity"
-      description: "returns 1-byte value of the number of arguments in the enclosing function's scope. Used via $$ literal"
+      sym: "$$"
+      description: "returns 1-byte value of the number of arguments in the enclosing function's scope"
       funCode: 36
       numArgs: 0
       embedded_as: "evalArity"

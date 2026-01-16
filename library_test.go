@@ -1436,17 +1436,37 @@ func TestArityLiteral(t *testing.T) {
 		require.EqualValues(t, []byte{2, 0x01, 0x02}, ret)
 	})
 
+	t.Run("$$ in extended function with 3 args nested", func(t *testing.T) {
+		// Define an extended function with 3 args
+		lib.extend("arityConcat3", "concat($$, $0, concat($1, $2))")
+
+		// Call with 3 arguments - $$ should return 3
+		ret, err := lib.EvalFromSource(nil, "arityConcat3(1, 2, 3)")
+		require.NoError(t, err)
+		require.EqualValues(t, []byte{3, 1, 2, 3}, ret)
+	})
+
+	t.Run("$$ in extended function with 2 args nested", func(t *testing.T) {
+		// Define an extended function with 2 args
+		lib.extend("arityConcat2nested", "concat($$, $0, concat($1, $1))")
+
+		// Call with 2 arguments - $$ should return 2
+		ret, err := lib.EvalFromSource(nil, "arityConcat2nested(1, 2)")
+		require.NoError(t, err)
+		require.EqualValues(t, []byte{2, 1, 2, 2}, ret)
+	})
+
 	t.Run("$$ compiles correctly", func(t *testing.T) {
-		// Verify $$ compiles to the arity function call
+		// Verify $$ compiles to the $$ function call
 		_, numParams, code, err := lib.CompileExpression("$$")
 		require.NoError(t, err)
 		require.EqualValues(t, 0, numParams)
 		t.Logf("$$ bytecode: %s", easyfl_util.Fmt(code))
 
-		// Decompile should show "arity"
+		// Decompile should show "$$"
 		src, err := lib.DecompileBytecode(code)
 		require.NoError(t, err)
-		require.EqualValues(t, "arity", src)
+		require.EqualValues(t, "$$", src)
 	})
 
 	t.Run("$$ via EvalExpression directly", func(t *testing.T) {
@@ -1462,5 +1482,144 @@ func TestArityLiteral(t *testing.T) {
 		// With 5 args in varScope
 		ret = EvalExpression[any](nil, f, []byte{1}, []byte{2}, []byte{3}, []byte{4}, []byte{5})
 		require.EqualValues(t, []byte{5}, ret)
+	})
+}
+
+func TestVarargExtendedFunctions(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	t.Run("func_vararg parsing", func(t *testing.T) {
+		// Test that func_vararg is correctly parsed
+		err := lib.ExtendMany(`
+func_vararg countArgs: $$
+`)
+		require.NoError(t, err)
+
+		// Call with different numbers of arguments
+		ret, err := lib.EvalFromSource(nil, "countArgs()")
+		require.NoError(t, err)
+		require.EqualValues(t, []byte{0}, ret)
+
+		ret, err = lib.EvalFromSource(nil, "countArgs(1)")
+		require.NoError(t, err)
+		require.EqualValues(t, []byte{1}, ret)
+
+		ret, err = lib.EvalFromSource(nil, "countArgs(1, 2, 3)")
+		require.NoError(t, err)
+		require.EqualValues(t, []byte{3}, ret)
+
+		ret, err = lib.EvalFromSource(nil, "countArgs(1, 2, 3, 4, 5)")
+		require.NoError(t, err)
+		require.EqualValues(t, []byte{5}, ret)
+	})
+
+	t.Run("vararg function returns first arg or nil", func(t *testing.T) {
+		lib2 := NewBaseLibrary[any]()
+		// Define a vararg function that returns the first arg if present, else nil
+		// Note: $$ returns 0x00 when no args (which is truthy since non-empty),
+		// so we need to use not(isZero($$)) to check if there are args
+		err := lib2.ExtendMany(`
+func_vararg firstOrNil: if(not(isZero($$)), $0, nil)
+`)
+		require.NoError(t, err)
+
+		// With no args - returns nil (isZero(0x00) is true, so not() makes it false, we get nil)
+		ret, err := lib2.EvalFromSource(nil, "firstOrNil()")
+		require.NoError(t, err)
+		require.EqualValues(t, []byte{}, ret)
+
+		// With one arg - returns that arg
+		ret, err = lib2.EvalFromSource(nil, "firstOrNil(0x42)")
+		require.NoError(t, err)
+		require.EqualValues(t, []byte{0x42}, ret)
+
+		// With multiple args - still returns first
+		ret, err = lib2.EvalFromSource(nil, "firstOrNil(0xAB, 0xCD, 0xEF)")
+		require.NoError(t, err)
+		require.EqualValues(t, []byte{0xAB}, ret)
+	})
+
+	t.Run("vararg sum function", func(t *testing.T) {
+		lib3 := NewBaseLibrary[any]()
+		// Define a vararg function that sums up to 4 arguments
+		err := lib3.ExtendMany(`
+func_vararg sum4: selectCaseByIndex($$,
+   u64/0,
+   uint8Bytes($0),
+   add($0,$1),
+   add($0,add($1,$2)),
+   add(add($0,$1),add($2,$3))
+)
+`)
+		require.NoError(t, err)
+
+		// No args - returns 0
+		ret, err := lib3.EvalFromSource(nil, "sum4()")
+		require.NoError(t, err)
+		require.EqualValues(t, make([]byte, 8), ret)
+
+		// One arg
+		ret, err = lib3.EvalFromSource(nil, "sum4(u64/5)")
+		require.NoError(t, err)
+		var expected [8]byte
+		binary.BigEndian.PutUint64(expected[:], 5)
+		require.EqualValues(t, expected[:], ret)
+
+		// Two args: 10 + 20 = 30
+		ret, err = lib3.EvalFromSource(nil, "sum4(u64/10, u64/20)")
+		require.NoError(t, err)
+		binary.BigEndian.PutUint64(expected[:], 30)
+		require.EqualValues(t, expected[:], ret)
+
+		// Three args: 1 + 2 + 3 = 6
+		ret, err = lib3.EvalFromSource(nil, "sum4(u64/1, u64/2, u64/3)")
+		require.NoError(t, err)
+		binary.BigEndian.PutUint64(expected[:], 6)
+		require.EqualValues(t, expected[:], ret)
+
+		// Four args: 1 + 2 + 3 + 4 = 10
+		ret, err = lib3.EvalFromSource(nil, "sum4(u64/1, u64/2, u64/3, u64/4)")
+		require.NoError(t, err)
+		binary.BigEndian.PutUint64(expected[:], 10)
+		require.EqualValues(t, expected[:], ret)
+	})
+
+	t.Run("mixed func and func_vararg", func(t *testing.T) {
+		lib4 := NewBaseLibrary[any]()
+		// Test that both regular and vararg functions can coexist
+		err := lib4.ExtendMany(`
+func regular: concat($0, $1)
+func_vararg varargFn: $$
+`)
+		require.NoError(t, err)
+
+		// Regular function works as expected
+		ret, err := lib4.EvalFromSource(nil, "regular(0x01, 0x02)")
+		require.NoError(t, err)
+		require.EqualValues(t, []byte{0x01, 0x02}, ret)
+
+		// Vararg function works as expected
+		ret, err = lib4.EvalFromSource(nil, "varargFn(0x01, 0x02, 0x03)")
+		require.NoError(t, err)
+		require.EqualValues(t, []byte{3}, ret)
+	})
+
+	t.Run("vararg accessing $i beyond arity panics", func(t *testing.T) {
+		lib5 := NewBaseLibrary[any]()
+		// Define a vararg function that unconditionally accesses $2
+		err := lib5.ExtendMany(`
+func_vararg needsThree: $2
+`)
+		require.NoError(t, err)
+
+		// With 3+ args it should work
+		ret, err := lib5.EvalFromSource(nil, "needsThree(0x01, 0x02, 0x03)")
+		require.NoError(t, err)
+		require.EqualValues(t, []byte{0x03}, ret)
+
+		// With fewer args it should panic
+		lib5.MustError("needsThree(0x01, 0x02)", "")
+		lib5.MustError("needsThree(0x01)", "")
+		lib5.MustError("needsThree()", "")
 	})
 }

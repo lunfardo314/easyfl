@@ -294,6 +294,40 @@ func (lib *Library[T]) ExtendErr(sym string, source string, description ...strin
 
 }
 
+// ExtendVarargErr extends library with a vararg extended function.
+// Unlike ExtendErr, the function will accept any number of arguments at call time.
+// The numArgs in the descriptor is set to -1 to indicate vararg.
+func (lib *Library[T]) ExtendVarargErr(sym string, source string, description ...string) (uint16, error) {
+	f, _, bytecode, err := lib.CompileExpression(source)
+	if err != nil {
+		return 0, fmt.Errorf("error while compiling vararg '%s': %v", sym, err)
+	}
+
+	easyfl_util.Assertf(lib.numExtended < MaxNumExtendedGlobal, "too many extended functions")
+
+	if lib.existsFunction(sym) {
+		return 0, errors.New("repeating symbol '" + sym + "'")
+	}
+	embeddedFun := makeEmbeddedFunForExpression(sym, f)
+	if traceYN {
+		embeddedFun = wrapWithTracing(embeddedFun, sym)
+	}
+	dscr := &funDescriptor[T]{
+		sym:               sym,
+		funCode:           lib.numExtended + FirstExtended,
+		bytecode:          bytecode,
+		requiredNumParams: -1, // vararg indicator
+		embeddedFun:       embeddedFun,
+		source:            source,
+	}
+	if len(description) > 0 {
+		dscr.description = description[0]
+	}
+	lib.addDescriptor(dscr)
+
+	return dscr.funCode, nil
+}
+
 func wrapWithTracing[T any](f EmbeddedFunction[T], msg string) EmbeddedFunction[T] {
 	return func(par *CallParams[T]) []byte {
 		fmt.Printf("EvalFunction '%s' - IN\n", msg)
@@ -309,8 +343,14 @@ func (lib *Library[T]) ExtendMany(source string) error {
 		return err
 	}
 	for _, pf := range parsed {
-		if _, err = lib.ExtendErr(pf.Sym, pf.SourceCode); err != nil {
-			return err
+		if pf.IsVararg {
+			if _, err = lib.ExtendVarargErr(pf.Sym, pf.SourceCode); err != nil {
+				return err
+			}
+		} else {
+			if _, err = lib.ExtendErr(pf.Sym, pf.SourceCode); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

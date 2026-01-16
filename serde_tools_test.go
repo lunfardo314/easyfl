@@ -602,3 +602,56 @@ functions:
 	// Verify new behavior
 	lib.MustEqual("mutableFunc(3, 5)", "uint8Bytes(15)")
 }
+
+// Test adding vararg extended function via YAML
+func TestUpgrade_VarargExtended_Success(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	// Add a vararg function with numArgs: -1
+	yamlData := `
+functions:
+  -
+    sym: varargCount
+    numArgs: -1
+    source: $$
+`
+	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
+	require.NoError(t, err)
+
+	err = lib.Upgrade(fromYaml)
+	require.NoError(t, err)
+
+	// Verify function works with different numbers of arguments
+	ret, err := lib.EvalFromSource(nil, "varargCount()")
+	require.NoError(t, err)
+	require.EqualValues(t, []byte{0}, ret)
+
+	ret, err = lib.EvalFromSource(nil, "varargCount(1)")
+	require.NoError(t, err)
+	require.EqualValues(t, []byte{1}, ret)
+
+	ret, err = lib.EvalFromSource(nil, "varargCount(1, 2, 3)")
+	require.NoError(t, err)
+	require.EqualValues(t, []byte{3}, ret)
+
+	ret, err = lib.EvalFromSource(nil, "varargCount(1, 2, 3, 4, 5)")
+	require.NoError(t, err)
+	require.EqualValues(t, []byte{5}, ret)
+}
+
+// Test that vararg functions are correctly serialized to YAML
+func TestToYAML_VarargExtended(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	// Add a vararg function
+	_, err := lib.ExtendVarargErr("myVararg", "$$")
+	require.NoError(t, err)
+
+	// Serialize to YAML
+	yamlData := lib.ToYAML(true)
+	t.Logf("YAML output:\n%s", string(yamlData))
+
+	// Verify numArgs: -1 is present
+	require.Contains(t, string(yamlData), "numArgs: -1")
+	require.Contains(t, string(yamlData), "sym: \"myVararg\"")
+}
