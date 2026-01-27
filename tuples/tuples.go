@@ -256,6 +256,20 @@ func (a *Tuple) Bytes() []byte {
 	return a.bytes
 }
 
+// IndexFunc returns index of the first element that satisfies func
+// If not founds, returns -1
+func (a *Tuple) IndexFunc(cond func(idx int, data []byte) bool) (ret int) {
+	ret = -1
+	a.ForEach(func(i int, data []byte) bool {
+		if cond(i, data) {
+			ret = i
+			return true
+		}
+		return false
+	})
+	return
+}
+
 func (a *TupleEditable) Bytes() []byte {
 	var buf bytes.Buffer
 	err := encodeArray(a.elements, &buf)
