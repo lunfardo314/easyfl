@@ -263,9 +263,9 @@ func (a *Tuple) IndexFunc(cond func(idx int, data []byte) bool) (ret int) {
 	a.ForEach(func(i int, data []byte) bool {
 		if cond(i, data) {
 			ret = i
-			return true
+			return false // exit iteration
 		}
-		return false
+		return true // continue iteration
 	})
 	return
 }
