@@ -18,8 +18,9 @@ import (
 type (
 	// LibraryFromYAML is parsed YAML description of a library
 	LibraryFromYAML struct {
-		Hash      string                   `yaml:"hash,omitempty"` // if Hash != "", library is compiled
-		Functions []FuncDescriptorYAMLAble `yaml:"functions"`
+		Hash        string                   `yaml:"hash,omitempty"`         // if Hash != "", library is compiled
+		VersionData string                   `yaml:"version_data,omitempty"` // optional version data as string
+		Functions   []FuncDescriptorYAMLAble `yaml:"functions"`
 	}
 
 	// FuncDescriptorYAMLAble contains all information about embedded or extended function
@@ -65,6 +66,10 @@ func (lib *Library[T]) write(w io.Writer) {
 	_ = binary.Write(w, binary.BigEndian, lib.numEmbeddedShort)
 	_ = binary.Write(w, binary.BigEndian, lib.numEmbeddedLong)
 	_ = binary.Write(w, binary.BigEndian, lib.numExtended)
+
+	// include VersionData in hash
+	_ = binary.Write(w, binary.BigEndian, uint16(len(lib.VersionData)))
+	_, _ = w.Write(lib.VersionData)
 
 	funCodes := make([]uint16, 0, len(lib.funByFunCode))
 	for funCode := range lib.funByFunCode {
@@ -122,6 +127,9 @@ func (lib *Library[T]) ToYAML(compiled bool, prefix ...string) []byte {
 	if compiled {
 		h := lib.LibraryHash()
 		prn(&buf, "hash: %s\n", hex.EncodeToString(h[:]))
+	}
+	if len(lib.VersionData) > 0 {
+		prn(&buf, "version_data: \"%s\"\n", string(lib.VersionData))
 	}
 
 	functions := make([]*FuncDescriptorYAMLAble, 0)
@@ -260,6 +268,11 @@ func ReadLibraryFromYAML(data []byte) (*LibraryFromYAML, error) {
 func (lib *Library[T]) Upgrade(fromYAML *LibraryFromYAML, embed ...func(sym string) EmbeddedFunction[T]) error {
 	var err error
 	var ef EmbeddedFunction[T]
+
+	// Update VersionData only if new value is non-empty
+	if fromYAML.VersionData != "" {
+		lib.VersionData = []byte(fromYAML.VersionData)
+	}
 
 	for _, d := range fromYAML.Functions {
 		exists := lib.existsFunction(d.Sym)

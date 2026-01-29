@@ -1,5 +1,5 @@
 # Base EasyFL library
-hash: 8f3fa0b7a6ca72befbcb4282217c675e728d5fa75e463c8037049126941fbaaf
+hash: 02f160a9443624902b385aeddf7fd408220701cb8ad63da7f8c834c8b9591dae
 functions:
 # BEGIN EMBEDDED function definitions
 #    function codes (opcodes) from 0 to 14 are reserved for predefined parameter access functions $i

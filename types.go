@@ -93,6 +93,8 @@ type (
 		numEmbeddedShort uint16
 		numEmbeddedLong  uint16
 		numExtended      uint16
+		// VersionData is optional arbitrary data attached to the library (can be nil)
+		VersionData []byte
 	}
 )
 
