@@ -269,9 +269,9 @@ func (lib *Library[T]) Upgrade(fromYAML *LibraryFromYAML, embed ...func(sym stri
 	var err error
 	var ef EmbeddedFunction[T]
 
-	// Update VersionData only if new value is non-empty
-	if fromYAML.VersionData != "" {
-		lib.VersionData = []byte(fromYAML.VersionData)
+	// Update VersionData only if new value is non-empty (after trimming whitespace)
+	if vd := strings.TrimSpace(fromYAML.VersionData); vd != "" {
+		lib.VersionData = []byte(vd)
 	}
 
 	for _, d := range fromYAML.Functions {

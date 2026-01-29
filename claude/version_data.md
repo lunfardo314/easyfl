@@ -5,7 +5,7 @@ Add additional field `VersionData []byte` to the `Library` structure.
    - the field is represented as a top-level key `version_data:` in the .yaml form of the library
    - in yaml, value of the `version_data:` is string
    - absence of the `version_data:` means empty value
-   - upon library upgrade, `version_data` field is updated only if the new value exists and is non-empty
+   - upon library upgrade, `version_data` field is updated only if the new value exists and is non-empty (after trimming leading/trailing whitespace)
    - `VersionData` must be included in the library hash calculation   
 
 # Goal 2
