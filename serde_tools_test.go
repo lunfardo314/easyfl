@@ -19,6 +19,48 @@ func TestLibraryRenewYAML(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestVersionDataEscaping verifies that version_data with special characters (like JSON with quotes)
+// is properly escaped when serialized to YAML and can be parsed back correctly.
+func TestVersionDataEscaping(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	// Set version_data to JSON with quotes - this previously caused YAML parsing errors
+	jsonData := `{"txValidation":"txLayoutValidator","key":"value with \"quotes\""}`
+	lib.VersionData = []byte(jsonData)
+
+	// Generate YAML
+	yamlData := lib.ToYAML(true)
+	t.Logf("Generated YAML (first 300 bytes):\n%s", string(yamlData[:min(300, len(yamlData))]))
+
+	// Parse the YAML back - this would fail if escaping is broken
+	parsed, err := ReadLibraryFromYAML(yamlData)
+	require.NoError(t, err, "YAML parsing should succeed with escaped version_data")
+
+	// Verify the version_data round-trips correctly
+	require.Equal(t, jsonData, parsed.VersionData, "version_data should round-trip correctly")
+}
+
+// TestYamlEscapeString verifies the yamlEscapeString helper function
+func TestYamlEscapeString(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{`simple`, `simple`},
+		{`with "quotes"`, `with \"quotes\"`},
+		{`with\backslash`, `with\\backslash`},
+		{`line1\nline2`, `line1\\nline2`}, // literal \n in input
+		{"with\nnewline", "with\\nnewline"},
+		{"with\ttab", "with\\ttab"},
+		{`{"key":"value"}`, `{\"key\":\"value\"}`},
+	}
+
+	for _, tc := range tests {
+		result := yamlEscapeString(tc.input)
+		require.Equal(t, tc.expected, result, "escaping %q", tc.input)
+	}
+}
+
 func TestLibrary_ToYAML_not_compiled(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 	lib.PrintLibraryStats()

@@ -129,7 +129,7 @@ func (lib *Library[T]) ToYAML(compiled bool, prefix ...string) []byte {
 		prn(&buf, "hash: %s\n", hex.EncodeToString(h[:]))
 	}
 	if len(lib.VersionData) > 0 {
-		prn(&buf, "version_data: \"%s\"\n", string(lib.VersionData))
+		prn(&buf, "version_data: \"%s\"\n", yamlEscapeString(string(lib.VersionData)))
 	}
 
 	functions := make([]*FuncDescriptorYAMLAble, 0)
@@ -203,18 +203,43 @@ func prn(w io.Writer, format string, a ...any) {
 	easyfl_util.AssertNoError(err)
 }
 
+// yamlEscapeString escapes a string for use in YAML double-quoted format.
+// It escapes backslashes, double quotes, and control characters.
+func yamlEscapeString(s string) string {
+	var buf strings.Builder
+	buf.Grow(len(s) + 10) // pre-allocate with some extra space for escapes
+
+	for _, r := range s {
+		switch r {
+		case '\\':
+			buf.WriteString("\\\\")
+		case '"':
+			buf.WriteString("\\\"")
+		case '\n':
+			buf.WriteString("\\n")
+		case '\r':
+			buf.WriteString("\\r")
+		case '\t':
+			buf.WriteString("\\t")
+		default:
+			buf.WriteRune(r)
+		}
+	}
+	return buf.String()
+}
+
 func prnFuncDescription(w io.Writer, f *FuncDescriptorYAMLAble, compiled bool) {
 	prn(w, ident+"-\n")
-	prn(w, ident2+"sym: \"%s\"\n", f.Sym)
+	prn(w, ident2+"sym: \"%s\"\n", yamlEscapeString(f.Sym))
 	if f.Description != "" {
-		prn(w, ident2+"description: \"%s\"\n", f.Description)
+		prn(w, ident2+"description: \"%s\"\n", yamlEscapeString(f.Description))
 	}
 	if compiled {
 		prn(w, ident2+"funCode: %d\n", f.FunCode)
 	}
 	prn(w, ident2+"numArgs: %d\n", f.NumArgs)
 	if f.EmbeddedAs != "" {
-		prn(w, ident2+"embedded_as: \"%s\"\n", f.EmbeddedAs)
+		prn(w, ident2+"embedded_as: \"%s\"\n", yamlEscapeString(f.EmbeddedAs))
 	}
 	if f.Short {
 		prn(w, ident2+"short: true\n")
