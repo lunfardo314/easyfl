@@ -8,12 +8,13 @@
 ### Changes Made
 
 **`library_yaml.go`** - Replaced string literal with go:embed directive:
+
 ```go
 package easyfl
 
 import _ "embed"
 
-//go:embed library.yaml
+//go:embed ../library.yaml
 var baseLibraryDefinitions string
 ```
 
