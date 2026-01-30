@@ -202,6 +202,45 @@ func TestTupleSemantics(t *testing.T) {
 	})
 }
 
+func TestHasDuplicates(t *testing.T) {
+	t.Run("empty tuple", func(t *testing.T) {
+		tup := EmptyTupleEditable().Tuple()
+		require.False(t, tup.HasDuplicates())
+	})
+	t.Run("single element", func(t *testing.T) {
+		tup := MakeTupleFromDataElements([]byte{1, 2, 3})
+		require.False(t, tup.HasDuplicates())
+	})
+	t.Run("no duplicates", func(t *testing.T) {
+		tup := MakeTupleFromDataElements([]byte{1}, []byte{2}, []byte{3})
+		require.False(t, tup.HasDuplicates())
+	})
+	t.Run("with duplicates", func(t *testing.T) {
+		tup := MakeTupleFromDataElements([]byte{1}, []byte{2}, []byte{1})
+		require.True(t, tup.HasDuplicates())
+	})
+	t.Run("adjacent duplicates", func(t *testing.T) {
+		tup := MakeTupleFromDataElements([]byte{1, 2}, []byte{1, 2}, []byte{3})
+		require.True(t, tup.HasDuplicates())
+	})
+	t.Run("all same", func(t *testing.T) {
+		tup := MakeTupleFromDataElements([]byte{5}, []byte{5}, []byte{5})
+		require.True(t, tup.HasDuplicates())
+	})
+	t.Run("nil elements no duplicates", func(t *testing.T) {
+		tup := MakeTupleFromDataElements(nil, []byte{1}, []byte{2})
+		require.False(t, tup.HasDuplicates())
+	})
+	t.Run("nil elements with duplicates", func(t *testing.T) {
+		tup := MakeTupleFromDataElements(nil, []byte{1}, nil)
+		require.True(t, tup.HasDuplicates())
+	})
+	t.Run("empty byte slices are duplicates", func(t *testing.T) {
+		tup := MakeTupleFromDataElements([]byte{}, []byte{1}, []byte{})
+		require.True(t, tup.HasDuplicates())
+	})
+}
+
 func TestTreeSemantics(t *testing.T) {
 	t.Run("nil", func(t *testing.T) {
 		_, err := TreeFromBytesReadOnly(nil)

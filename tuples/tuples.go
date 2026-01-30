@@ -286,6 +286,23 @@ func (a *Tuple) AsTree() *Tree {
 	}
 }
 
+// HasDuplicates returns true if the tuple contains duplicate elements.
+// Two elements are considered duplicates if they are byte-equal.
+func (a *Tuple) HasDuplicates() bool {
+	seen := make(map[string]struct{})
+	hasDup := false
+	a.ForEach(func(_ int, data []byte) bool {
+		key := string(data)
+		if _, exists := seen[key]; exists {
+			hasDup = true
+			return false // stop iteration
+		}
+		seen[key] = struct{}{}
+		return true
+	})
+	return hasDup
+}
+
 func calcLenPrefix(data [][]byte) (lenPrefixType, error) {
 	if len(data) > maxTupleLen {
 		return 0, errors.New("too long data")
