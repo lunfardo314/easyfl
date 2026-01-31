@@ -1,5 +1,5 @@
 # Base EasyFL library
-hash: 02f160a9443624902b385aeddf7fd408220701cb8ad63da7f8c834c8b9591dae
+hash: e423bbc8b7f16950c3e1f801ed76a053b452175610ccaff21950ff08daf1d4ea
 functions:
 # BEGIN EMBEDDED function definitions
 #    function codes (opcodes) from 0 to 14 are reserved for predefined parameter access functions $i
@@ -270,6 +270,12 @@ functions:
       funCode: 81
       numArgs: 1
       embedded_as: "evalTupleLen"
+   -
+      sym: "tupleHasDuplicates"
+      description: "returns number of elements of a tuple as 8 byte-long big-endian value"
+      funCode: 82
+      numArgs: 1
+      embedded_as: "evalTupleHasDuplicates"
 # END LONG EMBEDDED function definitions
 # BEGIN EXTENDED function definitions (defined by EasyFL formulas)
 #    function codes (opcodes) from 319 and up to maximum 1022 are reserved for 'EXTENDED function codes'
