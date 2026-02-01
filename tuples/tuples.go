@@ -281,7 +281,7 @@ func (a *TupleEditable) Bytes() []byte {
 
 func (a *Tuple) AsTree() *Tree {
 	return &Tree{
-		sa:       a,
+		Tuple:    a,
 		subtrees: make(map[byte]*Tree),
 	}
 }

@@ -13,7 +13,7 @@ import (
 // only when accessed
 type Tree struct {
 	// bytes
-	sa *Tuple
+	*Tuple
 	// cache of parsed subtrees
 	subtrees map[byte]*Tree
 	// to protect lazy deserialization in multithread situations
@@ -31,7 +31,7 @@ func TreeFromBytesReadOnly(data []byte) (*Tree, error) {
 		return nil, fmt.Errorf("TreeFromBytesReadOnly: %v", err)
 	}
 	return &Tree{
-		sa:       arr,
+		Tuple:    arr,
 		subtrees: make(map[byte]*Tree),
 	}, nil
 }
@@ -47,7 +47,7 @@ func TreeFromTreesReadOnly(trees ...*Tree) *Tree {
 	}
 
 	return &Tree{
-		sa:       sa.Tuple(),
+		Tuple:    sa.Tuple(),
 		subtrees: m,
 	}
 }
@@ -66,11 +66,6 @@ func (p TreePath) String() string {
 
 func (p TreePath) Hex() string {
 	return hex.EncodeToString(p.Bytes())
-}
-
-// Bytes recursively update bytes in the tree from leaves
-func (st *Tree) Bytes() []byte {
-	return st.sa.Bytes()
 }
 
 func (st *Tree) _getCachedSubtree(idx byte) *Tree {
@@ -94,7 +89,7 @@ func (st *Tree) getSubtree(idx byte) (*Tree, error) {
 		return ret, nil
 	}
 
-	bin, err := st.sa.At(int(idx))
+	bin, err := st.At(int(idx))
 	if err != nil {
 		return nil, fmt.Errorf("getSubtree: %v", err)
 	}
@@ -124,18 +119,13 @@ func (st *Tree) Subtree(path TreePath) (*Tree, error) {
 	return ret, nil
 }
 
-// TopTuple returns the tuple at the top of the tree
-func (st *Tree) TopTuple() *Tuple {
-	return st.sa
-}
-
 // BytesAtPath returns serialized for of the element at 'path'
 func (st *Tree) BytesAtPath(path TreePath) ([]byte, error) {
 	if len(path) == 0 {
 		return st.Bytes(), nil
 	}
 	if len(path) == 1 {
-		return st.sa.At(int(path[0]))
+		return st.At(int(path[0]))
 	}
 	subtree, err := st.getSubtree(path[0])
 	if err != nil {
@@ -156,7 +146,7 @@ func (st *Tree) NumElementsAtPath(path TreePath) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return s.sa.NumElements(), nil
+	return s.NumElements(), nil
 }
 
 func (st *Tree) MustNumElementsAtPath(path TreePath) int {
@@ -170,7 +160,7 @@ func (st *Tree) ForEach(fun func(i byte, data []byte) bool, path TreePath) error
 	if err != nil {
 		return err
 	}
-	sub.sa.ForEach(func(i int, data []byte) bool {
+	sub.Tuple.ForEach(func(i int, data []byte) bool {
 		return fun(byte(i), data)
 	})
 	return nil
@@ -181,7 +171,7 @@ func (st *Tree) ForEachReverse(fun func(i byte, data []byte) bool, path TreePath
 	if err != nil {
 		return err
 	}
-	sub.sa.ForEachReverse(func(i int, data []byte) bool {
+	sub.Tuple.ForEachReverse(func(i int, data []byte) bool {
 		return fun(byte(i), data)
 	})
 	return nil

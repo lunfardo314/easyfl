@@ -347,7 +347,7 @@ func TestSubTuples(t *testing.T) {
 		path := randomPath(5)
 		subTree, err := tree.Subtree(path)
 		require.NoError(t, err)
-		require.EqualValues(t, subTree.TopTuple().Bytes(), tree.MustBytesAtPath(path))
+		require.EqualValues(t, subTree.Bytes(), tree.MustBytesAtPath(path))
 	}
 }
 
