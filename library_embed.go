@@ -62,9 +62,8 @@ func unboundEmbeddedFunctions[T any]() map[string]EmbeddedFunction[T] {
 		"evalValidSignatureED25519": evalValidSigED25519[T],
 		"evalBlake2b":               evalBlake2b[T],
 		// tuples
-		"evalAtTuple8":           evalAtTuple8[T],
-		"evalTupleLen":           evalNumElementsOfTuple[T],
-		"evalTupleHasDuplicates": evalTupleHasDuplicates[T],
+		"evalAtTuple8": evalAtTuple8[T],
+		"evalTupleLen": evalNumElementsOfTuple[T],
 	}
 }
 func EmbeddedFunctions[T any](targetLib *Library[T]) func(sym string) EmbeddedFunction[T] {
@@ -553,17 +552,6 @@ func evalNumElementsOfTuple[T any](par *CallParams[T]) []byte {
 	ret := par.Alloc(8)
 	binary.BigEndian.PutUint64(ret, uint64(arr.NumElements()))
 	return ret
-}
-
-func evalTupleHasDuplicates[T any](par *CallParams[T]) []byte {
-	arr, err := tuples.TupleFromBytes(par.Arg(0))
-	if err != nil {
-		par.TracePanic("evalTupleHasDuplicates: %v", err)
-	}
-	if arr.HasDuplicates() {
-		return []byte{0xff}
-	}
-	return nil
 }
 
 func (lib *Library[T]) evalParseInlineData(par *CallParams[T]) []byte {
