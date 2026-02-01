@@ -124,6 +124,11 @@ func (st *Tree) Subtree(path TreePath) (*Tree, error) {
 	return ret, nil
 }
 
+// TopTuple returns the tuple at the top of the tree
+func (st *Tree) TopTuple() *Tuple {
+	return st.sa
+}
+
 // BytesAtPath returns serialized for of the element at 'path'
 func (st *Tree) BytesAtPath(path TreePath) ([]byte, error) {
 	if len(path) == 0 {

@@ -339,6 +339,18 @@ func buildTree(n int, leaves ...[]byte) []byte {
 	return MakeTupleFromDataElements(buildTree(n-1), buildTree(n-1)).Bytes()
 }
 
+func TestSubTuples(t *testing.T) {
+	treeBytes := buildTree(7)
+	tree, _ := TreeFromBytesReadOnly(treeBytes)
+
+	for i := 0; i < 10; i++ {
+		path := randomPath(5)
+		subTree, err := tree.Subtree(path)
+		require.NoError(t, err)
+		require.EqualValues(t, subTree.TopTuple().Bytes(), tree.MustBytesAtPath(path))
+	}
+}
+
 func BenchmarkAt(b *testing.B) {
 	arr := EmptyTupleEditable()
 	for i := 0; i < 100; i++ {
