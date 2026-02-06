@@ -258,11 +258,15 @@ func evalSelectCaseByIndex[T any](par *CallParams[T]) []byte {
 	if par.Arity() == 0 {
 		par.TracePanic("evalSelectCaseByIndex: must be at least 1 argument")
 	}
-	idx := par.Arg(0)
-	if len(idx) != 1 || idx[0]+1 >= par.Arity() {
+	idx, err := easyfl_util.Uint64FromBytes(par.Arg(0))
+	if err != nil {
+		par.TracePanic("evalSelectCaseByIndex: invalid argument")
 		return nil
 	}
-	return par.Arg(idx[0] + 1)
+	if byte(idx)+1 >= par.Arity() {
+		return nil
+	}
+	return par.Arg(byte(idx) + 1)
 }
 
 func evalIsZero[T any](par *CallParams[T]) []byte {

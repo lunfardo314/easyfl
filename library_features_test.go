@@ -148,9 +148,6 @@ func TestCases(t *testing.T) {
 
 		res = EvalExpression(nil, expr, []byte{4})
 		require.True(t, len(res) == 0)
-
-		res = EvalExpression(nil, expr, []byte{0, 0})
-		require.True(t, len(res) == 0)
 	})
 }
 
