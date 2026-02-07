@@ -115,6 +115,16 @@ func stripSpaces(str string) string {
 	}, str)
 }
 
+// preprocessSource strips comments and whitespace from EasyFL source code,
+// producing the cleaned string suitable for ExpressionSourceToBytecode.
+func preprocessSource(source string) (string, error) {
+	lines, err := splitLinesStripComments(source)
+	if err != nil {
+		return "", err
+	}
+	return stripSpaces(strings.Join(lines, "")), nil
+}
+
 func parseExpression[T any](s string) (*parsedExpression[T], error) {
 	name, rest, foundOpen := strings.Cut(s, "(")
 	f := &parsedExpression[T]{

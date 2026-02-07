@@ -282,22 +282,34 @@ func ReadLibraryFromYAML(data []byte) (*LibraryFromYAML, error) {
 	return fromYAML, nil
 }
 
-// Upgrade add functions to the library from YAMLAble. It ignores compiled part, compiles and assigns fun codes
-// If embedding functions are available, embeds them and enforces consistency
-// NOTE: if embedded functions are not provided, library is not ready for use, however its consistency
-// is checked, and it can be serialized to YAML
+// Upgrade adds or replaces functions in the library from YAML definitions.
+// It uses a multi-phase approach that allows forward references between extended functions
+// within the same upgrade batch and explicitly checks for recursion via call graph analysis.
+//
+// For safe upgrades, use Clone() first: clone := lib.Clone(); err := clone.Upgrade(...).
+// If the upgrade fails, simply discard the clone.
+//
 // The Replace flag controls behavior:
 // - Replace=true: function must exist in library, its definition will be replaced (funCode preserved)
 // - Replace=false (default): function must not exist, will be added as new
 // The Immutable flag controls whether the function can be replaced in future upgrades
 func (lib *Library[T]) Upgrade(fromYAML *LibraryFromYAML, embed ...func(sym string) EmbeddedFunction[T]) error {
-	var err error
-	var ef EmbeddedFunction[T]
-
 	// Update VersionData only if new value is non-empty (after trimming whitespace)
 	if vd := strings.TrimSpace(fromYAML.VersionData); vd != "" {
 		lib.VersionData = []byte(vd)
 	}
+
+	// ---- Phase 0: process embedded functions (leaf nodes, no dependencies on EasyFL functions)
+	// Also validate replace/existence flags for all functions upfront
+	type pendingExtendedFunc struct {
+		sym         string
+		source      string
+		description string
+		isReplace   bool
+		isVararg    bool
+		immutable   bool
+	}
+	var pending []pendingExtendedFunc
 
 	for _, d := range fromYAML.Functions {
 		exists := lib.existsFunction(d.Sym)
@@ -314,55 +326,160 @@ func (lib *Library[T]) Upgrade(fromYAML *LibraryFromYAML, embed ...func(sym stri
 		}
 
 		if d.EmbeddedAs != "" {
-			// embedded function - resolve using EmbeddedAs key
+			// embedded function — process immediately
+			var ef EmbeddedFunction[T]
 			if len(embed) > 0 {
 				if ef = embed[0](d.EmbeddedAs); ef == nil {
 					return fmt.Errorf("missing embedded function for key '%s' (sym: '%s')", d.EmbeddedAs, d.Sym)
 				}
 			}
-
 			if d.Replace {
-				// Replace existing embedded function
-				if err = lib.replaceEmbedded(d.Sym, d.NumArgs, ef, d.EmbeddedAs, d.Description); err != nil {
+				if err := lib.replaceEmbedded(d.Sym, d.NumArgs, ef, d.EmbeddedAs, d.Description); err != nil {
 					return err
 				}
 			} else {
-				// Add new embedded function
 				if d.Short {
-					if _, err = lib.embedShortErr(d.Sym, d.NumArgs, ef, d.EmbeddedAs, d.Description); err != nil {
+					if _, err := lib.embedShortErr(d.Sym, d.NumArgs, ef, d.EmbeddedAs, d.Description); err != nil {
 						return err
 					}
 				} else {
-					if _, err = lib.embedLongErr(d.Sym, d.NumArgs, ef, d.EmbeddedAs, d.Description); err != nil {
+					if _, err := lib.embedLongErr(d.Sym, d.NumArgs, ef, d.EmbeddedAs, d.Description); err != nil {
 						return err
 					}
+				}
+			}
+			// Set immutable flag for embedded
+			if d.Immutable {
+				if fd, found := lib.funByName[d.Sym]; found {
+					fd.immutable = true
 				}
 			}
 		} else {
-			// extended function
-			if d.Replace {
-				if err = lib.replaceExtended(d.Sym, d.Source, d.Description); err != nil {
-					return err
-				}
-			} else {
-				// NumArgs == -1 indicates vararg extended function
-				if d.NumArgs == -1 {
-					if _, err = lib.ExtendVarargErr(d.Sym, d.Source, d.Description); err != nil {
-						return err
-					}
-				} else {
-					if _, err = lib.ExtendErr(d.Sym, d.Source, d.Description); err != nil {
-						return err
-					}
-				}
+			// extended function — defer to Phase 1
+			pending = append(pending, pendingExtendedFunc{
+				sym:         d.Sym,
+				source:      d.Source,
+				description: d.Description,
+				isReplace:   d.Replace,
+				isVararg:    d.NumArgs == -1,
+				immutable:   d.Immutable,
+			})
+		}
+	}
+
+	if len(pending) == 0 {
+		return nil
+	}
+
+	// ---- Phase 1: introduce stubs for new extended functions; validate replaced ones
+	// Stubs use requiredNumParams = -1 (vararg) so that ExpressionSourceToBytecode
+	// does not fail on arity checks. Actual numParams is determined in Phase 2.
+	for _, p := range pending {
+		if p.isReplace {
+			// Validate: exists, not immutable, is extended
+			fd := lib.funByName[p.sym]
+			if fd.immutable {
+				return fmt.Errorf("replaceExtended: function '%s' is immutable and cannot be replaced", p.sym)
 			}
+			if fd.embeddedAs != "" {
+				return fmt.Errorf("replaceExtended: function '%s' is embedded, not extended", p.sym)
+			}
+		} else {
+			// Create stub descriptor
+			easyfl_util.Assertf(lib.numExtended < MaxNumExtendedGlobal, "too many extended functions")
+			dscr := &funDescriptor[T]{
+				sym:               p.sym,
+				funCode:           lib.numExtended + FirstExtended,
+				requiredNumParams: -1, // temporary vararg
+			}
+			lib.addDescriptor(dscr)
+		}
+	}
+
+	// ---- Phase 2: compile all pending functions to bytecode
+	// All function names are now resolvable (stubs exist for new, descriptors exist for replaced)
+	type compiledInfo struct {
+		bytecode []byte
+		numParam int
+	}
+	compiled := make([]compiledInfo, len(pending))
+	involvedFunCodes := make([]uint16, len(pending))
+
+	for i, p := range pending {
+		src, err := preprocessSource(p.source)
+		if err != nil {
+			return fmt.Errorf("Upgrade: error preprocessing source for '%s': %v", p.sym, err)
+		}
+		bytecode, numParam, err := lib.ExpressionSourceToBytecode(src)
+		if err != nil {
+			return fmt.Errorf("Upgrade: error compiling '%s': %v", p.sym, err)
+		}
+		if numParam > 15 {
+			return fmt.Errorf("Upgrade: can't be more than 15 parameters in '%s'", p.sym)
+		}
+		compiled[i] = compiledInfo{bytecode: bytecode, numParam: numParam}
+
+		fd := lib.funByName[p.sym]
+		involvedFunCodes[i] = fd.funCode
+
+		// Set bytecode on descriptor (needed for cycle check)
+		fd.bytecode = bytecode
+
+		// Fix up numParams from compiled result
+		if p.isVararg {
+			fd.requiredNumParams = -1
+		} else if p.isReplace {
+			// For replaced functions, numArgs must not change
+			if fd.requiredNumParams >= 0 && fd.requiredNumParams != numParam {
+				return fmt.Errorf("Upgrade: function '%s' numArgs mismatch: existing %d, new %d (must be equal for backward compatibility)",
+					p.sym, fd.requiredNumParams, numParam)
+			}
+		} else {
+			// New function: set actual numParams
+			fd.requiredNumParams = numParam
+		}
+	}
+
+	// ---- Phase 3: check for cycles in the call graph
+	if err := checkForCycles(lib, involvedFunCodes); err != nil {
+		return fmt.Errorf("Upgrade: %v", err)
+	}
+
+	// ---- Phase 4: build expression trees in topological order (dependencies first)
+	sorted, err := topologicalSortPartialOrder(lib, involvedFunCodes)
+	if err != nil {
+		return fmt.Errorf("Upgrade: topological sort failed: %v", err)
+	}
+
+	// Map funCode to pending index for lookup
+	fcToIdx := make(map[uint16]int, len(involvedFunCodes))
+	for i, fc := range involvedFunCodes {
+		fcToIdx[fc] = i
+	}
+
+	for _, fc := range sorted {
+		idx := fcToIdx[fc]
+		p := pending[idx]
+		c := compiled[idx]
+		fd := lib.funByName[p.sym]
+
+		expr, err := lib.ExpressionFromBytecode(c.bytecode)
+		if err != nil {
+			return fmt.Errorf("Upgrade: error building expression for '%s': %v", p.sym, err)
 		}
 
-		// Set immutable flag if specified
-		if d.Immutable {
-			if fd, found := lib.funByName[d.Sym]; found {
-				fd.immutable = true
-			}
+		embeddedFun := makeEmbeddedFunForExpression(p.sym, expr)
+		if traceYN {
+			embeddedFun = wrapWithTracing(embeddedFun, p.sym)
+		}
+
+		fd.embeddedFun = embeddedFun
+		fd.source = p.source
+		fd.description = p.description
+
+		// Set immutable flag
+		if p.immutable {
+			fd.immutable = true
 		}
 	}
 	return nil

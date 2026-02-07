@@ -484,6 +484,48 @@ func (lib *Library[T]) NumFunctions() uint16 {
 	return lib.numEmbeddedShort + lib.numEmbeddedLong + lib.numExtended
 }
 
+// Clone creates a deep copy of the library. The cloned library can be independently modified
+// (e.g. via Upgrade) without affecting the original. If the modification fails, the caller
+// simply discards the clone.
+// Panics if the clone's hash does not match the original (sanity check).
+func (lib *Library[T]) Clone() *Library[T] {
+	ret := &Library[T]{
+		funByName:        make(map[string]*funDescriptor[T], len(lib.funByName)),
+		funByFunCode:     make(map[uint16]*funDescriptor[T], len(lib.funByFunCode)),
+		numEmbeddedShort: lib.numEmbeddedShort,
+		numEmbeddedLong:  lib.numEmbeddedLong,
+		numExtended:      lib.numExtended,
+	}
+	if lib.VersionData != nil {
+		ret.VersionData = make([]byte, len(lib.VersionData))
+		copy(ret.VersionData, lib.VersionData)
+	}
+	for funCode, fd := range lib.funByFunCode {
+		fdCopy := &funDescriptor[T]{
+			sym:               fd.sym,
+			funCode:           fd.funCode,
+			requiredNumParams: fd.requiredNumParams,
+			embeddedFun:       fd.embeddedFun,
+			embeddedAs:        fd.embeddedAs,
+			source:            fd.source,
+			description:       fd.description,
+			immutable:         fd.immutable,
+		}
+		if fd.bytecode != nil {
+			fdCopy.bytecode = make([]byte, len(fd.bytecode))
+			copy(fdCopy.bytecode, fd.bytecode)
+		}
+		ret.funByFunCode[funCode] = fdCopy
+		ret.funByName[fdCopy.sym] = fdCopy
+	}
+	// sanity check: hashes must match
+	origHash := lib.LibraryHash()
+	cloneHash := ret.LibraryHash()
+	easyfl_util.Assertf(origHash == cloneHash,
+		"Clone: library hash mismatch after deep copy (orig: %x, clone: %x)", origHash, cloneHash)
+	return ret
+}
+
 func (lib *Library[T]) FunctionNameByCallPrefix(prefix []byte, localLib ...*LocalLibrary[T]) (sym string, err error) {
 	if prefix[0]&FirstByteLongCallMask == 0 {
 		// short call
