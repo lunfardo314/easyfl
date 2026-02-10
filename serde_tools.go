@@ -301,14 +301,6 @@ func (lib *Library[T]) Upgrade(fromYAML *LibraryFromYAML, embed ...func(sym stri
 
 	// ---- Phase 0: process embedded functions (leaf nodes, no dependencies on EasyFL functions)
 	// Also validate replace/existence flags for all functions upfront
-	type pendingExtendedFunc struct {
-		sym         string
-		source      string
-		description string
-		isReplace   bool
-		isVararg    bool
-		immutable   bool
-	}
 	var pending []pendingExtendedFunc
 
 	for _, d := range fromYAML.Functions {
@@ -355,7 +347,7 @@ func (lib *Library[T]) Upgrade(fromYAML *LibraryFromYAML, embed ...func(sym stri
 				}
 			}
 		} else {
-			// extended function — defer to Phase 1
+			// extended function — defer to batch processing
 			pending = append(pending, pendingExtendedFunc{
 				sym:         d.Sym,
 				source:      d.Source,
@@ -367,120 +359,8 @@ func (lib *Library[T]) Upgrade(fromYAML *LibraryFromYAML, embed ...func(sym stri
 		}
 	}
 
-	if len(pending) == 0 {
-		return nil
-	}
-
-	// ---- Phase 1: introduce stubs for new extended functions; validate replaced ones
-	// Stubs use requiredNumParams = -1 (vararg) so that ExpressionSourceToBytecode
-	// does not fail on arity checks. Actual numParams is determined in Phase 2.
-	for _, p := range pending {
-		if p.isReplace {
-			// Validate: exists, not immutable, is extended
-			fd := lib.funByName[p.sym]
-			if fd.immutable {
-				return fmt.Errorf("replaceExtended: function '%s' is immutable and cannot be replaced", p.sym)
-			}
-			if fd.embeddedAs != "" {
-				return fmt.Errorf("replaceExtended: function '%s' is embedded, not extended", p.sym)
-			}
-		} else {
-			// Create stub descriptor
-			easyfl_util.Assertf(lib.numExtended < MaxNumExtendedGlobal, "too many extended functions")
-			dscr := &funDescriptor[T]{
-				sym:               p.sym,
-				funCode:           lib.numExtended + FirstExtended,
-				requiredNumParams: -1, // temporary vararg
-			}
-			lib.addDescriptor(dscr)
-		}
-	}
-
-	// ---- Phase 2: compile all pending functions to bytecode
-	// All function names are now resolvable (stubs exist for new, descriptors exist for replaced)
-	type compiledInfo struct {
-		bytecode []byte
-		numParam int
-	}
-	compiled := make([]compiledInfo, len(pending))
-	involvedFunCodes := make([]uint16, len(pending))
-
-	for i, p := range pending {
-		src, err := preprocessSource(p.source)
-		if err != nil {
-			return fmt.Errorf("Upgrade: error preprocessing source for '%s': %v", p.sym, err)
-		}
-		bytecode, numParam, err := lib.ExpressionSourceToBytecode(src)
-		if err != nil {
-			return fmt.Errorf("Upgrade: error compiling '%s': %v", p.sym, err)
-		}
-		if numParam > 15 {
-			return fmt.Errorf("Upgrade: can't be more than 15 parameters in '%s'", p.sym)
-		}
-		compiled[i] = compiledInfo{bytecode: bytecode, numParam: numParam}
-
-		fd := lib.funByName[p.sym]
-		involvedFunCodes[i] = fd.funCode
-
-		// Set bytecode on descriptor (needed for cycle check)
-		fd.bytecode = bytecode
-
-		// Fix up numParams from compiled result
-		if p.isVararg {
-			fd.requiredNumParams = -1
-		} else if p.isReplace {
-			// For replaced functions, numArgs must not change
-			if fd.requiredNumParams >= 0 && fd.requiredNumParams != numParam {
-				return fmt.Errorf("Upgrade: function '%s' numArgs mismatch: existing %d, new %d (must be equal for backward compatibility)",
-					p.sym, fd.requiredNumParams, numParam)
-			}
-		} else {
-			// New function: set actual numParams
-			fd.requiredNumParams = numParam
-		}
-	}
-
-	// ---- Phase 3: check for cycles in the call graph
-	if err := checkForCycles(lib, involvedFunCodes); err != nil {
+	if err := lib.addExtendedBatch(pending); err != nil {
 		return fmt.Errorf("Upgrade: %v", err)
-	}
-
-	// ---- Phase 4: build expression trees in topological order (dependencies first)
-	sorted, err := topologicalSortPartialOrder(lib, involvedFunCodes)
-	if err != nil {
-		return fmt.Errorf("Upgrade: topological sort failed: %v", err)
-	}
-
-	// Map funCode to pending index for lookup
-	fcToIdx := make(map[uint16]int, len(involvedFunCodes))
-	for i, fc := range involvedFunCodes {
-		fcToIdx[fc] = i
-	}
-
-	for _, fc := range sorted {
-		idx := fcToIdx[fc]
-		p := pending[idx]
-		c := compiled[idx]
-		fd := lib.funByName[p.sym]
-
-		expr, err := lib.ExpressionFromBytecode(c.bytecode)
-		if err != nil {
-			return fmt.Errorf("Upgrade: error building expression for '%s': %v", p.sym, err)
-		}
-
-		embeddedFun := makeEmbeddedFunForExpression(p.sym, expr)
-		if traceYN {
-			embeddedFun = wrapWithTracing(embeddedFun, p.sym)
-		}
-
-		fd.embeddedFun = embeddedFun
-		fd.source = p.source
-		fd.description = p.description
-
-		// Set immutable flag
-		if p.immutable {
-			fd.immutable = true
-		}
 	}
 	return nil
 }

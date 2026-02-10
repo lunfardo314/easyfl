@@ -416,3 +416,30 @@ functions:
 
 	lib.MustEqual("varCaller(3, 5)", "uint8Bytes(8)")
 }
+
+// TestExtendMany_ForwardReference tests that ExtendMany supports forward references
+// (funcA calls funcB, but funcA is defined first).
+func TestExtendMany_ForwardReference(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	err := lib.ExtendMany(`
+func fwdA : fwdB($0, $1)
+func fwdB : add($0, $1)
+`)
+	require.NoError(t, err)
+
+	lib.MustEqual("fwdA(3, 5)", "uint8Bytes(8)")
+	lib.MustEqual("fwdB(3, 5)", "uint8Bytes(8)")
+}
+
+// TestExtendMany_CycleDetection tests that ExtendMany detects mutual recursion.
+func TestExtendMany_CycleDetection(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	err := lib.ExtendMany(`
+func cycX : cycY($0)
+func cycY : cycX($0)
+`)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "recursion detected")
+}

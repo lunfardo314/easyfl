@@ -43,12 +43,22 @@ lib = clone // adopt the upgraded library
 ```
 No rollback logic is needed inside `Upgrade()`.
 
+### Shared batch-add logic (`addExtendedBatch`)
+The multi-phase logic (phases 1-4) was extracted from `Upgrade()` into a shared `addExtendedBatch()` method on `Library[T]`. Both `Upgrade()` and `ExtendMany()` now use this same code path:
+
+- **`Upgrade()`** retains Phase 0 (embedded function processing + replace/existence validation), then delegates extended functions to `addExtendedBatch()`.
+- **`ExtendMany()`** validates no duplicate/existing names, builds a `[]pendingExtendedFunc` slice from parsed source, and calls `addExtendedBatch()`. This gives `ExtendMany` forward-reference support and cycle detection — previously it required dependency order (no forward references).
+
+The `pendingExtendedFunc` struct and `addExtendedBatch()` method live in `library.go`. Error messages from `addExtendedBatch` use neutral wording; callers wrap with their own context prefix (e.g. `"Upgrade: "`, `"ExtendMany: "`).
+
+The previously unused `replaceExtended()` method was removed — its functionality is subsumed by `addExtendedBatch` with `isReplace=true`.
+
 ### Key files
 - `recursion.go` — `extractReferencedFunCodes()` (bytecode walker), `checkForCycles()` (DFS cycle detection), `topologicalSortPartialOrder()` (sort.Slice with partial order)
-- `library.go` — `Clone()` method with hash verification
+- `library.go` — `pendingExtendedFunc` struct, `addExtendedBatch()` (shared multi-phase logic), `Clone()` method, rewritten `ExtendMany()`
 - `compiler.go` — `preprocessSource()` helper (strips comments and whitespace)
-- `serde_tools.go` — restructured `Upgrade()` with 5 phases
-- `recursion_test.go` — tests for forward references, self/mutual/indirect recursion detection, replace-induced cycles, diamond dependencies, clone correctness, backward compatibility
+- `serde_tools.go` — simplified `Upgrade()` delegating to `addExtendedBatch()`
+- `recursion_test.go` — tests for forward references, self/mutual/indirect recursion detection, replace-induced cycles, diamond dependencies, clone correctness, backward compatibility, `ExtendMany` forward references and cycle detection
 
 ### Key design decisions
 - **Temporary vararg stubs**: During Phase 1, stubs use `requiredNumParams = -1` so `ExpressionSourceToBytecode` doesn't fail on arity checks. Actual arity validation happens in Phase 4 when `ExpressionFromBytecode` checks the call prefix arity against the now-correct `numParams`.

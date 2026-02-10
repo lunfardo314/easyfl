@@ -208,41 +208,128 @@ func (lib *Library[T]) replaceEmbedded(sym string, requiredNumPar int, embeddedF
 	return nil
 }
 
-// replaceExtended replaces an existing extended function's implementation while preserving its funCode
-func (lib *Library[T]) replaceExtended(sym string, source string, description string) error {
-	fd, found := lib.funByName[sym]
-	if !found {
-		return fmt.Errorf("replaceExtended: function '%s' not found", sym)
-	}
-	if fd.immutable {
-		return fmt.Errorf("replaceExtended: function '%s' is immutable and cannot be replaced", sym)
-	}
-	if fd.embeddedAs != "" {
-		return fmt.Errorf("replaceExtended: function '%s' is embedded, not extended", sym)
+// pendingExtendedFunc represents an extended function waiting to be added or replaced
+// in a batch operation (used by addExtendedBatch, called from Upgrade and ExtendMany).
+type pendingExtendedFunc struct {
+	sym         string
+	source      string
+	description string
+	isReplace   bool
+	isVararg    bool
+	immutable   bool
+}
+
+// addExtendedBatch processes a batch of extended functions using a multi-phase approach
+// that supports forward references between functions in the batch.
+// Phase 1: register stubs for new functions; validate replaced ones
+// Phase 2: compile all to bytecode, fix numParams
+// Phase 3: check for cycles
+// Phase 4: build expression trees in topological (dependency) order
+func (lib *Library[T]) addExtendedBatch(pending []pendingExtendedFunc) error {
+	if len(pending) == 0 {
+		return nil
 	}
 
-	f, numParam, bytecode, err := lib.CompileExpression(source)
+	// ---- Phase 1: introduce stubs for new extended functions; validate replaced ones
+	for _, p := range pending {
+		if p.isReplace {
+			fd := lib.funByName[p.sym]
+			if fd.immutable {
+				return fmt.Errorf("function '%s' is immutable and cannot be replaced", p.sym)
+			}
+			if fd.embeddedAs != "" {
+				return fmt.Errorf("function '%s' is embedded, not extended", p.sym)
+			}
+		} else {
+			easyfl_util.Assertf(lib.numExtended < MaxNumExtendedGlobal, "too many extended functions")
+			dscr := &funDescriptor[T]{
+				sym:               p.sym,
+				funCode:           lib.numExtended + FirstExtended,
+				requiredNumParams: -1, // temporary vararg
+			}
+			lib.addDescriptor(dscr)
+		}
+	}
+
+	// ---- Phase 2: compile all pending functions to bytecode
+	type compiledInfo struct {
+		bytecode []byte
+		numParam int
+	}
+	compiled := make([]compiledInfo, len(pending))
+	involvedFunCodes := make([]uint16, len(pending))
+
+	for i, p := range pending {
+		src, err := preprocessSource(p.source)
+		if err != nil {
+			return fmt.Errorf("error preprocessing source for '%s': %v", p.sym, err)
+		}
+		bytecode, numParam, err := lib.ExpressionSourceToBytecode(src)
+		if err != nil {
+			return fmt.Errorf("error compiling '%s': %v", p.sym, err)
+		}
+		if numParam > 15 {
+			return fmt.Errorf("can't be more than 15 parameters in '%s'", p.sym)
+		}
+		compiled[i] = compiledInfo{bytecode: bytecode, numParam: numParam}
+
+		fd := lib.funByName[p.sym]
+		involvedFunCodes[i] = fd.funCode
+
+		fd.bytecode = bytecode
+
+		if p.isVararg {
+			fd.requiredNumParams = -1
+		} else if p.isReplace {
+			if fd.requiredNumParams >= 0 && fd.requiredNumParams != numParam {
+				return fmt.Errorf("function '%s' numArgs mismatch: existing %d, new %d (must be equal for backward compatibility)",
+					p.sym, fd.requiredNumParams, numParam)
+			}
+		} else {
+			fd.requiredNumParams = numParam
+		}
+	}
+
+	// ---- Phase 3: check for cycles in the call graph
+	if err := checkForCycles(lib, involvedFunCodes); err != nil {
+		return err
+	}
+
+	// ---- Phase 4: build expression trees in topological order (dependencies first)
+	sorted, err := topologicalSortPartialOrder(lib, involvedFunCodes)
 	if err != nil {
-		return fmt.Errorf("replaceExtended: error while compiling '%s': %v", sym, err)
-	}
-	if numParam > 15 {
-		return fmt.Errorf("replaceExtended: can't be more than 15 parameters")
-	}
-	// Enforce numArgs does not change for backward compatible serde
-	if fd.requiredNumParams != numParam {
-		return fmt.Errorf("replaceExtended: function '%s' numArgs mismatch: existing %d, new %d (must be equal for backward compatibility)",
-			sym, fd.requiredNumParams, numParam)
+		return fmt.Errorf("topological sort failed: %v", err)
 	}
 
-	embeddedFun := makeEmbeddedFunForExpression(sym, f)
-	if traceYN {
-		embeddedFun = wrapWithTracing(embeddedFun, sym)
+	fcToIdx := make(map[uint16]int, len(involvedFunCodes))
+	for i, fc := range involvedFunCodes {
+		fcToIdx[fc] = i
 	}
-	// Update the descriptor in place, preserving funCode
-	fd.bytecode = bytecode
-	fd.embeddedFun = embeddedFun
-	fd.source = source
-	fd.description = description
+
+	for _, fc := range sorted {
+		idx := fcToIdx[fc]
+		p := pending[idx]
+		c := compiled[idx]
+		fd := lib.funByName[p.sym]
+
+		expr, err := lib.ExpressionFromBytecode(c.bytecode)
+		if err != nil {
+			return fmt.Errorf("error building expression for '%s': %v", p.sym, err)
+		}
+
+		embeddedFun := makeEmbeddedFunForExpression(p.sym, expr)
+		if traceYN {
+			embeddedFun = wrapWithTracing(embeddedFun, p.sym)
+		}
+
+		fd.embeddedFun = embeddedFun
+		fd.source = p.source
+		fd.description = p.description
+
+		if p.immutable {
+			fd.immutable = true
+		}
+	}
 	return nil
 }
 
@@ -342,16 +429,28 @@ func (lib *Library[T]) ExtendMany(source string) error {
 	if err != nil {
 		return err
 	}
+	// Validate: no duplicate names within batch, no existing functions with same names
+	seen := make(map[string]bool, len(parsed))
 	for _, pf := range parsed {
-		if pf.IsVararg {
-			if _, err = lib.ExtendVarargErr(pf.Sym, pf.SourceCode); err != nil {
-				return err
-			}
-		} else {
-			if _, err = lib.ExtendErr(pf.Sym, pf.SourceCode); err != nil {
-				return err
-			}
+		if seen[pf.Sym] {
+			return fmt.Errorf("ExtendMany: duplicate function name '%s'", pf.Sym)
 		}
+		seen[pf.Sym] = true
+		if lib.existsFunction(pf.Sym) {
+			return fmt.Errorf("ExtendMany: function '%s' already exists in library", pf.Sym)
+		}
+	}
+	// Build pending batch
+	pending := make([]pendingExtendedFunc, len(parsed))
+	for i, pf := range parsed {
+		pending[i] = pendingExtendedFunc{
+			sym:      pf.Sym,
+			source:   pf.SourceCode,
+			isVararg: pf.IsVararg,
+		}
+	}
+	if err := lib.addExtendedBatch(pending); err != nil {
+		return fmt.Errorf("ExtendMany: %v", err)
 	}
 	return nil
 }
