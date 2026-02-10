@@ -1,6 +1,7 @@
 package easyfl
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -567,4 +568,156 @@ functions:
 	lib.MustEqual("mFuncA(3, 5)", "uint8Bytes(8)")
 	lib.MustEqual("mFuncB(3, 5)", "uint8Bytes(8)")
 	lib.MustEqual("mFuncD(3, 5)", "uint8Bytes(8)")
+}
+
+// TestTopoSort_CrossSourceDepWithManyUnrelated tests the scenario that originally triggered
+// the sort.Slice bug: a function in source1 depends on a function in sourceN (last source),
+// with many unrelated functions defined in between. The previous sort.Slice-based topological
+// sort would incorrectly place the dependent before its dependency due to the partial order
+// comparator violating the strict weak ordering requirement (transitivity of incomparability).
+func TestTopoSort_CrossSourceDepWithManyUnrelated(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	// Source 1: defines "caller" which depends on "helper" (not yet defined)
+	src1 := `func caller : helper($0, $1)`
+
+	// Sources 2..N: many unrelated functions that neither depend on "caller" nor "helper".
+	// These are the functions that break sort.Slice by being incomparable with both endpoints.
+	var unrelatedSources []string
+	for i := 0; i < 50; i++ {
+		unrelatedSources = append(unrelatedSources,
+			fmt.Sprintf("func unrel%d : add($0, $1)", i))
+	}
+
+	// Last source: defines "helper"
+	srcLast := `func helper : mul($0, $1)`
+
+	// Stage all sources
+	err := lib.IntroduceUpdateMany(src1)
+	require.NoError(t, err)
+	for _, s := range unrelatedSources {
+		err = lib.IntroduceUpdateMany(s)
+		require.NoError(t, err)
+	}
+	err = lib.IntroduceUpdateMany(srcLast)
+	require.NoError(t, err)
+
+	// Commit — the topological sort must place "helper" before "caller"
+	err = lib.CommitUpdate()
+	require.NoError(t, err)
+
+	// Verify both functions work correctly
+	lib.MustEqual("helper(3, 5)", "uint8Bytes(15)")
+	lib.MustEqual("caller(3, 5)", "uint8Bytes(15)")
+}
+
+// TestTopoSort_DeepChainReversed tests a deep dependency chain where functions are
+// introduced in reverse order: A→B→C→D→E, but A is defined first and E last.
+func TestTopoSort_DeepChainReversed(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	// A calls B, B calls C, C calls D, D calls E — all defined in forward (wrong) order
+	err := lib.ExtendMany(`
+func chainA : chainB($0, $1)
+func chainB : chainC($0, $1)
+func chainC : chainD($0, $1)
+func chainD : chainE($0, $1)
+func chainE : add($0, $1)
+`)
+	require.NoError(t, err)
+
+	lib.MustEqual("chainE(3, 5)", "uint8Bytes(8)")
+	lib.MustEqual("chainD(3, 5)", "uint8Bytes(8)")
+	lib.MustEqual("chainC(3, 5)", "uint8Bytes(8)")
+	lib.MustEqual("chainB(3, 5)", "uint8Bytes(8)")
+	lib.MustEqual("chainA(3, 5)", "uint8Bytes(8)")
+}
+
+// TestTopoSort_MultipleSourcesReverseOrder tests that IntroduceUpdateManyMulti correctly
+// handles the case where the first source references functions from the last source.
+// This is the pattern that occurs in Proxima's def_upgrade0.go: sigLock (first source)
+// references selfRequireEnoughStorageDeposit (last source).
+func TestTopoSort_MultipleSourcesReverseOrder(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	// Source 1: defines "outer" that calls "inner" (defined in source 3)
+	src1 := `func outer : add(inner($0), $1)`
+	// Source 2: unrelated function
+	src2 := `func middle : byte($0, 0)`
+	// Source 3: defines "inner" that "outer" depends on
+	src3 := `func inner : mul($0, 2)`
+
+	err := lib.IntroduceUpdateManyMulti(src1, src2, src3)
+	require.NoError(t, err)
+
+	err = lib.CommitUpdate()
+	require.NoError(t, err)
+
+	// inner(3) = 3*2 = 6, outer(3, 5) = inner(3) + 5 = 6 + 5 = 11
+	lib.MustEqual("inner(3)", "uint8Bytes(6)")
+	lib.MustEqual("outer(3, 5)", "uint8Bytes(11)")
+	lib.MustEqual("middle(0x0102)", "1")
+}
+
+// TestTopoSort_IndependentFunctionsNoOrder tests that independent functions
+// (no dependencies between them) can be compiled in any order without error.
+func TestTopoSort_IndependentFunctionsNoOrder(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	err := lib.ExtendMany(`
+func indA : add($0, $1)
+func indB : mul($0, $1)
+func indC : sub($0, $1)
+func indD : byte($0, 0)
+`)
+	require.NoError(t, err)
+
+	lib.MustEqual("indA(3, 5)", "uint8Bytes(8)")
+	lib.MustEqual("indB(3, 5)", "uint8Bytes(15)")
+}
+
+// TestTopoSort_DiamondWithUnrelated tests a diamond dependency pattern with many
+// unrelated functions in between, stressing the topological sort correctness.
+func TestTopoSort_DiamondWithUnrelated(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	// Build sources: top→left, top→right, left→bottom, right→bottom
+	// with unrelated functions interleaved
+	srcTop := `func diaTop : add(diaLeft($0), diaRight($0))`
+	srcLeft := `func diaLeft : diaBot($0)`
+	srcRight := `func diaRight : diaBot($0)`
+	srcBot := `func diaBot : byte($0, 0)`
+
+	// Introduce in worst-case order: top first, bottom last, with unrelated in between
+	err := lib.IntroduceUpdateMany(srcTop)
+	require.NoError(t, err)
+
+	for i := 0; i < 20; i++ {
+		err = lib.IntroduceUpdateMany(fmt.Sprintf("func noise%d : add($0, $1)", i))
+		require.NoError(t, err)
+	}
+
+	err = lib.IntroduceUpdateMany(srcLeft)
+	require.NoError(t, err)
+
+	for i := 20; i < 40; i++ {
+		err = lib.IntroduceUpdateMany(fmt.Sprintf("func noise%d : add($0, $1)", i))
+		require.NoError(t, err)
+	}
+
+	err = lib.IntroduceUpdateMany(srcRight)
+	require.NoError(t, err)
+	err = lib.IntroduceUpdateMany(srcBot)
+	require.NoError(t, err)
+
+	err = lib.CommitUpdate()
+	require.NoError(t, err)
+
+	// diaBot(0x0102) = byte(0x0102, 0) = 1
+	// diaLeft = diaRight = diaBot = 1
+	// diaTop = 1 + 1 = 2
+	lib.MustEqual("diaBot(0x0102)", "1")
+	lib.MustEqual("diaLeft(0x0102)", "1")
+	lib.MustEqual("diaRight(0x0102)", "1")
+	lib.MustEqual("diaTop(0x0102)", "uint8Bytes(2)")
 }

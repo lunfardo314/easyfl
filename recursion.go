@@ -3,7 +3,6 @@ package easyfl
 import (
 	"encoding/binary"
 	"fmt"
-	"sort"
 	"strings"
 )
 
@@ -128,18 +127,34 @@ func checkForCycles[T any](lib *Library[T], startFunCodes []uint16) error {
 }
 
 // topologicalSortPartialOrder sorts funCodes so that dependencies come before dependents.
-// Uses sort.Slice with a partial order: A < B iff A is a transitive dependency of B
-// within the given set. The input must be acyclic (call checkForCycles first).
+// Uses Kahn's algorithm (BFS-based topological sort) which correctly handles partial orders.
+// The input must be acyclic (call checkForCycles first).
+//
+// NOTE: sort.Slice cannot be used here. A dependency graph defines a partial order, not a
+// strict weak ordering. sort.Slice requires transitivity of incomparability: if A is
+// incomparable with B, and B is incomparable with C, then A must be incomparable with C.
+// Dependency graphs violate this: an unrelated function E can be incomparable with both
+// a dependency D and its dependent F, while D < F. This causes sort.Slice to produce
+// incorrect orderings where a function is placed before its own dependencies.
 func topologicalSortPartialOrder[T any](lib *Library[T], funCodes []uint16) ([]uint16, error) {
 	inSet := make(map[uint16]bool, len(funCodes))
 	for _, fc := range funCodes {
 		inSet[fc] = true
 	}
 
-	// Build direct dependency sets (only within the given set)
+	// Build direct dependency graph (only within the given set)
+	// directDeps[fc] = set of functions that fc depends on (within batch)
+	// dependents[fc] = set of functions that depend on fc (within batch)
 	directDeps := make(map[uint16]map[uint16]bool, len(funCodes))
+	dependents := make(map[uint16]map[uint16]bool, len(funCodes))
+	inDegree := make(map[uint16]int, len(funCodes))
+
 	for _, fc := range funCodes {
 		directDeps[fc] = make(map[uint16]bool)
+		dependents[fc] = make(map[uint16]bool)
+	}
+
+	for _, fc := range funCodes {
 		fd := lib.funByFunCode[fc]
 		if fd != nil && fd.bytecode != nil {
 			refs, err := extractReferencedFunCodes(fd.bytecode)
@@ -147,42 +162,40 @@ func topologicalSortPartialOrder[T any](lib *Library[T], funCodes []uint16) ([]u
 				return nil, err
 			}
 			for _, ref := range refs {
-				if inSet[ref] {
+				if inSet[ref] && ref != fc && !directDeps[fc][ref] {
 					directDeps[fc][ref] = true
+					dependents[ref][fc] = true
+					inDegree[fc]++
 				}
 			}
 		}
 	}
 
-	// Compute transitive closure so sort.Slice gets a strict weak ordering
-	deps := make(map[uint16]map[uint16]bool, len(funCodes))
-	for fc, dd := range directDeps {
-		deps[fc] = make(map[uint16]bool, len(dd))
-		for d := range dd {
-			deps[fc][d] = true
+	// Kahn's algorithm: start with nodes that have no in-batch dependencies
+	var queue []uint16
+	for _, fc := range funCodes {
+		if inDegree[fc] == 0 {
+			queue = append(queue, fc)
 		}
 	}
-	changed := true
-	for changed {
-		changed = false
-		for fc, depsOfFc := range deps {
-			for dep := range depsOfFc {
-				for transDep := range deps[dep] {
-					if !depsOfFc[transDep] && transDep != fc {
-						depsOfFc[transDep] = true
-						changed = true
-					}
-				}
+
+	var result []uint16
+	for len(queue) > 0 {
+		fc := queue[0]
+		queue = queue[1:]
+		result = append(result, fc)
+
+		for dep := range dependents[fc] {
+			inDegree[dep]--
+			if inDegree[dep] == 0 {
+				queue = append(queue, dep)
 			}
 		}
 	}
 
-	result := make([]uint16, len(funCodes))
-	copy(result, funCodes)
+	if len(result) != len(funCodes) {
+		return nil, fmt.Errorf("topological sort: cycle detected (processed %d of %d)", len(result), len(funCodes))
+	}
 
-	// A < B in partial order iff A is a transitive dependency of B
-	sort.Slice(result, func(i, j int) bool {
-		return deps[result[j]][result[i]]
-	})
 	return result, nil
 }
