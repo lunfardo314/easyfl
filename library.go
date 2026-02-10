@@ -333,6 +333,63 @@ func (lib *Library[T]) addExtendedBatch(pending []pendingExtendedFunc) error {
 	return nil
 }
 
+// isPendingSym returns true if sym is already in lib.pendingBatch.
+func (lib *Library[T]) isPendingSym(sym string) bool {
+	for i := range lib.pendingBatch {
+		if lib.pendingBatch[i].sym == sym {
+			return true
+		}
+	}
+	return false
+}
+
+// IntroduceUpdateMany parses EasyFL source containing multiple function definitions
+// and appends them to the pending batch for later processing by CommitUpdate.
+// Validates against both the library and the current pendingBatch to detect duplicates.
+func (lib *Library[T]) IntroduceUpdateMany(source string) error {
+	parsed, err := parseFunctions(source)
+	if err != nil {
+		return err
+	}
+	// Validate: no duplicate names within this call, no existing functions, no pending duplicates
+	seen := make(map[string]bool, len(parsed))
+	for _, pf := range parsed {
+		if seen[pf.Sym] {
+			return fmt.Errorf("IntroduceUpdateMany: duplicate function name '%s'", pf.Sym)
+		}
+		seen[pf.Sym] = true
+		if lib.existsFunction(pf.Sym) {
+			return fmt.Errorf("IntroduceUpdateMany: function '%s' already exists in library", pf.Sym)
+		}
+		if lib.isPendingSym(pf.Sym) {
+			return fmt.Errorf("IntroduceUpdateMany: function '%s' already in pending batch", pf.Sym)
+		}
+	}
+	// Append to pending batch
+	for _, pf := range parsed {
+		lib.pendingBatch = append(lib.pendingBatch, pendingExtendedFunc{
+			sym:      pf.Sym,
+			source:   pf.SourceCode,
+			isVararg: pf.IsVararg,
+		})
+	}
+	return nil
+}
+
+// CommitUpdate finalizes the pending batch by calling addExtendedBatch,
+// then clears the pendingBatch regardless of success or failure.
+func (lib *Library[T]) CommitUpdate() error {
+	pending := lib.pendingBatch
+	lib.pendingBatch = nil
+	if len(pending) == 0 {
+		return nil
+	}
+	if err := lib.addExtendedBatch(pending); err != nil {
+		return fmt.Errorf("CommitUpdate: %v", err)
+	}
+	return nil
+}
+
 func evalEvalParamFun[T any](paramNr byte) EmbeddedFunction[T] {
 	return func(par *CallParams[T]) []byte {
 		return par.EvalParam(paramNr)
@@ -425,31 +482,10 @@ func wrapWithTracing[T any](f EmbeddedFunction[T], msg string) EmbeddedFunction[
 }
 
 func (lib *Library[T]) ExtendMany(source string) error {
-	parsed, err := parseFunctions(source)
-	if err != nil {
-		return err
+	if err := lib.IntroduceUpdateMany(source); err != nil {
+		return fmt.Errorf("ExtendMany: %v", err)
 	}
-	// Validate: no duplicate names within batch, no existing functions with same names
-	seen := make(map[string]bool, len(parsed))
-	for _, pf := range parsed {
-		if seen[pf.Sym] {
-			return fmt.Errorf("ExtendMany: duplicate function name '%s'", pf.Sym)
-		}
-		seen[pf.Sym] = true
-		if lib.existsFunction(pf.Sym) {
-			return fmt.Errorf("ExtendMany: function '%s' already exists in library", pf.Sym)
-		}
-	}
-	// Build pending batch
-	pending := make([]pendingExtendedFunc, len(parsed))
-	for i, pf := range parsed {
-		pending[i] = pendingExtendedFunc{
-			sym:      pf.Sym,
-			source:   pf.SourceCode,
-			isVararg: pf.IsVararg,
-		}
-	}
-	if err := lib.addExtendedBatch(pending); err != nil {
+	if err := lib.CommitUpdate(); err != nil {
 		return fmt.Errorf("ExtendMany: %v", err)
 	}
 	return nil
@@ -588,6 +624,7 @@ func (lib *Library[T]) NumFunctions() uint16 {
 // simply discards the clone.
 // Panics if the clone's hash does not match the original (sanity check).
 func (lib *Library[T]) Clone() *Library[T] {
+	easyfl_util.Assertf(len(lib.pendingBatch) == 0, "Clone: cannot clone library with pending batch (call CommitUpdate first)")
 	ret := &Library[T]{
 		funByName:        make(map[string]*funDescriptor[T], len(lib.funByName)),
 		funByFunCode:     make(map[uint16]*funDescriptor[T], len(lib.funByFunCode)),

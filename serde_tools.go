@@ -282,31 +282,22 @@ func ReadLibraryFromYAML(data []byte) (*LibraryFromYAML, error) {
 	return fromYAML, nil
 }
 
-// Upgrade adds or replaces functions in the library from YAML definitions.
-// It uses a multi-phase approach that allows forward references between extended functions
-// within the same upgrade batch and explicitly checks for recursion via call graph analysis.
+// IntroduceUpdateYAML processes YAML function definitions and stages extended functions
+// for later processing by CommitUpdate. Embedded functions are processed immediately.
+// Validates replace/existence flags against both the library and the current pendingBatch.
 //
-// For safe upgrades, use Clone() first: clone := lib.Clone(); err := clone.Upgrade(...).
-// If the upgrade fails, simply discard the clone.
-//
-// The Replace flag controls behavior:
-// - Replace=true: function must exist in library, its definition will be replaced (funCode preserved)
-// - Replace=false (default): function must not exist, will be added as new
-// The Immutable flag controls whether the function can be replaced in future upgrades
-func (lib *Library[T]) Upgrade(fromYAML *LibraryFromYAML, embed ...func(sym string) EmbeddedFunction[T]) error {
+// Multiple calls to IntroduceUpdateYAML and IntroduceUpdateMany can be made before
+// a single CommitUpdate to accumulate functions from different sources.
+func (lib *Library[T]) IntroduceUpdateYAML(fromYAML *LibraryFromYAML, embed ...func(sym string) EmbeddedFunction[T]) error {
 	// Update VersionData only if new value is non-empty (after trimming whitespace)
 	if vd := strings.TrimSpace(fromYAML.VersionData); vd != "" {
 		lib.VersionData = []byte(vd)
 	}
 
-	// ---- Phase 0: process embedded functions (leaf nodes, no dependencies on EasyFL functions)
-	// Also validate replace/existence flags for all functions upfront
-	var pending []pendingExtendedFunc
-
 	for _, d := range fromYAML.Functions {
 		exists := lib.existsFunction(d.Sym)
 
-		// Check replace flag consistency
+		// Check replace flag consistency against library and pendingBatch
 		if d.Replace {
 			if !exists {
 				return fmt.Errorf("replace=true but function '%s' does not exist in library", d.Sym)
@@ -314,6 +305,9 @@ func (lib *Library[T]) Upgrade(fromYAML *LibraryFromYAML, embed ...func(sym stri
 		} else {
 			if exists {
 				return fmt.Errorf("function '%s' already exists in library (use replace=true to replace)", d.Sym)
+			}
+			if lib.isPendingSym(d.Sym) {
+				return fmt.Errorf("function '%s' already in pending batch", d.Sym)
 			}
 		}
 
@@ -347,8 +341,8 @@ func (lib *Library[T]) Upgrade(fromYAML *LibraryFromYAML, embed ...func(sym stri
 				}
 			}
 		} else {
-			// extended function — defer to batch processing
-			pending = append(pending, pendingExtendedFunc{
+			// extended function — append to pending batch
+			lib.pendingBatch = append(lib.pendingBatch, pendingExtendedFunc{
 				sym:         d.Sym,
 				source:      d.Source,
 				description: d.Description,
@@ -358,8 +352,25 @@ func (lib *Library[T]) Upgrade(fromYAML *LibraryFromYAML, embed ...func(sym stri
 			})
 		}
 	}
+	return nil
+}
 
-	if err := lib.addExtendedBatch(pending); err != nil {
+// Upgrade adds or replaces functions in the library from YAML definitions.
+// It uses a multi-phase approach that allows forward references between extended functions
+// within the same upgrade batch and explicitly checks for recursion via call graph analysis.
+//
+// For safe upgrades, use Clone() first: clone := lib.Clone(); err := clone.Upgrade(...).
+// If the upgrade fails, simply discard the clone.
+//
+// The Replace flag controls behavior:
+// - Replace=true: function must exist in library, its definition will be replaced (funCode preserved)
+// - Replace=false (default): function must not exist, will be added as new
+// The Immutable flag controls whether the function can be replaced in future upgrades
+func (lib *Library[T]) Upgrade(fromYAML *LibraryFromYAML, embed ...func(sym string) EmbeddedFunction[T]) error {
+	if err := lib.IntroduceUpdateYAML(fromYAML, embed...); err != nil {
+		return fmt.Errorf("Upgrade: %v", err)
+	}
+	if err := lib.CommitUpdate(); err != nil {
 		return fmt.Errorf("Upgrade: %v", err)
 	}
 	return nil

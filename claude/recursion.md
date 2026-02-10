@@ -53,12 +53,41 @@ The `pendingExtendedFunc` struct and `addExtendedBatch()` method live in `librar
 
 The previously unused `replaceExtended()` method was removed — its functionality is subsumed by `addExtendedBatch` with `isReplace=true`.
 
+### Staged update API (`IntroduceUpdateYAML`, `IntroduceUpdateMany`, `CommitUpdate`)
+A staged API allows accumulating functions from multiple sources (YAML + plain EasyFL code) into a single batch before resolving. This enables cross-source forward references and a single cycle check across all sources.
+
+**`Library[T].pendingBatch`** (`types.go`): A `[]pendingExtendedFunc` field on the library struct serves as the staging area.
+
+**`IntroduceUpdateYAML(fromYAML, embed...)`** (`serde_tools.go`):
+- Sets `VersionData` if non-empty
+- For each YAML function: validates replace/existence against both the library and `pendingBatch`
+- Embedded functions (`EmbeddedAs != ""`): processed immediately (embedShort/embedLong/replaceEmbedded + immutable flag)
+- Extended functions: appended to `lib.pendingBatch`
+
+**`IntroduceUpdateMany(source)`** (`library.go`):
+- Parses with `parseFunctions(source)`
+- Validates no duplicates within the call, against the library, and against `pendingBatch`
+- Appends all parsed functions to `lib.pendingBatch`
+
+**`CommitUpdate()`** (`library.go`):
+- Calls `lib.addExtendedBatch(lib.pendingBatch)`
+- Clears `lib.pendingBatch` (on both success and error)
+- Returns `nil` when `pendingBatch` is empty
+
+**Rewritten callers:**
+- `Upgrade()` is now `IntroduceUpdateYAML` + `CommitUpdate`
+- `ExtendMany()` is now `IntroduceUpdateMany` + `CommitUpdate`
+
+**`Clone()`** asserts that `pendingBatch` is empty — cloning mid-update is not supported.
+
+**Helper: `isPendingSym(sym)`** scans `lib.pendingBatch` for a matching symbol. Used by both introduce methods to detect cross-batch duplicates.
+
 ### Key files
 - `recursion.go` — `extractReferencedFunCodes()` (bytecode walker), `checkForCycles()` (DFS cycle detection), `topologicalSortPartialOrder()` (sort.Slice with partial order)
-- `library.go` — `pendingExtendedFunc` struct, `addExtendedBatch()` (shared multi-phase logic), `Clone()` method, rewritten `ExtendMany()`
+- `library.go` — `pendingExtendedFunc` struct, `addExtendedBatch()` (shared multi-phase logic), `isPendingSym()`, `IntroduceUpdateMany()`, `CommitUpdate()`, `Clone()` method, rewritten `ExtendMany()`
 - `compiler.go` — `preprocessSource()` helper (strips comments and whitespace)
-- `serde_tools.go` — simplified `Upgrade()` delegating to `addExtendedBatch()`
-- `recursion_test.go` — tests for forward references, self/mutual/indirect recursion detection, replace-induced cycles, diamond dependencies, clone correctness, backward compatibility, `ExtendMany` forward references and cycle detection
+- `serde_tools.go` — `IntroduceUpdateYAML()`, simplified `Upgrade()` as introduce+commit
+- `recursion_test.go` — tests for forward references, self/mutual/indirect recursion detection, replace-induced cycles, diamond dependencies, clone correctness, backward compatibility, `ExtendMany` forward references and cycle detection, cross-source forward references, cross-source cycles, cross-batch duplicate detection, empty commit
 
 ### Key design decisions
 - **Temporary vararg stubs**: During Phase 1, stubs use `requiredNumParams = -1` so `ExpressionSourceToBytecode` doesn't fail on arity checks. Actual arity validation happens in Phase 4 when `ExpressionFromBytecode` checks the call prefix arity against the now-correct `numParams`.

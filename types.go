@@ -95,6 +95,9 @@ type (
 		numExtended      uint16
 		// VersionData is optional arbitrary data attached to the library (can be nil)
 		VersionData []byte
+		// pendingBatch is a staging area for extended functions collected by
+		// IntroduceUpdateYAML / IntroduceUpdateMany, finalized by CommitUpdate
+		pendingBatch []pendingExtendedFunc
 	}
 )
 

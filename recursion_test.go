@@ -443,3 +443,97 @@ func cycY : cycX($0)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "recursion detected")
 }
+
+// TestIntroduceCommit_CrossSourceForwardRef tests that functions from YAML and plain
+// EasyFL code can reference each other when committed together.
+func TestIntroduceCommit_CrossSourceForwardRef(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	// YAML adds funcA that calls funcB (which doesn't exist yet)
+	yamlData := `
+functions:
+  -
+    sym: funcA
+    numArgs: 2
+    source: funcB($0, $1)
+`
+	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
+	require.NoError(t, err)
+	err = lib.IntroduceUpdateYAML(fromYaml)
+	require.NoError(t, err)
+
+	// Plain code adds funcB
+	err = lib.IntroduceUpdateMany(`
+func funcB : add($0, $1)
+`)
+	require.NoError(t, err)
+
+	// CommitUpdate resolves both together
+	err = lib.CommitUpdate()
+	require.NoError(t, err)
+
+	lib.MustEqual("funcA(3, 5)", "uint8Bytes(8)")
+	lib.MustEqual("funcB(3, 5)", "uint8Bytes(8)")
+}
+
+// TestIntroduceCommit_CrossSourceCycle tests that cross-source cycles are detected.
+func TestIntroduceCommit_CrossSourceCycle(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	// YAML adds funcA→funcB
+	yamlData := `
+functions:
+  -
+    sym: funcA
+    numArgs: 1
+    source: funcB($0)
+`
+	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
+	require.NoError(t, err)
+	err = lib.IntroduceUpdateYAML(fromYaml)
+	require.NoError(t, err)
+
+	// Plain code adds funcB→funcA (cycle)
+	err = lib.IntroduceUpdateMany(`
+func funcB : funcA($0)
+`)
+	require.NoError(t, err)
+
+	// CommitUpdate should detect the cycle
+	err = lib.CommitUpdate()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "recursion detected")
+}
+
+// TestIntroduceCommit_DuplicateAcrossBatches tests that the same symbol in YAML
+// and plain code is detected as a duplicate.
+func TestIntroduceCommit_DuplicateAcrossBatches(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	// YAML adds funcDup
+	yamlData := `
+functions:
+  -
+    sym: funcDup
+    numArgs: 1
+    source: byte($0, 0)
+`
+	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
+	require.NoError(t, err)
+	err = lib.IntroduceUpdateYAML(fromYaml)
+	require.NoError(t, err)
+
+	// Plain code also tries to add funcDup — should fail
+	err = lib.IntroduceUpdateMany(`
+func funcDup : byte($0, 0)
+`)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "already in pending batch")
+}
+
+// TestIntroduceCommit_EmptyCommit tests that CommitUpdate with no pending returns nil.
+func TestIntroduceCommit_EmptyCommit(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+	err := lib.CommitUpdate()
+	require.NoError(t, err)
+}
