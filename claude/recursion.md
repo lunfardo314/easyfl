@@ -78,6 +78,10 @@ A staged API allows accumulating functions from multiple sources (YAML + plain E
 - `Upgrade()` is now `IntroduceUpdateYAML` + `CommitUpdate`
 - `ExtendMany()` is now `IntroduceUpdateMany` + `CommitUpdate`
 
+**Variadic versions:**
+- `IntroduceUpdateYAMLMulti(embed func(sym string) EmbeddedFunction[T], fromYAMLs ...*LibraryFromYAML)` (`serde_tools.go`) — processes multiple YAML definitions sequentially into the same pendingBatch. `embed` resolver may be nil when no embedded functions need resolving.
+- `IntroduceUpdateManyMulti(sources ...string)` (`library.go`) — processes multiple EasyFL source strings sequentially into the same pendingBatch. No resolver needed since plain EasyFL source only defines extended functions.
+
 **`Clone()`** asserts that `pendingBatch` is empty — cloning mid-update is not supported.
 
 **Helper: `isPendingSym(sym)`** scans `lib.pendingBatch` for a matching symbol. Used by both introduce methods to detect cross-batch duplicates.

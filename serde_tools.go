@@ -355,6 +355,24 @@ func (lib *Library[T]) IntroduceUpdateYAML(fromYAML *LibraryFromYAML, embed ...f
 	return nil
 }
 
+// IntroduceUpdateYAMLMulti is a variadic version of IntroduceUpdateYAML.
+// It processes multiple YAML definitions sequentially, staging all extended functions
+// into the same pendingBatch. embed is the resolver for embedded functions (may be nil).
+func (lib *Library[T]) IntroduceUpdateYAMLMulti(embed func(sym string) EmbeddedFunction[T], fromYAMLs ...*LibraryFromYAML) error {
+	for _, fromYAML := range fromYAMLs {
+		if embed != nil {
+			if err := lib.IntroduceUpdateYAML(fromYAML, embed); err != nil {
+				return err
+			}
+		} else {
+			if err := lib.IntroduceUpdateYAML(fromYAML); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // Upgrade adds or replaces functions in the library from YAML definitions.
 // It uses a multi-phase approach that allows forward references between extended functions
 // within the same upgrade batch and explicitly checks for recursion via call graph analysis.

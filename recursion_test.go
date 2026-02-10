@@ -537,3 +537,47 @@ func TestIntroduceCommit_EmptyCommit(t *testing.T) {
 	err := lib.CommitUpdate()
 	require.NoError(t, err)
 }
+
+// TestIntroduceMulti_YAMLAndSources tests the variadic IntroduceUpdateYAMLMulti
+// and IntroduceUpdateManyMulti with cross-source forward references.
+func TestIntroduceMulti_YAMLAndSources(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	yaml1 := `
+functions:
+  -
+    sym: mFuncA
+    numArgs: 2
+    source: mFuncC($0, $1)
+`
+	yaml2 := `
+functions:
+  -
+    sym: mFuncB
+    numArgs: 2
+    source: mFuncA($0, $1)
+`
+	from1, err := ReadLibraryFromYAML([]byte(yaml1))
+	require.NoError(t, err)
+	from2, err := ReadLibraryFromYAML([]byte(yaml2))
+	require.NoError(t, err)
+
+	// Introduce two YAML sources at once (nil resolver — no embedded)
+	err = lib.IntroduceUpdateYAMLMulti(nil, from1, from2)
+	require.NoError(t, err)
+
+	// Introduce two plain EasyFL sources at once
+	src1 := `func mFuncC : add($0, $1)`
+	src2 := `func mFuncD : mFuncB($0, $1)`
+	err = lib.IntroduceUpdateManyMulti(src1, src2)
+	require.NoError(t, err)
+
+	err = lib.CommitUpdate()
+	require.NoError(t, err)
+
+	// mFuncA→mFuncC→add, mFuncB→mFuncA→mFuncC→add, mFuncD→mFuncB→...
+	lib.MustEqual("mFuncC(3, 5)", "uint8Bytes(8)")
+	lib.MustEqual("mFuncA(3, 5)", "uint8Bytes(8)")
+	lib.MustEqual("mFuncB(3, 5)", "uint8Bytes(8)")
+	lib.MustEqual("mFuncD(3, 5)", "uint8Bytes(8)")
+}

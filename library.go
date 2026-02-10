@@ -376,6 +376,18 @@ func (lib *Library[T]) IntroduceUpdateMany(source string) error {
 	return nil
 }
 
+// IntroduceUpdateManyMulti is a variadic version of IntroduceUpdateMany.
+// It processes multiple EasyFL source strings sequentially, staging all parsed functions
+// into the same pendingBatch.
+func (lib *Library[T]) IntroduceUpdateManyMulti(sources ...string) error {
+	for _, source := range sources {
+		if err := lib.IntroduceUpdateMany(source); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // CommitUpdate finalizes the pending batch by calling addExtendedBatch,
 // then clears the pendingBatch regardless of success or failure.
 func (lib *Library[T]) CommitUpdate() error {
