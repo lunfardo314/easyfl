@@ -282,13 +282,9 @@ func ReadLibraryFromYAML(data []byte) (*LibraryFromYAML, error) {
 	return fromYAML, nil
 }
 
-// IntroduceUpdateYAML processes YAML function definitions and stages extended functions
-// for later processing by CommitUpdate. Embedded functions are processed immediately.
-// Validates replace/existence flags against both the library and the current pendingBatch.
-//
-// Multiple calls to IntroduceUpdateYAML and IntroduceUpdateMany can be made before
-// a single CommitUpdate to accumulate functions from different sources.
-func (lib *Library[T]) IntroduceUpdateYAML(fromYAML *LibraryFromYAML, embed ...func(sym string) EmbeddedFunction[T]) error {
+// introduceFromParsedYAML is the internal implementation that works with already-parsed YAML.
+// It stages extended functions for CommitUpdate and processes embedded functions immediately.
+func (lib *Library[T]) introduceFromParsedYAML(fromYAML *LibraryFromYAML, embed ...func(sym string) EmbeddedFunction[T]) error {
 	// Update VersionData only if new value is non-empty (after trimming whitespace)
 	if vd := strings.TrimSpace(fromYAML.VersionData); vd != "" {
 		lib.VersionData = []byte(vd)
@@ -355,17 +351,31 @@ func (lib *Library[T]) IntroduceUpdateYAML(fromYAML *LibraryFromYAML, embed ...f
 	return nil
 }
 
+// IntroduceUpdateYAML parses raw YAML data and stages extended functions for later
+// processing by CommitUpdate. Embedded functions are processed immediately.
+// Validates replace/existence flags against both the library and the current pendingBatch.
+//
+// Multiple calls to IntroduceUpdateYAML and IntroduceUpdateMany can be made before
+// a single CommitUpdate to accumulate functions from different sources.
+func (lib *Library[T]) IntroduceUpdateYAML(yamlData []byte, embed ...func(sym string) EmbeddedFunction[T]) error {
+	fromYAML, err := ReadLibraryFromYAML(yamlData)
+	if err != nil {
+		return err
+	}
+	return lib.introduceFromParsedYAML(fromYAML, embed...)
+}
+
 // IntroduceUpdateYAMLMulti is a variadic version of IntroduceUpdateYAML.
-// It processes multiple YAML definitions sequentially, staging all extended functions
+// It processes multiple raw YAML data sequentially, staging all extended functions
 // into the same pendingBatch. embed is the resolver for embedded functions (may be nil).
-func (lib *Library[T]) IntroduceUpdateYAMLMulti(embed func(sym string) EmbeddedFunction[T], fromYAMLs ...*LibraryFromYAML) error {
-	for _, fromYAML := range fromYAMLs {
+func (lib *Library[T]) IntroduceUpdateYAMLMulti(embed func(sym string) EmbeddedFunction[T], yamlDatas ...[]byte) error {
+	for _, yamlData := range yamlDatas {
 		if embed != nil {
-			if err := lib.IntroduceUpdateYAML(fromYAML, embed); err != nil {
+			if err := lib.IntroduceUpdateYAML(yamlData, embed); err != nil {
 				return err
 			}
 		} else {
-			if err := lib.IntroduceUpdateYAML(fromYAML); err != nil {
+			if err := lib.IntroduceUpdateYAML(yamlData); err != nil {
 				return err
 			}
 		}
@@ -385,7 +395,7 @@ func (lib *Library[T]) IntroduceUpdateYAMLMulti(embed func(sym string) EmbeddedF
 // - Replace=false (default): function must not exist, will be added as new
 // The Immutable flag controls whether the function can be replaced in future upgrades
 func (lib *Library[T]) Upgrade(fromYAML *LibraryFromYAML, embed ...func(sym string) EmbeddedFunction[T]) error {
-	if err := lib.IntroduceUpdateYAML(fromYAML, embed...); err != nil {
+	if err := lib.introduceFromParsedYAML(fromYAML, embed...); err != nil {
 		return fmt.Errorf("Upgrade: %v", err)
 	}
 	if err := lib.CommitUpdate(); err != nil {

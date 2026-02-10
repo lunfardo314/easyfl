@@ -450,16 +450,13 @@ func TestIntroduceCommit_CrossSourceForwardRef(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
 	// YAML adds funcA that calls funcB (which doesn't exist yet)
-	yamlData := `
+	err := lib.IntroduceUpdateYAML([]byte(`
 functions:
   -
     sym: funcA
     numArgs: 2
     source: funcB($0, $1)
-`
-	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
-	require.NoError(t, err)
-	err = lib.IntroduceUpdateYAML(fromYaml)
+`))
 	require.NoError(t, err)
 
 	// Plain code adds funcB
@@ -481,16 +478,13 @@ func TestIntroduceCommit_CrossSourceCycle(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
 	// YAML adds funcA→funcB
-	yamlData := `
+	err := lib.IntroduceUpdateYAML([]byte(`
 functions:
   -
     sym: funcA
     numArgs: 1
     source: funcB($0)
-`
-	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
-	require.NoError(t, err)
-	err = lib.IntroduceUpdateYAML(fromYaml)
+`))
 	require.NoError(t, err)
 
 	// Plain code adds funcB→funcA (cycle)
@@ -511,16 +505,13 @@ func TestIntroduceCommit_DuplicateAcrossBatches(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
 	// YAML adds funcDup
-	yamlData := `
+	err := lib.IntroduceUpdateYAML([]byte(`
 functions:
   -
     sym: funcDup
     numArgs: 1
     source: byte($0, 0)
-`
-	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
-	require.NoError(t, err)
-	err = lib.IntroduceUpdateYAML(fromYaml)
+`))
 	require.NoError(t, err)
 
 	// Plain code also tries to add funcDup — should fail
@@ -543,27 +534,23 @@ func TestIntroduceCommit_EmptyCommit(t *testing.T) {
 func TestIntroduceMulti_YAMLAndSources(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
-	yaml1 := `
+	yaml1 := []byte(`
 functions:
   -
     sym: mFuncA
     numArgs: 2
     source: mFuncC($0, $1)
-`
-	yaml2 := `
+`)
+	yaml2 := []byte(`
 functions:
   -
     sym: mFuncB
     numArgs: 2
     source: mFuncA($0, $1)
-`
-	from1, err := ReadLibraryFromYAML([]byte(yaml1))
-	require.NoError(t, err)
-	from2, err := ReadLibraryFromYAML([]byte(yaml2))
-	require.NoError(t, err)
+`)
 
 	// Introduce two YAML sources at once (nil resolver — no embedded)
-	err = lib.IntroduceUpdateYAMLMulti(nil, from1, from2)
+	err := lib.IntroduceUpdateYAMLMulti(nil, yaml1, yaml2)
 	require.NoError(t, err)
 
 	// Introduce two plain EasyFL sources at once

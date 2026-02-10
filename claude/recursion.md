@@ -58,7 +58,7 @@ A staged API allows accumulating functions from multiple sources (YAML + plain E
 
 **`Library[T].pendingBatch`** (`types.go`): A `[]pendingExtendedFunc` field on the library struct serves as the staging area.
 
-**`IntroduceUpdateYAML(fromYAML, embed...)`** (`serde_tools.go`):
+**`IntroduceUpdateYAML(yamlData []byte, embed...)`** (`serde_tools.go`):
 - Sets `VersionData` if non-empty
 - For each YAML function: validates replace/existence against both the library and `pendingBatch`
 - Embedded functions (`EmbeddedAs != ""`): processed immediately (embedShort/embedLong/replaceEmbedded + immutable flag)
@@ -79,7 +79,7 @@ A staged API allows accumulating functions from multiple sources (YAML + plain E
 - `ExtendMany()` is now `IntroduceUpdateMany` + `CommitUpdate`
 
 **Variadic versions:**
-- `IntroduceUpdateYAMLMulti(embed func(sym string) EmbeddedFunction[T], fromYAMLs ...*LibraryFromYAML)` (`serde_tools.go`) — processes multiple YAML definitions sequentially into the same pendingBatch. `embed` resolver may be nil when no embedded functions need resolving.
+- `IntroduceUpdateYAMLMulti(embed func(sym string) EmbeddedFunction[T], yamlDatas ...[]byte)` (`serde_tools.go`) — processes multiple raw YAML data sequentially into the same pendingBatch. `embed` resolver may be nil when no embedded functions need resolving.
 - `IntroduceUpdateManyMulti(sources ...string)` (`library.go`) — processes multiple EasyFL source strings sequentially into the same pendingBatch. No resolver needed since plain EasyFL source only defines extended functions.
 
 **`Clone()`** asserts that `pendingBatch` is empty — cloning mid-update is not supported.
