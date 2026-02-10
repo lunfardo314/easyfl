@@ -74,9 +74,11 @@ A staged API allows accumulating functions from multiple sources (YAML + plain E
 - Clears `lib.pendingBatch` (on both success and error)
 - Returns `nil` when `pendingBatch` is empty
 
+**Internal helper: `introduceFromParsedYAML(fromYAML *LibraryFromYAML, embed...)`** (`serde_tools.go`) — contains the core logic (validate, embed immediately, stage extended). Both `IntroduceUpdateYAML` (parses `[]byte` then delegates) and `Upgrade` (receives `*LibraryFromYAML` directly) call it.
+
 **Rewritten callers:**
-- `Upgrade()` is now `IntroduceUpdateYAML` + `CommitUpdate`
-- `ExtendMany()` is now `IntroduceUpdateMany` + `CommitUpdate`
+- `Upgrade(fromYAML *LibraryFromYAML, embed...)` — calls `introduceFromParsedYAML` + `CommitUpdate` (signature unchanged)
+- `ExtendMany()` — calls `IntroduceUpdateMany` + `CommitUpdate`
 
 **Variadic versions:**
 - `IntroduceUpdateYAMLMulti(embed func(sym string) EmbeddedFunction[T], yamlDatas ...[]byte)` (`serde_tools.go`) — processes multiple raw YAML data sequentially into the same pendingBatch. `embed` resolver may be nil when no embedded functions need resolving.
@@ -88,9 +90,9 @@ A staged API allows accumulating functions from multiple sources (YAML + plain E
 
 ### Key files
 - `recursion.go` — `extractReferencedFunCodes()` (bytecode walker), `checkForCycles()` (DFS cycle detection), `topologicalSortPartialOrder()` (sort.Slice with partial order)
-- `library.go` — `pendingExtendedFunc` struct, `addExtendedBatch()` (shared multi-phase logic), `isPendingSym()`, `IntroduceUpdateMany()`, `CommitUpdate()`, `Clone()` method, rewritten `ExtendMany()`
+- `library.go` — `pendingExtendedFunc` struct, `addExtendedBatch()` (shared multi-phase logic), `isPendingSym()`, `IntroduceUpdateMany()`, `IntroduceUpdateManyMulti()`, `CommitUpdate()`, `Clone()` method, rewritten `ExtendMany()`
 - `compiler.go` — `preprocessSource()` helper (strips comments and whitespace)
-- `serde_tools.go` — `IntroduceUpdateYAML()`, simplified `Upgrade()` as introduce+commit
+- `serde_tools.go` — `introduceFromParsedYAML()` (internal), `IntroduceUpdateYAML()` (public, `[]byte`), `IntroduceUpdateYAMLMulti()`, simplified `Upgrade()` as introduce+commit
 - `recursion_test.go` — tests for forward references, self/mutual/indirect recursion detection, replace-induced cycles, diamond dependencies, clone correctness, backward compatibility, `ExtendMany` forward references and cycle detection, cross-source forward references, cross-source cycles, cross-batch duplicate detection, empty commit
 
 ### Key design decisions
