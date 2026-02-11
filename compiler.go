@@ -125,6 +125,37 @@ func preprocessSource(source string) (string, error) {
 	return stripSpaces(strings.Join(lines, "")), nil
 }
 
+// countParametersFromSource pre-scans the preprocessed source to determine the number
+// of parameters by finding the maximum $N reference. Returns 0 if no parameters found.
+// This is used to set requiredNumParams before compilation so that #funcName references
+// in earlier sources can resolve the correct arity for functions defined in later sources.
+func countParametersFromSource(source string) (int, error) {
+	src, err := preprocessSource(source)
+	if err != nil {
+		return 0, err
+	}
+	maxParam := -1
+	for i := 0; i < len(src); i++ {
+		if src[i] == '$' && i+1 < len(src) && src[i+1] >= '0' && src[i+1] <= '9' {
+			j := i + 1
+			for j < len(src) && src[j] >= '0' && src[j] <= '9' {
+				j++
+			}
+			n, err := strconv.Atoi(src[i+1 : j])
+			if err != nil {
+				continue
+			}
+			if n > maxParam {
+				maxParam = n
+			}
+		}
+	}
+	if maxParam < 0 {
+		return 0, nil
+	}
+	return maxParam + 1, nil
+}
+
 func parseExpression[T any](s string) (*parsedExpression[T], error) {
 	name, rest, foundOpen := strings.Cut(s, "(")
 	f := &parsedExpression[T]{

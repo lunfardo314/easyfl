@@ -1,6 +1,7 @@
 package easyfl
 
 import (
+	"encoding/hex"
 	"fmt"
 	"testing"
 
@@ -720,4 +721,88 @@ func TestTopoSort_DiamondWithUnrelated(t *testing.T) {
 	lib.MustEqual("diaLeft(0x0102)", "1")
 	lib.MustEqual("diaRight(0x0102)", "1")
 	lib.MustEqual("diaTop(0x0102)", "uint8Bytes(2)")
+}
+
+// TestHashPrefixForwardRef tests that #funcName bytecode prefix references resolve
+// with the correct arity even when the referenced function is defined in a later source.
+// This was a bug: Phase 1 registered all functions with requiredNumParams=-1, and Phase 2
+// compiled sequentially. When an earlier function used #laterFunc, the arity was 0 instead
+// of the actual value, causing the call prefix to differ from the runtime bytecode.
+func TestHashPrefixForwardRef(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	// earlyChecker uses #lateTarget to check if bytecode has lateTarget's prefix.
+	// earlyChecker is listed FIRST so it's compiled before lateTarget in Phase 2.
+	// lateTarget has 3 params — without the fix, #lateTarget would resolve with arity 0.
+	err := lib.ExtendMany(`
+func earlyChecker : equal(parseBytecode($0, 0x), #lateTarget)
+func lateTarget : concat($0, $1, $2)
+`)
+	require.NoError(t, err)
+
+	// Compile lateTarget(0x01, 0x02, 0x03) to get its actual bytecode
+	_, _, code, err := lib.CompileExpression("lateTarget(0x01, 0x02, 0x03)")
+	require.NoError(t, err)
+
+	// earlyChecker should return 0xff (true) when given lateTarget bytecode
+	src := fmt.Sprintf("earlyChecker(0x%s)", hex.EncodeToString(code))
+	result, err := lib.EvalFromSource(nil, src)
+	require.NoError(t, err)
+	require.Equal(t, []byte{0xff}, result, "earlyChecker should recognize lateTarget prefix via #lateTarget")
+}
+
+// TestHashPrefixForwardRef_MultiSource tests #funcName across separate sources
+// committed together (the pattern used by Proxima's IntroduceUpdateManyMulti).
+func TestHashPrefixForwardRef_MultiSource(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	// Source 1 (compiled first) references #targetFunc from source 2
+	err := lib.IntroduceUpdateMany(`
+func checker : equal(parseBytecode($0, 0x), #targetFunc)
+`)
+	require.NoError(t, err)
+
+	// Source 2 defines targetFunc with 4 params
+	err = lib.IntroduceUpdateMany(`
+func targetFunc : concat($0, concat($1, concat($2, $3)))
+`)
+	require.NoError(t, err)
+
+	err = lib.CommitUpdate()
+	require.NoError(t, err)
+
+	// Compile targetFunc call to get its bytecode
+	_, _, code, err := lib.CompileExpression("targetFunc(0x01, 0x02, 0x03, 0x04)")
+	require.NoError(t, err)
+
+	// checker should recognize the prefix
+	src := fmt.Sprintf("checker(0x%s)", hex.EncodeToString(code))
+	result, err := lib.EvalFromSource(nil, src)
+	require.NoError(t, err)
+	require.Equal(t, []byte{0xff}, result, "checker should recognize targetFunc prefix across sources")
+}
+
+// TestCountParametersFromSource tests the parameter count pre-scanner.
+func TestCountParametersFromSource(t *testing.T) {
+	tests := []struct {
+		source   string
+		expected int
+	}{
+		{"add($0, $1)", 2},
+		{"byte($0, 0)", 1},
+		{"concat($0, $1, $2)", 3},
+		{"concat($0, concat($1, concat($2, $3)))", 4},
+		{"0x0102", 0},
+		{"nil", 0},
+		{"add(1, 2)", 0},
+		// $15 = param index 15, so 16 params
+		{"add($0, $15)", 16},
+	}
+	for _, tt := range tests {
+		t.Run(tt.source, func(t *testing.T) {
+			n, err := countParametersFromSource(tt.source)
+			require.NoError(t, err)
+			require.Equal(t, tt.expected, n, "source: %s", tt.source)
+		})
+	}
 }

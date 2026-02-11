@@ -251,6 +251,20 @@ func (lib *Library[T]) addExtendedBatch(pending []pendingExtendedFunc) error {
 		}
 	}
 
+	// ---- Phase 1.5: pre-determine parameter counts for new functions so that
+	// #funcName bytecode prefix references resolve with the correct arity even when
+	// the referenced function is defined in a later source within the same batch.
+	for _, p := range pending {
+		if p.isVararg || p.isReplace {
+			continue
+		}
+		numParam, err := countParametersFromSource(p.source)
+		if err != nil {
+			return fmt.Errorf("error counting parameters for '%s': %v", p.sym, err)
+		}
+		lib.funByName[p.sym].requiredNumParams = numParam
+	}
+
 	// ---- Phase 2: compile all pending functions to bytecode
 	type compiledInfo struct {
 		bytecode []byte
