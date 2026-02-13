@@ -260,13 +260,13 @@ functions:
       embedded_as: "evalCallLocalLibrary"
    -
       sym: "atTuple8"
-      description: "returns element of the serialized tuple at index $0 which must be 1 byte-long"
+      description: "returns element of the serialized tuple $0 at index $1 which must be 1 byte-long"
       funCode: 80
       numArgs: 2
       embedded_as: "evalAtTuple8"
    -
       sym: "tupleLen"
-      description: "returns number of elements of a tuple as 8 byte-long big-endian value"
+      description: "returns number of elements of a serialized tuple at $0 as 8 byte-long big-endian value"
       funCode: 81
       numArgs: 1
       embedded_as: "evalTupleLen"
