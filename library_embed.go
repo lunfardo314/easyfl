@@ -201,7 +201,7 @@ func evalRepeat[T any](par *CallParams[T]) []byte {
 	if len(n) != 1 {
 		par.TracePanic("evalRepeat: count must be 1-byte long")
 	}
-	ret := bytes.Repeat(fragment, int(n[0]))
+	ret := par.AllocData(bytes.Repeat(fragment, int(n[0]))...)
 	par.Trace("hasPrefix:: %s, %s -> %s", easyfl_util.FmtLazy(fragment), easyfl_util.FmtLazy(n), easyfl_util.FmtLazy(ret))
 	return ret
 }
@@ -210,8 +210,8 @@ func evalLen[T any](par *CallParams[T]) []byte {
 	data := par.Arg(0)
 	ret := par.Alloc(8)
 	binary.BigEndian.PutUint64(ret, uint64(len(data)))
-	par.Trace("len:: %s -> %s", easyfl_util.FmtLazy(data), easyfl_util.FmtLazy(ret[:]))
-	return ret[:]
+	par.Trace("len:: %s -> %s", easyfl_util.FmtLazy(data), easyfl_util.FmtLazy(ret))
+	return ret
 }
 
 func evalIf[T any](par *CallParams[T]) []byte {
