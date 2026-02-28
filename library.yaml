@@ -188,7 +188,7 @@ functions:
       embedded_as: "evalRepeat"
    -
       sym: "firstCaseIndex"
-      description: "evaluates one-by-one and returns first argument with non-empty value"
+      description: "evaluates one-by-one and returns index of the first argument with non-empty value as 1 byte value"
       funCode: 68
       numArgs: -1
       embedded_as: "evalFirstCaseIndex"
