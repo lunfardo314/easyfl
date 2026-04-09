@@ -91,14 +91,14 @@ func EmbeddedFunctions[T any](targetLib *Library[T]) func(sym string) EmbeddedFu
 
 // evalCallLocalLibrary not tested here, only in Proxima
 func (lib *Library[T]) evalCallLocalLibrary(ctx *CallParams[T]) []byte {
-	// arg 0 - local library binary (as a lazy array)
+	// arg 0 - local library binary (as a tuple)
 	// arg 1 - 1-byte index of then function in the library
 	// arg 2 ... arg 15 optional arguments
-	arr, err := tuples.TupleFromBytes(ctx.Arg(0))
+	tuple, err := tuples.TupleFromBytes(ctx.Arg(0))
 	if err != nil {
 		ctx.TracePanic("evalCallLocalLibrary: %v", err)
 	}
-	libData := arr.Parsed()
+	libData := tuple.Parsed()
 	idx := ctx.Arg(1)
 	if len(idx) != 1 || int(idx[0]) >= len(libData) {
 		ctx.TracePanic("evalCallLocalLibrary: wrong function index")

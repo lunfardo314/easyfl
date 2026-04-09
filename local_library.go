@@ -8,12 +8,13 @@ import (
 	"github.com/lunfardo314/easyfl/tuples"
 )
 
-type (
-	LocalLibrary[T any] struct {
-		funByName    map[string]*funDescriptor[T]
-		funByFunCode []*funDescriptor[T] // code of the function respective to the baseline of numExtended+FirstExtended+1
-	}
-)
+// LocalLibrary is array keeps a collection of function definitions in the local scope of function codes
+// That allows compiling a set of functions at separately from the global scope (that is usually immutably)
+// and adding them to the runtime evaluation scope dynamically
+type LocalLibrary[T any] struct {
+	funByName    map[string]*funDescriptor[T]
+	funByFunCode []*funDescriptor[T] // code of the function respective to the baseline of numExtended+FirstExtended+1
+}
 
 func NewLocalLibrary[T any]() *LocalLibrary[T] {
 	return &LocalLibrary[T]{
@@ -22,6 +23,7 @@ func NewLocalLibrary[T any]() *LocalLibrary[T] {
 	}
 }
 
+// CompileLocalLibrary compiles local library source to local library binary (a slice of bytecodes)
 func (lib *Library[T]) CompileLocalLibrary(source string) ([][]byte, error) {
 	libLoc := NewLocalLibrary[T]()
 	ret := make([][]byte, 0)

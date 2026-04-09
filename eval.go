@@ -303,7 +303,8 @@ func (lib *Library[T]) EvalFromBytecodeWithSlicePool(glb GlobalData[T], spool *s
 	return ret, err
 }
 
-func (lib *Library[T]) expressionFromLibrary(libraryBin [][]byte, funIndex int) (*Expression[T], error) {
+// expressionFromLocalLibrary makes expression from the parsed local library
+func (lib *Library[T]) expressionFromLocalLibrary(libraryBin [][]byte, funIndex int) (*Expression[T], error) {
 	libLoc, err := lib.LocalLibraryFromBytes(libraryBin[:funIndex])
 	if err != nil {
 		return nil, err
@@ -315,14 +316,16 @@ func (lib *Library[T]) expressionFromLibrary(libraryBin [][]byte, funIndex int) 
 	return expr, nil
 }
 
-func (lib *Library[T]) MustEvalFromLibrary(glb GlobalData[T], libraryBin [][]byte, funIndex int, args ...[]byte) []byte {
+// MustEvalFromLocalLibrary evaluates function call from the parsed local library
+// Panics on any error
+func (lib *Library[T]) MustEvalFromLocalLibrary(glb GlobalData[T], libraryBin [][]byte, funIndex int, args ...[]byte) []byte {
 	if funIndex < 0 || funIndex >= len(libraryBin) {
 		panic("function index is out of library bounds")
 	}
 	if funIndex == 0 {
 		return lib.MustEvalFromBytecode(glb, libraryBin[0], args...)
 	}
-	expr, err := lib.expressionFromLibrary(libraryBin, funIndex)
+	expr, err := lib.expressionFromLocalLibrary(libraryBin, funIndex)
 	if err != nil {
 		panic(err)
 	}
@@ -331,10 +334,11 @@ func (lib *Library[T]) MustEvalFromLibrary(glb GlobalData[T], libraryBin [][]byt
 	return EvalExpression(glb, expr, args...)
 }
 
-func (lib *Library[T]) EvalFromLibrary(glb GlobalData[T], libraryBin [][]byte, funIndex int, args ...[]byte) ([]byte, error) {
+// EvalFromLocalLibrary safely evaluates function call from parsed local library
+func (lib *Library[T]) EvalFromLocalLibrary(glb GlobalData[T], libraryBin [][]byte, funIndex int, args ...[]byte) ([]byte, error) {
 	var ret []byte
 	err := easyfl_util.CatchPanicOrError(func() error {
-		ret = lib.MustEvalFromLibrary(glb, libraryBin, funIndex, args...)
+		ret = lib.MustEvalFromLocalLibrary(glb, libraryBin, funIndex, args...)
 		return nil
 	})
 	return ret, err
@@ -345,7 +349,7 @@ func (lib *Library[T]) CallLocalLibrary(ctx *CallParams[T], libBin [][]byte, idx
 	if idx < 0 || idx >= len(libBin) {
 		panic("function index is out of library bounds")
 	}
-	expr, err := lib.expressionFromLibrary(libBin, idx)
+	expr, err := lib.expressionFromLocalLibrary(libBin, idx)
 	if err != nil {
 		ctx.TracePanic("error while parsing local library: %v", err)
 	}

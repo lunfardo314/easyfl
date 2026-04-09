@@ -39,37 +39,37 @@ func TestLocalLibrary(t *testing.T) {
 	})
 	t.Run("2", func(t *testing.T) {
 		require.NoError(t, err)
-		lib.MustEvalFromLibrary(nil, libData, 0, []byte{1}, []byte{2})
-		lib.MustEvalFromLibrary(nil, libData, 1, []byte{5})
-		lib.MustEvalFromLibrary(nil, libData, 2, []byte{1})
-		lib.MustEvalFromLibrary(nil, libData, 3)
+		lib.MustEvalFromLocalLibrary(nil, libData, 0, []byte{1}, []byte{2})
+		lib.MustEvalFromLocalLibrary(nil, libData, 1, []byte{5})
+		lib.MustEvalFromLocalLibrary(nil, libData, 2, []byte{1})
+		lib.MustEvalFromLocalLibrary(nil, libData, 3)
 		err = easyfl_util.CatchPanicOrError(func() error {
-			lib.MustEvalFromLibrary(nil, libData, 4, []byte{1})
+			lib.MustEvalFromLocalLibrary(nil, libData, 4, []byte{1})
 			return nil
 		})
 		easyfl_util.RequireErrorWith(t, err, "function index is out of library bounds")
 	})
 	t.Run("3", func(t *testing.T) {
-		res, err := lib.EvalFromLibrary(nil, libData, 0, []byte{1}, []byte{2})
+		res, err := lib.EvalFromLocalLibrary(nil, libData, 0, []byte{1}, []byte{2})
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{1, 2}, res)
 
-		res, err = lib.EvalFromLibrary(nil, libData, 1, []byte{5})
+		res, err = lib.EvalFromLocalLibrary(nil, libData, 1, []byte{5})
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{5, 2, 3, 4}, res)
 
-		res, err = lib.EvalFromLibrary(nil, libData, 2, []byte{5})
+		res, err = lib.EvalFromLocalLibrary(nil, libData, 2, []byte{5})
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{5, 2, 3, 4}, res)
 
-		res, err = lib.EvalFromLibrary(nil, libData, 3)
+		res, err = lib.EvalFromLocalLibrary(nil, libData, 3)
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{1, 2, 3}, res)
 
-		res, err = lib.EvalFromLibrary(nil, libData, 2)
+		res, err = lib.EvalFromLocalLibrary(nil, libData, 2)
 		easyfl_util.RequireErrorWith(t, err, "index out of range")
 
-		_, err = lib.EvalFromLibrary(nil, libData, 4, []byte{5})
+		_, err = lib.EvalFromLocalLibrary(nil, libData, 4, []byte{5})
 		easyfl_util.RequireErrorWith(t, err, "function index is out of library bounds")
 	})
 
