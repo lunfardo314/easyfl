@@ -103,9 +103,6 @@ func (lib *Library[T]) embedShortErr(sym string, requiredNumPar int, embeddedFun
 	if requiredNumPar < 0 {
 		return 0, fmt.Errorf("EasyFL: short embedded vararg functions are not allowed")
 	}
-	if traceYN {
-		embeddedFun = wrapWithTracing[T](embeddedFun, sym)
-	}
 	dscr := &funDescriptor[T]{
 		sym:               sym,
 		funCode:           lib.numEmbeddedShort,
@@ -142,9 +139,6 @@ func (lib *Library[T]) embedLongErr(sym string, requiredNumPar int, embeddedFun 
 		return 0, fmt.Errorf("EasyFL: can't be more than 15 parameters")
 	}
 
-	if traceYN {
-		embeddedFun = wrapWithTracing(embeddedFun, sym)
-	}
 	dscr := &funDescriptor[T]{
 		sym:               sym,
 		funCode:           lib.numEmbeddedLong + FirstEmbeddedLong,
@@ -197,9 +191,6 @@ func (lib *Library[T]) replaceEmbedded(sym string, requiredNumPar int, embeddedF
 	if fd.requiredNumParams != requiredNumPar {
 		return fmt.Errorf("replaceEmbedded: function '%s' numArgs mismatch: existing %d, new %d (must be equal for backward compatibility)",
 			sym, fd.requiredNumParams, requiredNumPar)
-	}
-	if traceYN {
-		embeddedFun = wrapWithTracing(embeddedFun, sym)
 	}
 	// Update the descriptor in place, preserving funCode
 	fd.embeddedFun = embeddedFun
@@ -332,9 +323,6 @@ func (lib *Library[T]) addExtendedBatch(pending []pendingExtendedFunc) error {
 		}
 
 		embeddedFun := makeEmbeddedFunForExpression(p.sym, expr)
-		if traceYN {
-			embeddedFun = wrapWithTracing(embeddedFun, p.sym)
-		}
 
 		fd.embeddedFun = embeddedFun
 		fd.source = p.source
@@ -437,9 +425,6 @@ func (lib *Library[T]) ExtendErr(sym string, source string, description ...strin
 		return 0, errors.New("can't be more than 15 parameters")
 	}
 	embeddedFun := makeEmbeddedFunForExpression(sym, f)
-	if traceYN {
-		embeddedFun = wrapWithTracing(embeddedFun, sym)
-	}
 	dscr := &funDescriptor[T]{
 		sym:               sym,
 		funCode:           lib.numExtended + FirstExtended,
@@ -479,9 +464,6 @@ func (lib *Library[T]) ExtendVarargErr(sym string, source string, description ..
 		return 0, errors.New("repeating symbol '" + sym + "'")
 	}
 	embeddedFun := makeEmbeddedFunForExpression(sym, f)
-	if traceYN {
-		embeddedFun = wrapWithTracing(embeddedFun, sym)
-	}
 	dscr := &funDescriptor[T]{
 		sym:               sym,
 		funCode:           lib.numExtended + FirstExtended,
@@ -496,15 +478,6 @@ func (lib *Library[T]) ExtendVarargErr(sym string, source string, description ..
 	lib.addDescriptor(dscr)
 
 	return dscr.funCode, nil
-}
-
-func wrapWithTracing[T any](f EmbeddedFunction[T], msg string) EmbeddedFunction[T] {
-	return func(par *CallParams[T]) []byte {
-		fmt.Printf("EvalFunction '%s' - IN\n", msg)
-		ret := f(par)
-		fmt.Printf("EvalFunction '%s' - OUT: %v\n", msg, ret)
-		return ret
-	}
 }
 
 func (lib *Library[T]) ExtendMany(source string) error {

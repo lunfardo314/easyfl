@@ -9,8 +9,8 @@ import (
 )
 
 // LocalLibrary is array keeps a collection of function definitions in the local scope of function codes
-// That allows compiling a set of functions at separately from the global scope (that is usually immutably)
-// and adding them to the runtime evaluation scope dynamically
+// That allows compiling a set of functions separately in the global scope and adding
+// them to the runtime evaluation scope dynamically
 type LocalLibrary[T any] struct {
 	funByName    map[string]*funDescriptor[T]
 	funByFunCode []*funDescriptor[T] // code of the function respective to the baseline of numExtended+FirstExtended+1
@@ -46,9 +46,6 @@ func (lib *Library[T]) CompileLocalLibrary(source string) ([][]byte, error) {
 			return nil, errors.New("can't be more than 15 parameters")
 		}
 		embeddedFun := makeEmbeddedFunForExpression(pf.Sym, f)
-		if traceYN {
-			embeddedFun = wrapWithTracing(embeddedFun, pf.Sym)
-		}
 		funCode := FirstLocalFunCode + uint16(len(libLoc.funByName))
 		dscr := &funDescriptor[T]{
 			sym:               pf.Sym,

@@ -133,14 +133,7 @@ func (ctx *evalContext[T]) eval(f *Expression[T]) []byte {
 
 // Arg evaluates argument if the call inside embedded function
 func (p *CallParams[T]) Arg(n byte) []byte {
-	if traceYN {
-		fmt.Printf("Arg(%d) -- IN\n", n)
-	}
 	ret := p.evalContext.eval(p.args[n])
-
-	if traceYN {
-		fmt.Printf("Arg(%d) -- OUT ret: %v\n", n, ret)
-	}
 	return ret
 }
 

@@ -10,7 +10,8 @@ import (
 
 const (
 
-	// ---- embedded parameter access codes
+	// embedded parameter access codes
+
 	MaxSourceSize         = bufio.MaxScanTokenSize - 10
 	MaxDataSize           = math.MaxUint16
 	FirstEmbeddedReserved = 0x00
@@ -100,8 +101,6 @@ type (
 		pendingBatch []pendingExtendedFunc
 	}
 )
-
-const traceYN = false
 
 var (
 	expressionArrayPool [MaxParameters + 1]sync.Pool
