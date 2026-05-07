@@ -60,7 +60,7 @@ func (lib *Library[T]) CompileLocalLibrary(source string) ([][]byte, error) {
 	return ret, nil
 }
 
-// CompileLocalLibraryToTuple compiles local library and serializes it as lazy array
+// CompileLocalLibraryToTuple compiles local library and serializes it as a tuple bytes
 func (lib *Library[T]) CompileLocalLibraryToTuple(source string) ([]byte, error) {
 	libBin, err := lib.CompileLocalLibrary(source)
 	if err != nil {
@@ -70,6 +70,7 @@ func (lib *Library[T]) CompileLocalLibraryToTuple(source string) ([]byte, error)
 	return ret.Bytes(), nil
 }
 
+// LocalLibraryFromBytes takes slice of bytecodes, compiles it and creates LocalLibrary instance
 func (lib *Library[T]) LocalLibraryFromBytes(bin [][]byte) (*LocalLibrary[T], error) {
 	if len(bin) > 255 {
 		return nil, fmt.Errorf("local library can contain up to 255 elements")
