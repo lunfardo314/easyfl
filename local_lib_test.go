@@ -129,6 +129,72 @@ func TestLocalScriptEmpty(t *testing.T) {
 	require.Equal(t, 0, s.NumFunctions())
 }
 
+// BenchmarkLocalScriptIntraCall measures end-to-end cost of a local-script
+// eval that performs one intra-script call per top-level invocation. Used as
+// a sanity check after Phase B's slicepool sharing.
+func BenchmarkLocalScriptIntraCall(b *testing.B) {
+	lib := NewBaseLibrary[any]()
+	const source = `
+ func leaf : concat($0, 0xaa)
+ func caller : leaf($0)
+`
+	bin, err := lib.CompileLocalScript(source)
+	if err != nil {
+		b.Fatal(err)
+	}
+	s, err := lib.LocalScriptFromBytes(bin)
+	if err != nil {
+		b.Fatal(err)
+	}
+	arg := []byte{0x42}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := s.Eval(nil, 1, arg); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkLocalScriptDeepCall stresses nested intra-script calls. After
+// Phase B (parent slicepool reuse) the per-call slicepool New/Dispose and
+// defensive copy are gone, so allocs/op should scale roughly linearly with
+// call depth instead of paying that overhead at every level.
+func BenchmarkLocalScriptDeepCall(b *testing.B) {
+	lib := NewBaseLibrary[any]()
+	// 6 layers: f0 is the leaf, f5 wraps f4 which wraps f3 ... down to f0.
+	const source = `
+ func f0 : concat($0, 0xaa)
+ func f1 : f0($0)
+ func f2 : f1($0)
+ func f3 : f2($0)
+ func f4 : f3($0)
+ func f5 : f4($0)
+`
+	bin, err := lib.CompileLocalScript(source)
+	if err != nil {
+		b.Fatal(err)
+	}
+	s, err := lib.LocalScriptFromBytes(bin)
+	if err != nil {
+		b.Fatal(err)
+	}
+	// Find f5 by arity (not topologically first; toposort puts f0 at idx 0).
+	// f5 is the only function whose body still contains a non-leaf reference
+	// after all rewrites; we identify it by being the last in the chain. The
+	// simplest stable lookup is by walking funByName: f5 is not present after
+	// decode (synthetic syms only), so just use the last index.
+	leafIdx := s.NumFunctions() - 1
+	arg := []byte{0x42}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := s.Eval(nil, leafIdx, arg); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 // TestLocalScriptNotInLocalScriptFlag verifies that a global function flagged
 // notInLocalScript is rejected when used inside a local script body.
 func TestLocalScriptNotInLocalScriptFlag(t *testing.T) {
