@@ -53,21 +53,31 @@ type LocalScript[T any] struct {
 // locals, references to globals flagged notInLocalScript, and over-arity
 // definitions are rejected.
 func (lib *Library[T]) CompileLocalScript(source string) (LocalScriptBin, error) {
+	bin, _, err := lib.CompileLocalScriptWithIndex(source)
+	return bin, err
+}
+
+// CompileLocalScriptWithIndex is like CompileLocalScript but additionally
+// returns a map from source-level function names to their wire indices in
+// the resulting LocalScriptBin. Useful for hosts and tests that want to
+// invoke a specific function by source name; the decoded *LocalScript[T]
+// uses synthetic "script#i" symbols and has no knowledge of source names.
+func (lib *Library[T]) CompileLocalScriptWithIndex(source string) (LocalScriptBin, map[string]int, error) {
 	// ---- Phase 1: parse
 	parsed, err := parseFunctions(source)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if len(parsed) > MaxLocalScriptFunctions {
-		return nil, fmt.Errorf("local script: too many functions: %d (max %d)", len(parsed), MaxLocalScriptFunctions)
+		return nil, nil, fmt.Errorf("local script: too many functions: %d (max %d)", len(parsed), MaxLocalScriptFunctions)
 	}
 	seen := make(map[string]bool, len(parsed))
 	for _, p := range parsed {
 		if p.IsVararg {
-			return nil, fmt.Errorf("local script: vararg local functions are not allowed (in '%s')", p.Sym)
+			return nil, nil, fmt.Errorf("local script: vararg local functions are not allowed (in '%s')", p.Sym)
 		}
 		if seen[p.Sym] {
-			return nil, fmt.Errorf("local script: duplicate symbol '%s'", p.Sym)
+			return nil, nil, fmt.Errorf("local script: duplicate symbol '%s'", p.Sym)
 		}
 		seen[p.Sym] = true
 	}
@@ -91,10 +101,10 @@ func (lib *Library[T]) CompileLocalScript(source string) (LocalScriptBin, error)
 	for i, p := range parsed {
 		n, err := countParametersFromSource(p.SourceCode)
 		if err != nil {
-			return nil, fmt.Errorf("local script: counting params for '%s': %v", p.Sym, err)
+			return nil, nil, fmt.Errorf("local script: counting params for '%s': %v", p.Sym, err)
 		}
 		if n > MaxParameters {
-			return nil, fmt.Errorf("local script: function '%s' has %d params, max %d", p.Sym, n, MaxParameters)
+			return nil, nil, fmt.Errorf("local script: function '%s' has %d params, max %d", p.Sym, n, MaxParameters)
 		}
 		scope.funByFunCode[i].requiredNumParams = n
 	}
@@ -104,14 +114,14 @@ func (lib *Library[T]) CompileLocalScript(source string) (LocalScriptBin, error)
 	for i, p := range parsed {
 		src, err := preprocessSource(p.SourceCode)
 		if err != nil {
-			return nil, fmt.Errorf("local script: preprocess '%s': %v", p.Sym, err)
+			return nil, nil, fmt.Errorf("local script: preprocess '%s': %v", p.Sym, err)
 		}
 		bc, n, err := lib.ExpressionSourceToBytecode(src, scope)
 		if err != nil {
-			return nil, fmt.Errorf("local script: compile '%s': %v", p.Sym, err)
+			return nil, nil, fmt.Errorf("local script: compile '%s': %v", p.Sym, err)
 		}
 		if n != scope.funByFunCode[i].requiredNumParams {
-			return nil, fmt.Errorf("local script: function '%s': declared %d params, body uses %d",
+			return nil, nil, fmt.Errorf("local script: function '%s': declared %d params, body uses %d",
 				p.Sym, scope.funByFunCode[i].requiredNumParams, n)
 		}
 		bytecodes[i] = bc
@@ -119,22 +129,32 @@ func (lib *Library[T]) CompileLocalScript(source string) (LocalScriptBin, error)
 
 	// ---- Phase 4: cycle detection on intra-script call graph
 	if err := checkLocalScriptCycles(scope, bytecodes); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// ---- Phase 5: forbidden-funCode check (refs to globals flagged notInLocalScript)
 	for i, bc := range bytecodes {
 		if err := checkForbiddenGlobalRefs(lib, scope.funByFunCode[i].sym, bc); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
 	// ---- Phase 6: topological sort + encode in dependency order
 	order, err := topologicalSortLocal(bytecodes)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return encodeLocalScript(scope, bytecodes, order)
+	bin, err := encodeLocalScript(scope, bytecodes, order)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Build sym → wire-index map. order[wireIdx] = oldIdx (source-position).
+	symIndex := make(map[string]int, len(parsed))
+	for wireIdx, oldIdx := range order {
+		symIndex[parsed[oldIdx].Sym] = wireIdx
+	}
+	return bin, symIndex, nil
 }
 
 // LocalScriptFromBytes parses a LocalScriptBin into the executable form.
