@@ -705,9 +705,11 @@ func (lib *Library[T]) CompileExpression(source string, localScript ...*LocalScr
 	return ret, numParams, bytecode, nil
 }
 
-// DecompileBytecode decompiles canonical bytecode into source. Symbols are restored wherever possible
-func (lib *Library[T]) DecompileBytecode(code []byte) (string, error) {
-	f, err := lib.ExpressionFromBytecode(code)
+// DecompileBytecode decompiles canonical bytecode into source. Symbols are
+// restored wherever possible. If a *LocalScript[T] is passed, local-call
+// prefixes resolve to that script's symbols.
+func (lib *Library[T]) DecompileBytecode(code []byte, localScript ...*LocalScript[T]) (string, error) {
+	f, err := lib.ExpressionFromBytecode(code, localScript...)
 	if err != nil {
 		return "", err
 	}

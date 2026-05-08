@@ -51,13 +51,16 @@ Replace the current `tuples.Tuple` envelope with a flat header:
 LocalScriptBin :=
     magic[2]              // 0x45 0x53  ('ES' = "EasyFL Script")
     version[1]            // 0x01
-    n[1]                  // number of functions, 0..255 → up to 256 fns
+    n[2]                  // big-endian uint16, number of functions, 0..256
     arity[n]              // 1 byte each, declared arity 0..15
     offsets[n*2]          // big-endian uint16, byte offset of each fn's
                           //   bytecode within `body`
     bodyLen[2]            // big-endian uint16
     body[bodyLen]         // concatenated function bytecodes
 ```
+
+`n` is two bytes so that a 256-function script is representable; a one-byte
+`n` would alias 256 to 0 (the empty case) on the wire.
 
 ### Why a flat header
 

@@ -19,11 +19,13 @@ const MaxLocalScriptFunctions = 256
 //	LocalScriptBin :=
 //	    magic[2]              // 0x45 0x53  ('ES')
 //	    version[1]            // 0x01
-//	    n[1]                  // number of functions, 0..255 → up to 256 fns
+//	    n[2]                  // BE uint16, number of functions, 0..256
 //	    arity[n]              // 1 byte each, declared arity 0..15
 //	    offsets[n*2]          // BE uint16, byte offset of each fn's bytecode within `body`
 //	    bodyLen[2]            // BE uint16
 //	    body[bodyLen]         // concatenated function bytecodes
+//
+// Header total: 5 + 3*n + 2 = 7 + 3*n bytes.
 const (
 	localScriptMagic0  = 0x45 // 'E'
 	localScriptMagic1  = 0x53 // 'S'
@@ -232,7 +234,7 @@ func (s *LocalScript[T]) Eval(glb GlobalData[T], idx int, args ...[]byte) ([]byt
 // parseLocalScriptHeader validates the wire format and returns the per-fn
 // declared arities and per-fn bytecode slices (slices are views into bin).
 func parseLocalScriptHeader(bin LocalScriptBin) ([]byte, [][]byte, error) {
-	const fixed = 2 + 1 + 1 + 2 // magic + version + n + bodyLen
+	const fixed = 2 + 1 + 2 + 2 // magic + version + n + bodyLen
 	if len(bin) < fixed {
 		return nil, nil, fmt.Errorf("local script: truncated header")
 	}
@@ -242,19 +244,22 @@ func parseLocalScriptHeader(bin LocalScriptBin) ([]byte, [][]byte, error) {
 	if bin[2] != localScriptVersion {
 		return nil, nil, fmt.Errorf("local script: unsupported version 0x%02x", bin[2])
 	}
-	n := int(bin[3])
-	headerLen := 4 + n + 2*n + 2
+	n := int(binary.BigEndian.Uint16(bin[3:5]))
+	if n > MaxLocalScriptFunctions {
+		return nil, nil, fmt.Errorf("local script: too many functions: %d (max %d)", n, MaxLocalScriptFunctions)
+	}
+	headerLen := 5 + 3*n + 2
 	if len(bin) < headerLen {
 		return nil, nil, fmt.Errorf("local script: truncated header (need %d, got %d)", headerLen, len(bin))
 	}
 	arities := make([]byte, n)
-	copy(arities, bin[4:4+n])
+	copy(arities, bin[5:5+n])
 	for i, ar := range arities {
 		if ar > MaxParameters {
 			return nil, nil, fmt.Errorf("local script: function #%d has arity %d (max %d)", i, ar, MaxParameters)
 		}
 	}
-	offsetsBase := 4 + n
+	offsetsBase := 5 + n
 	offsets := make([]int, n)
 	for i := 0; i < n; i++ {
 		offsets[i] = int(binary.BigEndian.Uint16(bin[offsetsBase+2*i : offsetsBase+2*i+2]))
@@ -313,20 +318,20 @@ func encodeLocalScript[T any](
 		return nil, fmt.Errorf("local script: body too large: %d bytes (max 65535)", totalBody)
 	}
 
-	headerLen := 4 + n + 2*n + 2
+	headerLen := 5 + 3*n + 2
 	out := make([]byte, headerLen+totalBody)
 	out[0] = localScriptMagic0
 	out[1] = localScriptMagic1
 	out[2] = localScriptVersion
-	out[3] = byte(n)
+	binary.BigEndian.PutUint16(out[3:5], uint16(n))
 
 	// arity[n] in NEW order
 	for newIdx, oldIdx := range order {
-		out[4+newIdx] = byte(scope.funByFunCode[oldIdx].requiredNumParams)
+		out[5+newIdx] = byte(scope.funByFunCode[oldIdx].requiredNumParams)
 	}
 
 	// offsets[n*2]
-	offsetsBase := 4 + n
+	offsetsBase := 5 + n
 	off := 0
 	for i := 0; i < n; i++ {
 		binary.BigEndian.PutUint16(out[offsetsBase+2*i:offsetsBase+2*i+2], uint16(off))
