@@ -251,7 +251,7 @@ const (
 )
 
 // bytecodeFromParsedExpression takes parsed expression and generates bytecode of it
-func (f *parsedExpression[T]) bytecodeFromParsedExpression(lib *Library[T], w io.Writer, localLib ...*LocalLibrary[T]) (int, error) {
+func (f *parsedExpression[T]) bytecodeFromParsedExpression(lib *Library[T], w io.Writer, localScript ...*LocalScript[T]) (int, error) {
 	numArgs := 0
 	if len(f.params) == 0 {
 		isLiteral, nArgs, err := parseLiteral(lib, f.sym, w)
@@ -264,7 +264,7 @@ func (f *parsedExpression[T]) bytecodeFromParsedExpression(lib *Library[T], w io
 	}
 	// either has arguments or not literal
 	// try if it is a short call
-	fi, err := lib.functionByName(f.sym, localLib...)
+	fi, err := lib.functionByName(f.sym, localScript...)
 	if err != nil {
 		return 0, err
 	}
@@ -283,7 +283,7 @@ func (f *parsedExpression[T]) bytecodeFromParsedExpression(lib *Library[T], w io
 	// generate code for call parameters
 	var n int
 	for _, ff := range f.params {
-		if n, err = ff.bytecodeFromParsedExpression(lib, w, localLib...); err != nil {
+		if n, err = ff.bytecodeFromParsedExpression(lib, w, localScript...); err != nil {
 			return 0, err
 		}
 		if n > numArgs {
@@ -539,14 +539,14 @@ func (lib *Library[T]) matchesPrefixes(prefix1, prefix2 []byte) (ret bool, err e
 }
 
 // ExpressionSourceToBytecode compiles expression from source form into the canonical bytecode representation
-func (lib *Library[T]) ExpressionSourceToBytecode(formulaSource string, localLib ...*LocalLibrary[T]) ([]byte, int, error) {
+func (lib *Library[T]) ExpressionSourceToBytecode(formulaSource string, localScript ...*LocalScript[T]) ([]byte, int, error) {
 	f, err := parseExpression[T](formulaSource)
 	if err != nil {
 		return nil, 0, err
 	}
 
 	var buf bytes.Buffer
-	numArgs, err := f.bytecodeFromParsedExpression(lib, &buf, localLib...)
+	numArgs, err := f.bytecodeFromParsedExpression(lib, &buf, localScript...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -554,8 +554,8 @@ func (lib *Library[T]) ExpressionSourceToBytecode(formulaSource string, localLib
 }
 
 // ExpressionFromBytecode creates an evaluation form of the expression from its canonical representation as a bytecode
-func (lib *Library[T]) ExpressionFromBytecode(code []byte, localLib ...*LocalLibrary[T]) (*Expression[T], error) {
-	ret, remaining, _, err := lib.expressionFromBytecode(code, localLib...)
+func (lib *Library[T]) ExpressionFromBytecode(code []byte, localScript ...*LocalScript[T]) (*Expression[T], error) {
+	ret, remaining, _, err := lib.expressionFromBytecode(code, localScript...)
 	if err != nil {
 		return nil, err
 	}
@@ -622,7 +622,7 @@ func writeExpressionSource[T any](w io.Writer, f *Expression[T]) error {
 }
 
 // expressionFromBytecode parses bytecode into the executable expression tree
-func (lib *Library[T]) expressionFromBytecode(bytecode []byte, localLib ...*LocalLibrary[T]) (*Expression[T], []byte, byte, error) {
+func (lib *Library[T]) expressionFromBytecode(bytecode []byte, localScript ...*LocalScript[T]) (*Expression[T], []byte, byte, error) {
 	if len(bytecode) == 0 {
 		return nil, nil, 0xff, io.ErrUnexpectedEOF
 	}
@@ -653,7 +653,7 @@ func (lib *Library[T]) expressionFromBytecode(bytecode []byte, localLib ...*Loca
 	maxParameterNumber := byte(0xff)
 
 	// function call expected
-	callPrefix, evalFun, arity, sym, err := lib.parseCallPrefix(bytecode, localLib...)
+	callPrefix, evalFun, arity, sym, err := lib.parseCallPrefix(bytecode, localScript...)
 	if err != nil {
 		return nil, nil, 0xff, err
 	}
@@ -673,7 +673,7 @@ func (lib *Library[T]) expressionFromBytecode(bytecode []byte, localLib ...*Loca
 	var p *Expression[T]
 	var m byte
 	for i := 0; i < arity; i++ {
-		p, bytecode, m, err = lib.expressionFromBytecode(bytecode, localLib...)
+		p, bytecode, m, err = lib.expressionFromBytecode(bytecode, localScript...)
 		if err != nil {
 			return nil, nil, 0xff, err
 		}
@@ -689,17 +689,17 @@ func (lib *Library[T]) expressionFromBytecode(bytecode []byte, localLib ...*Loca
 }
 
 // CompileExpression compiles from sources directly into the evaluation form
-func (lib *Library[T]) CompileExpression(source string, localLib ...*LocalLibrary[T]) (*Expression[T], int, []byte, error) {
+func (lib *Library[T]) CompileExpression(source string, localScript ...*LocalScript[T]) (*Expression[T], int, []byte, error) {
 	lines, err := splitLinesStripComments(source)
 	if err != nil {
 		return nil, 0, nil, err
 	}
 	src := strings.Join(lines, "")
-	bytecode, numParams, err := lib.ExpressionSourceToBytecode(stripSpaces(src), localLib...)
+	bytecode, numParams, err := lib.ExpressionSourceToBytecode(stripSpaces(src), localScript...)
 	if err != nil {
 		return nil, 0, nil, err
 	}
-	ret, err := lib.ExpressionFromBytecode(bytecode, localLib...)
+	ret, err := lib.ExpressionFromBytecode(bytecode, localScript...)
 	if err != nil {
 		return nil, 0, nil, err
 	}
@@ -740,7 +740,7 @@ func dataFunction[T any](data []byte) (ret EvalFunction[T], err error) {
 // - call arity
 // - symbol
 // - error or nil
-func (lib *Library[T]) parseCallPrefix(code []byte, localLib ...*LocalLibrary[T]) ([]byte, EvalFunction[T], int, string, error) {
+func (lib *Library[T]) parseCallPrefix(code []byte, localScript ...*LocalScript[T]) ([]byte, EvalFunction[T], int, string, error) {
 	if len(code) == 0 || HasInlineDataPrefix(code) {
 		return nil, EvalFunction[T]{}, 0, "", fmt.Errorf("parseCallPrefix: not a function call")
 	}
@@ -786,7 +786,7 @@ func (lib *Library[T]) parseCallPrefix(code []byte, localLib ...*LocalLibrary[T]
 		callPrefix = code[:2]
 		if idx == FirstLocalFunCode {
 			// it is a local library call
-			if len(localLib) == 0 {
+			if len(localScript) == 0 {
 				return nil, EvalFunction[T]{}, 0, "", fmt.Errorf("local library not provided")
 			}
 			if len(code) < 3 {
@@ -795,7 +795,7 @@ func (lib *Library[T]) parseCallPrefix(code []byte, localLib ...*LocalLibrary[T]
 			idx = uint16(FirstLocalFunCode) + uint16(code[2])
 			callPrefix = code[:3]
 		}
-		embeddedFun, numParams, sym, err = lib.functionByCode(idx, localLib...)
+		embeddedFun, numParams, sym, err = lib.functionByCode(idx, localScript...)
 		if err != nil {
 			return nil, EvalFunction[T]{}, 0, "", err
 		}

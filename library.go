@@ -202,12 +202,13 @@ func (lib *Library[T]) replaceEmbedded(sym string, requiredNumPar int, embeddedF
 // pendingExtendedFunc represents an extended function waiting to be added or replaced
 // in a batch operation (used by addExtendedBatch, called from Upgrade and ExtendMany).
 type pendingExtendedFunc struct {
-	sym         string
-	source      string
-	description string
-	isReplace   bool
-	isVararg    bool
-	immutable   bool
+	sym              string
+	source           string
+	description      string
+	isReplace        bool
+	isVararg         bool
+	immutable        bool
+	notInLocalScript bool
 }
 
 // addExtendedBatch processes a batch of extended functions using a multi-phase approach
@@ -330,6 +331,9 @@ func (lib *Library[T]) addExtendedBatch(pending []pendingExtendedFunc) error {
 
 		if p.immutable {
 			fd.immutable = true
+		}
+		if p.notInLocalScript {
+			fd.notInLocalScript = true
 		}
 	}
 	return nil
@@ -499,18 +503,18 @@ func (lib *Library[T]) MustExtendMany(source string) {
 // LibraryHash returns hash of the library code and locks library against modifications.
 // It is used for consistency checking and compatibility check
 
-func (lib *Library[T]) existsFunction(sym string, localLib ...*LocalLibrary[T]) bool {
+func (lib *Library[T]) existsFunction(sym string, localScript ...*LocalScript[T]) bool {
 	if _, found := lib.funByName[sym]; found {
 		return true
 	}
-	if len(localLib) == 0 {
+	if len(localScript) == 0 {
 		return false
 	}
-	_, found := localLib[0].funByName[sym]
+	_, found := localScript[0].funByName[sym]
 	return found
 }
 
-func (lib *Library[T]) functionByName(sym string, localLib ...*LocalLibrary[T]) (*funInfo, error) {
+func (lib *Library[T]) functionByName(sym string, localScript ...*LocalScript[T]) (*funInfo, error) {
 	fd, found := lib.funByName[sym]
 	ret := &funInfo{
 		Sym: sym,
@@ -520,8 +524,8 @@ func (lib *Library[T]) functionByName(sym string, localLib ...*LocalLibrary[T]) 
 		ret.NumParams = fd.requiredNumParams
 		ret.IsEmbedded, ret.IsShort = fd.isEmbeddedOrShort()
 	} else {
-		if len(localLib) > 0 {
-			if fdLoc, foundLocal := localLib[0].funByName[sym]; foundLocal {
+		if len(localScript) > 0 {
+			if fdLoc, foundLocal := localScript[0].funByName[sym]; foundLocal {
 				ret.FunCode = fdLoc.funCode
 				ret.NumParams = fdLoc.requiredNumParams
 				ret.IsLocal = true
@@ -550,7 +554,7 @@ func (fd *funDescriptor[T]) isEmbeddedOrShort() (isEmbedded bool, isShort bool) 
 	return
 }
 
-func (lib *Library[T]) functionByCode(funCode uint16, localLib ...*LocalLibrary[T]) (EmbeddedFunction[T], int, string, error) {
+func (lib *Library[T]) functionByCode(funCode uint16, localScript ...*LocalScript[T]) (EmbeddedFunction[T], int, string, error) {
 	if funCode < FirstLocalFunCode {
 		libData := lib.funByFunCode[funCode]
 		if libData != nil {
@@ -558,16 +562,15 @@ func (lib *Library[T]) functionByCode(funCode uint16, localLib ...*LocalLibrary[
 		}
 	}
 	funCodeLocal := funCode - FirstLocalFunCode
-	if len(localLib) == 0 || int(funCodeLocal) >= len(localLib[0].funByFunCode) {
+	if len(localScript) == 0 || int(funCodeLocal) >= len(localScript[0].funByFunCode) {
 		return nil, 0, "", fmt.Errorf("wrong function code %d", funCode)
 	}
 
-	libData := localLib[0].funByFunCode[byte(funCodeLocal)]
+	libData := localScript[0].funByFunCode[byte(funCodeLocal)]
 	if libData == nil {
 		return nil, 0, "", fmt.Errorf("wrong local function code %d", funCode)
 	}
-	sym := fmt.Sprintf("lib#%d)", funCodeLocal)
-	return libData.embeddedFun, libData.requiredNumParams, sym, nil
+	return libData.embeddedFun, libData.requiredNumParams, libData.sym, nil
 }
 
 func (fi *funInfo) callPrefix(numArgs byte) ([]byte, error) {
@@ -645,6 +648,7 @@ func (lib *Library[T]) Clone() *Library[T] {
 			source:            fd.source,
 			description:       fd.description,
 			immutable:         fd.immutable,
+			notInLocalScript:  fd.notInLocalScript,
 		}
 		if fd.bytecode != nil {
 			fdCopy.bytecode = make([]byte, len(fd.bytecode))
@@ -661,7 +665,7 @@ func (lib *Library[T]) Clone() *Library[T] {
 	return ret
 }
 
-func (lib *Library[T]) FunctionNameByCallPrefix(prefix []byte, localLib ...*LocalLibrary[T]) (sym string, err error) {
+func (lib *Library[T]) FunctionNameByCallPrefix(prefix []byte, localScript ...*LocalScript[T]) (sym string, err error) {
 	if prefix[0]&FirstByteLongCallMask == 0 {
 		// short call
 		if prefix[0] <= LastEmbeddedReserved {
@@ -687,7 +691,7 @@ func (lib *Library[T]) FunctionNameByCallPrefix(prefix []byte, localLib ...*Loca
 		}
 		if idx == FirstLocalFunCode {
 			// it is a local library call
-			if len(localLib) == 0 {
+			if len(localScript) == 0 {
 				err = fmt.Errorf("local library not provided")
 				return
 			}
@@ -698,7 +702,7 @@ func (lib *Library[T]) FunctionNameByCallPrefix(prefix []byte, localLib ...*Loca
 			idx = uint16(FirstLocalFunCode) + uint16(prefix[2])
 		}
 
-		if _, _, sym, err = lib.functionByCode(idx, localLib...); err != nil {
+		if _, _, sym, err = lib.functionByCode(idx, localScript...); err != nil {
 			return
 		}
 	}

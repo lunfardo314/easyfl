@@ -82,30 +82,9 @@ func EmbeddedFunctions[T any](targetLib *Library[T]) func(sym string) EmbeddedFu
 			return targetLib.evalParseInlineDataArgument
 		case "evalParseNumArgs":
 			return targetLib.evalParseNumArgs
-		case "evalCallLocalLibrary":
-			return targetLib.evalCallLocalLibrary
 		}
 		return nil
 	}
-}
-
-// evalCallLocalLibrary not tested here, only in Proxima
-func (lib *Library[T]) evalCallLocalLibrary(ctx *CallParams[T]) []byte {
-	// arg 0 - local library binary (as a tuple)
-	// arg 1 - 1-byte index of then function in the library
-	// arg 2 ... arg 15 optional arguments
-	tuple, err := tuples.TupleFromBytes(ctx.Arg(0))
-	if err != nil {
-		ctx.TracePanic("evalCallLocalLibrary: %v", err)
-	}
-	libData := tuple.Parsed()
-	idx := ctx.Arg(1)
-	if len(idx) != 1 || int(idx[0]) >= len(libData) {
-		ctx.TracePanic("evalCallLocalLibrary: wrong function index")
-	}
-	ret := lib.CallLocalLibrary(ctx.Slice(2, ctx.Arity()), libData, int(idx[0]))
-	ctx.Trace("evalCallLocalLibrary: lib#%d -> 0x%s", idx[0], hex.EncodeToString(ret))
-	return ret
 }
 
 // -----------------------------------------------------------------

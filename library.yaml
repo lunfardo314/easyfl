@@ -1,5 +1,5 @@
 # Base EasyFL library
-hash: 02f160a9443624902b385aeddf7fd408220701cb8ad63da7f8c834c8b9591dae
+hash: 74beedf1accc61498b930d96e82481f8aadcf52f09207a15c11dd7cda4cee5b4
 functions:
 # BEGIN EMBEDDED function definitions
 #    function codes (opcodes) from 0 to 14 are reserved for predefined parameter access functions $i
@@ -253,21 +253,15 @@ functions:
       numArgs: 1
       embedded_as: "evalParseNumArgs"
    -
-      sym: "callLocalLibrary"
-      description: "calls local library"
-      funCode: 79
-      numArgs: -1
-      embedded_as: "evalCallLocalLibrary"
-   -
       sym: "atTuple8"
       description: "returns element of the serialized tuple $0 at index $1 which must be 1 byte-long"
-      funCode: 80
+      funCode: 79
       numArgs: 2
       embedded_as: "evalAtTuple8"
    -
       sym: "tupleLen"
       description: "returns number of elements of a serialized tuple at $0 as 8 byte-long big-endian value"
-      funCode: 81
+      funCode: 80
       numArgs: 1
       embedded_as: "evalTupleLen"
 # END LONG EMBEDDED function definitions

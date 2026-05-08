@@ -75,6 +75,9 @@ type (
 		description string
 		// if true, function cannot be replaced/modified in upgrades
 		immutable bool
+		// if true, this function may not appear in the bytecode of any local script
+		// (enforced by CompileLocalScript and LocalScriptFromBytes)
+		notInLocalScript bool
 	}
 
 	funInfo struct {
