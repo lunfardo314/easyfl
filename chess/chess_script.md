@@ -794,42 +794,85 @@ self-check" rules.
 - Insufficient material (FIDE draw) collapses to "shuffle until someone
   times out" under the deadline rule — workable but not a true draw.
 
-### 9.6 Composability with other local scripts (forward-looking)
+### 9.6 Composability with other local scripts
 
-The chessValidator / chessGame split sketched above only really works
-if a local script can invoke another local script. The current
-local-script feature forbids `callRedeemer` from inside a local script
-— that keeps the dependency graph trivially safe but rules out exactly
-this pattern.
+The chessValidator / chessGame split sketched above relies on a local
+script being able to invoke another local script. Two pieces are
+needed; the second already exists in easyfl, the first is a host
+concern:
 
-A clean relaxation, mirroring the DAG discipline already enforced
-inside the easyfl library at function granularity:
+#### 9.6.1 The runtime primitive (host-supplied)
 
-- **Compile-time pinning.** When compiling a local script, the caller
-  passes the binaries of its callees as parameters. The compiler stores
-  their content hashes alongside the bytecode.
-- **Runtime dispatch by hash.** The compiled parent calls
-  `callRedeemer(hash, args)`; the runtime looks up the binary by hash
-  among the pinned set and evaluates it. A hash not in that set is
-  rejected.
-- **Cycles are structurally impossible.** A child binary must already
-  exist (and hash to its content) before the parent is compiled, so
-  there is no way to construct a recursive reference. Same argument as
-  the existing easyfl reference DAG, lifted from function granularity
-  to script granularity.
-- **No "callable / non-callable" flag is needed in the library** — the
-  binary-hash pinning is the gate. Whatever is pinned is callable;
-  everything else is not, by construction.
+The host (Proxima) registers `callRedeemer` as a regular vararg global:
 
-Reading the redeemer record (`redeem()`) is independent of this — it's
-a pure data accessor with no recursion or composability concern, so
-allowing it inside a local script is harmless even before the above
-relaxation lands.
+```
+callRedeemer(hashLiteral, fnIdx, ...args) -> bytes
+```
 
-For chess specifically: chessValidator (this script) ships with EasyFL;
-chessGame is a separately-compiled redeemer that pins chessValidator's
-binary at compile time and calls into `playerMove`, `boardOK`,
-`sideToMove`, etc. via hash-based dispatch. Neither source needs to
-know about the other beyond the pinned hash and the API in §9.0. The
-same scheme generalises: a chess-tournament redeemer can pin both
-chessValidator and chessGame as building blocks.
+At runtime it looks up the binary by `hashLiteral` (a 32-byte content
+hash), evaluates that binary's function `fnIdx` with `...args`, and
+returns the result. The binary itself can come from anywhere — the
+spending transaction's witnesses, a content store, etc. — as long as
+the lookup is by content hash.
+
+Cross-script composition is **recursion-free by construction**: a hash
+only exists after the callee is compiled, so the dependency graph is a
+DAG, the same way function references inside the easyfl library are a
+DAG. No runtime check is required to prevent loops; the content-
+addressable identity does it. This is also why easyfl no longer needs
+the legacy "this function is forbidden inside a local script" flag —
+removed alongside the hook.
+
+#### 9.6.2 The compile-time declaration (easyfl-supplied)
+
+easyfl ships a compile-time hook that lets a parent script *declare*
+which other binaries it expects to call into. The API:
+
+```go
+type LocalScriptCallSiteCheck[T any] func(callerSym string, callee *Expression[T]) error
+
+func (lib *Library[T]) CompileLocalScriptWithCheck(source string, check LocalScriptCallSiteCheck[T]) (LocalScriptBin, map[string]int, error)
+func (lib *Library[T]) LocalScriptFromBytesWithCheck(bin LocalScriptBin, check LocalScriptCallSiteCheck[T]) (*LocalScript[T], error)
+```
+
+The hook fires once per non-trivial call expression; for each
+`callRedeemer(hash, fnIdx, ...args)` site the host's check verifies:
+
+1. Callee name is `callRedeemer`.
+2. `arg[0]` is a 32-byte literal (`expr.IsInlineData() && len(expr.InlineData()) == 32`) AND the hash is in a pinned set.
+3. `arg[1]` is a 1-byte literal (`fnIdx`) in range of the pinned binary's `NumFunctions()`.
+4. The number of forwarded args matches the pinned function's `Arity(fnIdx)`.
+
+(See `TestLocalScriptCheck_CallRedeemerPattern` in the easyfl test
+suite for the full worked example, plus seven negative cases.)
+
+The hook is **not** a safety mechanism — it's a *catch-typos-early*
+declaration of the import set. A binary compiled with `check == nil`
+is exactly as sound as one compiled with a check; the check just
+turns "unknown hash rejected at execution time" into "unknown hash
+rejected at compile time" and makes the import set visible to readers
+of the source. Same goes for fnIdx range and arity.
+
+`LocalScriptFromBytesWithCheck` exists to re-run the same declaration
+when a binary travels across an import-set boundary — e.g. a binary
+compiled against pinned set A is being decoded for execution against
+pinned set B.
+
+#### 9.6.3 Mapping to chess
+
+- **chessValidator** is this script — rule-pure, ships with EasyFL.
+  Its public surface is the table in §9.0.
+- **chessGame** is a separately-compiled redeemer. It pins
+  chessValidator's binary hash at compile time and dispatches into
+  `playerMove`, `boardOK`, `sideToMove`, etc. via `callRedeemer`. The
+  pin is declared via `CompileLocalScriptWithCheck`.
+- Neither source needs to know about the other beyond the pinned hash
+  and the API in §9.0.
+- The same scheme generalises one level up: a chess-tournament
+  redeemer can pin both chessValidator and chessGame, composing them
+  freely.
+
+Reading the redeemer record (`redeem()`, separate from `callRedeemer`)
+is a pure data accessor with no recursion or composability concern;
+allowing it inside a local script is harmless and orthogonal to the
+above.
