@@ -202,13 +202,12 @@ func (lib *Library[T]) replaceEmbedded(sym string, requiredNumPar int, embeddedF
 // pendingExtendedFunc represents an extended function waiting to be added or replaced
 // in a batch operation (used by addExtendedBatch, called from Upgrade and ExtendMany).
 type pendingExtendedFunc struct {
-	sym              string
-	source           string
-	description      string
-	isReplace        bool
-	isVararg         bool
-	immutable        bool
-	notInLocalScript bool
+	sym         string
+	source      string
+	description string
+	isReplace   bool
+	isVararg    bool
+	immutable   bool
 }
 
 // addExtendedBatch processes a batch of extended functions using a multi-phase approach
@@ -331,9 +330,6 @@ func (lib *Library[T]) addExtendedBatch(pending []pendingExtendedFunc) error {
 
 		if p.immutable {
 			fd.immutable = true
-		}
-		if p.notInLocalScript {
-			fd.notInLocalScript = true
 		}
 	}
 	return nil
@@ -648,7 +644,6 @@ func (lib *Library[T]) Clone() *Library[T] {
 			source:            fd.source,
 			description:       fd.description,
 			immutable:         fd.immutable,
-			notInLocalScript:  fd.notInLocalScript,
 		}
 		if fd.bytecode != nil {
 			fdCopy.bytecode = make([]byte, len(fd.bytecode))

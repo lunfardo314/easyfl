@@ -11,8 +11,9 @@ import (
 )
 
 // Phase-C test suite for the local-script feature. Covers compile, wire
-// format, cycle detection, forward references, the notInLocalScript flag,
-// evaluation, and decompile. Plus the Phase-B benchmarks at the bottom.
+// format, cycle detection, forward references, the call-site validation
+// hook, evaluation, and decompile. Plus the Phase-B benchmarks at the
+// bottom.
 
 // =============================================================================
 // Compile & wire format
@@ -305,56 +306,6 @@ func TestLocalScript_DiamondDependencyAccepted(t *testing.T) {
 }
 
 // =============================================================================
-// notInLocalScript flag
-// =============================================================================
-
-func TestLocalScript_NotInLocalScript_CompileReject(t *testing.T) {
-	lib := NewBaseLibrary[any]()
-	require.NoError(t, lib.ExtendMany(`func forbidden : concat($0, 0x99)`))
-	fd, ok := lib.funByName["forbidden"]
-	require.True(t, ok)
-	fd.notInLocalScript = true
-
-	_, err := lib.CompileLocalScript(`func bad : forbidden($0)`)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "not allowed inside a local script")
-	require.Contains(t, err.Error(), "forbidden")
-}
-
-func TestLocalScript_NotInLocalScript_DecodeReject(t *testing.T) {
-	lib := NewBaseLibrary[any]()
-	require.NoError(t, lib.ExtendMany(`func forbidden : concat($0, 0x99)`))
-
-	// Compile a script that uses `forbidden` BEFORE flipping the flag.
-	bin, err := lib.CompileLocalScript(`func bad : forbidden($0)`)
-	require.NoError(t, err)
-
-	// Flip the flag retroactively. Decoding the previously-compiled bin must
-	// now fail (defense-in-depth on the decoder).
-	fd, ok := lib.funByName["forbidden"]
-	require.True(t, ok)
-	fd.notInLocalScript = true
-
-	_, err = lib.LocalScriptFromBytes(bin)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "not allowed inside a local script")
-}
-
-func TestLocalScript_NotInLocalScript_GlobalUseAllowed(t *testing.T) {
-	lib := NewBaseLibrary[any]()
-	require.NoError(t, lib.ExtendMany(`func forbidden : concat($0, 0x99)`))
-	fd, ok := lib.funByName["forbidden"]
-	require.True(t, ok)
-	fd.notInLocalScript = true
-
-	// Calling `forbidden` from a top-level / extended-fn body still works.
-	require.NoError(t, lib.ExtendMany(`func usesForbidden : forbidden($0)`))
-	got, err := lib.EvalFromSource(nil, `usesForbidden(0x42)`)
-	require.NoError(t, err)
-	require.Equal(t, []byte{0x42, 0x99}, got)
-}
-
-// =============================================================================
 // Evaluation edge cases
 // =============================================================================
 
@@ -499,8 +450,9 @@ func g : f(concat($0, 0xbb))
 	require.ElementsMatch(t, []string{"concat", "f", "concat"}, calleeNames)
 }
 
-// TestLocalScriptCheck_RejectByCallee shows the hook used to replace the
-// notInLocalScript flag: the host bans a specific callee at compile time.
+// TestLocalScriptCheck_RejectByCallee shows the hook in its simplest mode:
+// the host bans a specific callee at compile time. (This is the use case
+// the legacy notInLocalScript flag covered before it was removed.)
 func TestLocalScriptCheck_RejectByCallee(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 	require.NoError(t, lib.ExtendMany(`func dangerous : concat($0, 0xff)`))

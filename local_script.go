@@ -50,8 +50,22 @@ type LocalScript[T any] struct {
 
 // CompileLocalScript compiles EasyFL source containing one or more function
 // definitions into a LocalScriptBin. Source order is free; cycles, vararg
-// locals, references to globals flagged notInLocalScript, and over-arity
-// definitions are rejected.
+// locals, and over-arity definitions are rejected.
+//
+// Cross-script composition (e.g. a `callRedeemer(hash, fnIdx, ...)` pattern
+// where the host registers callRedeemer as a vararg global) is structurally
+// recursion-free without any runtime check: the callee is identified by
+// content hash, and a hash can only exist after the callee binary is
+// compiled — so the dependency graph between binaries is a DAG by
+// construction, the same way the function-reference graph inside the
+// library is a DAG. easyfl therefore imposes no per-call restriction.
+//
+// Hosts that want to *declare* which other scripts a binary is willing to
+// call (an "import list" — useful for catching typos at compile time and
+// for verifying call-site structure such as fnIdx-in-range and arity
+// match) can use CompileLocalScriptWithCheck. Such a declaration is a
+// compile-time precaution, not a safety property; safety comes from the
+// hash-by-content rule above.
 func (lib *Library[T]) CompileLocalScript(source string) (LocalScriptBin, error) {
 	bin, _, err := lib.CompileLocalScriptWithIndex(source)
 	return bin, err
@@ -142,17 +156,13 @@ func (lib *Library[T]) compileLocalScript(source string, check LocalScriptCallSi
 		return nil, nil, err
 	}
 
-	// ---- Phase 5: forbidden-funCode check (refs to globals flagged notInLocalScript)
-	for i, bc := range bytecodes {
-		if err := checkForbiddenGlobalRefs(lib, scope.funByFunCode[i].sym, bc); err != nil {
-			return nil, nil, err
-		}
-	}
-
-	// ---- Phase 5.5: user-supplied call-site check (if any)
+	// ---- Phase 5: user-supplied call-site check (if any)
 	// Decode each pre-toposort bytecode into an Expression tree using the
 	// source-name scope, then walk for the user check. Source-level names
-	// are visible for both the caller and any local callees.
+	// are visible for both the caller and any local callees. Typical use
+	// is to enforce a declared import list (e.g. "callRedeemer's first
+	// argument must hash to one of these pinned binaries"); see the
+	// LocalScriptCallSiteCheck doc for the full rationale.
 	if check != nil {
 		for i, bc := range bytecodes {
 			expr, err := lib.ExpressionFromBytecode(bc, scope)
@@ -192,10 +202,27 @@ func (lib *Library[T]) compileLocalScript(source string, check LocalScriptCallSi
 // Expression node representing the call. Returning a non-nil error fails
 // the operation with that error.
 //
-// The hook lets a host enforce its own composability rules — typically
-// "callRedeemer's first argument must be a 32-byte literal whose value
-// hashes to a known binary" — without baking those rules into easyfl.
-// It runs in addition to the built-in notInLocalScript check.
+// The hook is **not** a safety mechanism. Cross-script composition via a
+// host-registered `callRedeemer(hash, fnIdx, ...)` global is recursion-
+// free by construction: hashes only exist after the callee is compiled,
+// so the dependency graph is a DAG, and a host that dispatches by hash
+// cannot be tricked into calling itself. The same property removed the
+// need for the legacy notInLocalScript flag.
+//
+// What the hook *is* useful for is a compile-time **declaration** of a
+// binary's dependencies — an import list. The host registers a check
+// that, for each `callRedeemer(...)` site, verifies:
+//
+//   1. The first argument is a 32-byte literal hash.
+//   2. That hash is in the binary's declared import set.
+//   3. The fnIdx literal is in range of the imported binary's functions.
+//   4. The number of forwarded args matches the imported function's arity.
+//
+// All four are catch-typos-early checks; none of them are required for
+// safety. A binary compiled without a check is no less sound than one
+// compiled with — the check just turns a "bad call rejected at execution
+// time" failure into a "bad call rejected at compile time" failure, and
+// makes the import set visible to readers of the source.
 type LocalScriptCallSiteCheck[T any] func(callerSym string, callee *Expression[T]) error
 
 // IsInlineData reports whether the expression is an inline-data literal
@@ -260,8 +287,14 @@ func walkExpressionCalls[T any](callerSym string, expr *Expression[T], cb LocalS
 // scope is used to decode). Caller-symbol names are the source-level
 // function names from the script.
 //
-// Use this to enforce host-side composability rules without modifying
-// easyfl. A `check == nil` is equivalent to CompileLocalScriptWithIndex.
+// Typical use is to declare which other binaries the script is willing
+// to call into — an "import list" expressed at the call-site level.
+// Recursion is impossible regardless (calls dispatch by content hash,
+// which forms a DAG by construction); the check is a compile-time
+// precaution that catches unknown hashes, out-of-range fnIdx values, and
+// arity mismatches early. A `check == nil` is equivalent to
+// CompileLocalScriptWithIndex and is just as sound — only less helpful
+// to the source author.
 func (lib *Library[T]) CompileLocalScriptWithCheck(source string, check LocalScriptCallSiteCheck[T]) (LocalScriptBin, map[string]int, error) {
 	return lib.compileLocalScript(source, check)
 }
@@ -269,8 +302,13 @@ func (lib *Library[T]) CompileLocalScriptWithCheck(source string, check LocalScr
 // LocalScriptFromBytesWithCheck is like LocalScriptFromBytes but also
 // invokes `check` for every non-trivial call site in the decoded bodies.
 // Caller-symbol names are the synthesised "script#i" form used at decode
-// time. Useful for hosts validating an arbitrary binary they did not
-// compile.
+// time.
+//
+// Useful when a binary travels across an import-set boundary (compiled
+// against import set A, decoded for execution against import set B): the
+// caller can re-run its declaration against the imported binary it
+// actually has on hand. As at compile time, this is a precaution, not a
+// soundness gate.
 func (lib *Library[T]) LocalScriptFromBytesWithCheck(bin LocalScriptBin, check LocalScriptCallSiteCheck[T]) (*LocalScript[T], error) {
 	s, err := lib.LocalScriptFromBytes(bin)
 	if err != nil {
@@ -311,13 +349,6 @@ func (lib *Library[T]) LocalScriptFromBytes(bin LocalScriptBin) (*LocalScript[T]
 		}
 		ret.funByName[sym] = d
 		ret.funByFunCode = append(ret.funByFunCode, d)
-	}
-
-	// Defense-in-depth: forbidden-funCode check on every body.
-	for i, bc := range bodies {
-		if err := checkForbiddenGlobalRefs(lib, ret.funByFunCode[i].sym, bc); err != nil {
-			return nil, err
-		}
 	}
 
 	// Build expression trees in array order; the encoder writes dependencies first,
@@ -698,25 +729,3 @@ func topologicalSortLocal(bytecodes [][]byte) ([]int, error) {
 	return out, nil
 }
 
-// checkForbiddenGlobalRefs walks bc and rejects any reference to a global
-// function whose descriptor has notInLocalScript = true.
-func checkForbiddenGlobalRefs[T any](lib *Library[T], sym string, bc []byte) error {
-	return walkBytecode(bc, func(funCode uint16, isLocal bool, _ int) error {
-		if isLocal {
-			return nil
-		}
-		if funCode <= LastEmbeddedReserved {
-			// parameter reference — not a function call
-			return nil
-		}
-		fd, ok := lib.funByFunCode[funCode]
-		if !ok {
-			// unknown global: handled elsewhere; no opinion here
-			return nil
-		}
-		if fd.notInLocalScript {
-			return fmt.Errorf("local script: function '%s' is not allowed inside a local script (used in '%s')", fd.sym, sym)
-		}
-		return nil
-	})
-}

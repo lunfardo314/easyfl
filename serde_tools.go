@@ -32,16 +32,15 @@ type (
 	// Immutable: if true, function cannot be replaced/modified in upgrades
 	FuncDescriptorYAMLAble struct {
 		Sym              string `yaml:"sym"`
-		FunCode          uint16 `yaml:"funCode,omitempty"`
-		NumArgs          int    `yaml:"numArgs"`
-		EmbeddedAs       string `yaml:"embedded_as,omitempty"`
-		Short            bool   `yaml:"short,omitempty"`
-		Replace          bool   `yaml:"replace,omitempty"`
-		Immutable        bool   `yaml:"immutable,omitempty"`
-		NotInLocalScript bool   `yaml:"notInLocalScript,omitempty"`
-		Source           string `yaml:"source,omitempty"`
-		Bytecode         string `yaml:"bytecode,omitempty"`
-		Description      string `yaml:"description,omitempty"`
+		FunCode     uint16 `yaml:"funCode,omitempty"`
+		NumArgs     int    `yaml:"numArgs"`
+		EmbeddedAs  string `yaml:"embedded_as,omitempty"`
+		Short       bool   `yaml:"short,omitempty"`
+		Replace     bool   `yaml:"replace,omitempty"`
+		Immutable   bool   `yaml:"immutable,omitempty"`
+		Source      string `yaml:"source,omitempty"`
+		Bytecode    string `yaml:"bytecode,omitempty"`
+		Description string `yaml:"description,omitempty"`
 	}
 )
 
@@ -115,13 +114,6 @@ func (fd *funDescriptor[T]) write(w io.Writer) {
 		immutableByte = 1
 	}
 	_, _ = w.Write([]byte{immutableByte})
-
-	// notInLocalScript flag
-	notInLocalByte := byte(0)
-	if fd.notInLocalScript {
-		notInLocalByte = 1
-	}
-	_, _ = w.Write([]byte{notInLocalByte})
 }
 
 // ToYAML generates YAML data. Prefix is added at the beginning, usually it is a comment
@@ -255,9 +247,6 @@ func prnFuncDescription(w io.Writer, f *FuncDescriptorYAMLAble, compiled bool) {
 	if f.Immutable {
 		prn(w, ident2+"immutable: true\n")
 	}
-	if f.NotInLocalScript {
-		prn(w, ident2+"notInLocalScript: true\n")
-	}
 	if f.EmbeddedAs == "" {
 		if compiled {
 			prn(w, ident2+"bytecode: %s\n", f.Bytecode)
@@ -271,16 +260,15 @@ func (lib *Library[T]) mustFunYAMLAbleByName(sym string) *FuncDescriptorYAMLAble
 	easyfl_util.AssertNoError(err)
 	d := lib.funByFunCode[fi.FunCode]
 	return &FuncDescriptorYAMLAble{
-		Description:      d.description,
-		Sym:              d.sym,
-		FunCode:          d.funCode,
-		EmbeddedAs:       d.embeddedAs,
-		Short:            fi.IsShort,
-		Immutable:        d.immutable,
-		NotInLocalScript: d.notInLocalScript,
-		NumArgs:          d.requiredNumParams,
-		Source:           d.source,
-		Bytecode:         hex.EncodeToString(d.bytecode),
+		Description: d.description,
+		Sym:         d.sym,
+		FunCode:     d.funCode,
+		EmbeddedAs:  d.embeddedAs,
+		Short:       fi.IsShort,
+		Immutable:   d.immutable,
+		NumArgs:     d.requiredNumParams,
+		Source:      d.source,
+		Bytecode:    hex.EncodeToString(d.bytecode),
 	}
 }
 
@@ -347,20 +335,16 @@ func (lib *Library[T]) introduceFromParsedYAML(fromYAML *LibraryFromYAML, embed 
 				if d.Immutable {
 					fd.immutable = true
 				}
-				if d.NotInLocalScript {
-					fd.notInLocalScript = true
-				}
 			}
 		} else {
 			// extended function — append to pending batch
 			lib.pendingBatch = append(lib.pendingBatch, pendingExtendedFunc{
-				sym:              d.Sym,
-				source:           d.Source,
-				description:      d.Description,
-				isReplace:        d.Replace,
-				isVararg:         d.NumArgs == -1,
-				immutable:        d.Immutable,
-				notInLocalScript: d.NotInLocalScript,
+				sym:         d.Sym,
+				source:      d.Source,
+				description: d.Description,
+				isReplace:   d.Replace,
+				isVararg:    d.NumArgs == -1,
+				immutable:   d.Immutable,
 			})
 		}
 	}
