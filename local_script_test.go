@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/blake2b"
 )
 
 // Phase-C test suite for the local-script feature. Covers compile, wire
@@ -458,6 +459,310 @@ func TestLocalScript_DecompileSane(t *testing.T) {
 	// resolved, so DecompileBytecode should fail.
 	_, err = lib.DecompileBytecode(bc)
 	require.Error(t, err)
+}
+
+// =============================================================================
+// LocalScriptCallSiteCheck (compile- and decode-time hook)
+// =============================================================================
+
+// TestLocalScriptCheck_FiresPerCallSite verifies that the hook is invoked
+// once per non-trivial call expression, in preorder, and not for inline
+// data or parameter references.
+func TestLocalScriptCheck_FiresPerCallSite(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+	type call struct {
+		caller string
+		callee string
+	}
+	var seen []call
+	check := func(callerSym string, callee *Expression[any]) error {
+		seen = append(seen, call{callerSym, callee.FunctionName})
+		return nil
+	}
+	const source = `
+func f : concat($0, 0xaa)
+func g : f(concat($0, 0xbb))
+`
+	_, _, err := lib.CompileLocalScriptWithCheck(source, check)
+	require.NoError(t, err)
+	// f's body: concat($0, 0xaa) — one call ("concat"); $0 and 0xaa are
+	// param ref / inline data and skipped.
+	// g's body: f(concat($0, 0xbb)) — two calls ("f", "concat"); both args
+	// of the inner concat are skipped.
+	calleeNames := func() []string {
+		out := make([]string, len(seen))
+		for i, c := range seen {
+			out[i] = c.callee
+		}
+		return out
+	}()
+	require.ElementsMatch(t, []string{"concat", "f", "concat"}, calleeNames)
+}
+
+// TestLocalScriptCheck_RejectByCallee shows the hook used to replace the
+// notInLocalScript flag: the host bans a specific callee at compile time.
+func TestLocalScriptCheck_RejectByCallee(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+	require.NoError(t, lib.ExtendMany(`func dangerous : concat($0, 0xff)`))
+
+	check := func(_ string, callee *Expression[any]) error {
+		if callee.FunctionName == "dangerous" {
+			return fmt.Errorf("call to %q is not allowed", callee.FunctionName)
+		}
+		return nil
+	}
+	_, _, err := lib.CompileLocalScriptWithCheck(`func bad : dangerous($0)`, check)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not allowed")
+	require.Contains(t, err.Error(), "dangerous")
+}
+
+// TestLocalScriptCheck_InspectsLiteralArg shows the callRedeemer-style use
+// case: the hook reads a literal argument (would be a 32-byte hash in the
+// real callRedeemer scenario) and decides based on its value.
+func TestLocalScriptCheck_InspectsLiteralArg(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+	pinned := map[string]bool{
+		"\x9f\x3a": true, // arbitrary "known binary" stand-in
+	}
+	check := func(_ string, callee *Expression[any]) error {
+		if callee.FunctionName != "concat" {
+			return nil
+		}
+		if len(callee.Args) == 0 {
+			return nil
+		}
+		first := callee.Args[0]
+		if !first.IsInlineData() {
+			return fmt.Errorf("first arg of concat must be a literal")
+		}
+		lit := string(first.InlineData())
+		if !pinned[lit] {
+			return fmt.Errorf("first arg of concat (%x) is not pinned", lit)
+		}
+		return nil
+	}
+
+	// Allowed: concat's first arg is the pinned literal 0x9f3a.
+	_, _, err := lib.CompileLocalScriptWithCheck(`func ok : concat(0x9f3a, $0)`, check)
+	require.NoError(t, err)
+
+	// Rejected: concat's first arg is some other literal.
+	_, _, err = lib.CompileLocalScriptWithCheck(`func bad : concat(0x1234, $0)`, check)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not pinned")
+
+	// Rejected: concat's first arg is not a literal (it's another call).
+	_, _, err = lib.CompileLocalScriptWithCheck(
+		`func bad : concat(concat($0, 0x9f3a), $1)`, check)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "must be a literal")
+}
+
+// TestLocalScriptCheck_DecodeTime shows the hook running on a binary the
+// caller did not compile themselves (defense-in-depth).
+func TestLocalScriptCheck_DecodeTime(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+	require.NoError(t, lib.ExtendMany(`func dangerous : concat($0, 0xff)`))
+
+	// Compile a binary that uses `dangerous` (no flag flipped here).
+	bin, err := lib.CompileLocalScript(`func bad : dangerous($0)`)
+	require.NoError(t, err)
+
+	check := func(_ string, callee *Expression[any]) error {
+		if callee.FunctionName == "dangerous" {
+			return fmt.Errorf("call to %q is not allowed", callee.FunctionName)
+		}
+		return nil
+	}
+	_, err = lib.LocalScriptFromBytesWithCheck(bin, check)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not allowed")
+
+	// Same bin, no check: still decodes (host's choice to validate).
+	_, err = lib.LocalScriptFromBytes(bin)
+	require.NoError(t, err)
+}
+
+// TestLocalScriptCheck_CallRedeemerPattern is the worked example of the
+// full chess-covenant pattern (chess_script.md §9.6): the host registers
+// a `callRedeemer(hash, fnIdx, ...args)` global, pins the binaries it
+// is willing to dispatch into, and uses the call-site check to enforce —
+// at compile time — that every callRedeemer site has:
+//
+//   1. callee name "callRedeemer"
+//   2. arg[0] is a 32-byte literal whose value hashes to a known binary
+//   3. arg[1] is a 1-byte literal in range of the pinned binary's fns
+//   4. the remaining args match that fn's declared arity
+//
+// All of (1)–(4) come out of the existing hook + Expression helpers; the
+// host doesn't need any easyfl change.
+func TestLocalScriptCheck_CallRedeemerPattern(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	// --- Build a "library" local script that the consumer will pin. ---
+	libBin, libIdx, err := lib.CompileLocalScriptWithIndex(`
+func helper2 : concat($0, $1)
+func helper3 : concat($0, $1, $2)
+`)
+	require.NoError(t, err)
+	libScript, err := lib.LocalScriptFromBytes(libBin)
+	require.NoError(t, err)
+	libHash := blake2bSum32(libBin)
+
+	// --- Register a vararg `callRedeemer` global so the consumer source
+	//     parses. The body is irrelevant; only the call-site check
+	//     inspects callRedeemer call structure at compile time. ---
+	require.NoError(t, lib.ExtendMany(`func_vararg callRedeemer : $0`))
+
+	// --- Host's call-site check: enforce the pattern above. ---
+	pinned := map[[32]byte]*LocalScript[any]{libHash: libScript}
+	check := func(_ string, callee *Expression[any]) error {
+		if callee.FunctionName != "callRedeemer" {
+			return nil
+		}
+		if len(callee.Args) < 2 {
+			return fmt.Errorf("callRedeemer needs at least hash + fnIdx")
+		}
+		// (2) hash literal
+		h := callee.Args[0]
+		if !h.IsInlineData() {
+			return fmt.Errorf("callRedeemer arg 0 must be a 32-byte literal hash")
+		}
+		hashBytes := h.InlineData()
+		if len(hashBytes) != 32 {
+			return fmt.Errorf("callRedeemer arg 0 must be 32 bytes, got %d", len(hashBytes))
+		}
+		var key [32]byte
+		copy(key[:], hashBytes)
+		dep, ok := pinned[key]
+		if !ok {
+			return fmt.Errorf("callRedeemer hash %x is not pinned", key)
+		}
+		// (3) fnIdx literal in range
+		f := callee.Args[1]
+		if !f.IsInlineData() {
+			return fmt.Errorf("callRedeemer arg 1 must be a 1-byte literal fnIdx")
+		}
+		idxBytes := f.InlineData()
+		if len(idxBytes) != 1 {
+			return fmt.Errorf("callRedeemer arg 1 must be 1 byte, got %d", len(idxBytes))
+		}
+		idx := int(idxBytes[0])
+		if idx < 0 || idx >= dep.NumFunctions() {
+			return fmt.Errorf("callRedeemer fnIdx %d out of range (dep has %d fns)",
+				idx, dep.NumFunctions())
+		}
+		// (4) arity match
+		arity, err := dep.Arity(idx)
+		if err != nil {
+			return err
+		}
+		nForwarded := len(callee.Args) - 2
+		if nForwarded != arity {
+			return fmt.Errorf("callRedeemer to fn#%d: expected %d forwarded args, got %d",
+				idx, arity, nForwarded)
+		}
+		return nil
+	}
+
+	// --- Helpers for assembling source ---
+	helper2Wire := libIdx["helper2"]
+	helper3Wire := libIdx["helper3"]
+	hashLit := fmt.Sprintf("0x%x", libHash[:])
+	bytesLit := func(b byte) string { return fmt.Sprintf("0x%02x", b) }
+
+	// --- (a) Valid: pinned hash, valid idx, arity matches. ---
+	src := fmt.Sprintf(`func ok : callRedeemer(%s, %s, $0, $1)`,
+		hashLit, bytesLit(byte(helper2Wire)))
+	_, _, err = lib.CompileLocalScriptWithCheck(src, check)
+	require.NoError(t, err, "valid callRedeemer must be accepted")
+
+	// --- (b) Different valid call: helper3 with 3 args. ---
+	src = fmt.Sprintf(`func ok : callRedeemer(%s, %s, $0, $1, $2)`,
+		hashLit, bytesLit(byte(helper3Wire)))
+	_, _, err = lib.CompileLocalScriptWithCheck(src, check)
+	require.NoError(t, err)
+
+	// --- (c) Reject: hash is a valid 32-byte literal but not pinned. ---
+	wrongHash := "0x" + strings.Repeat("00", 32)
+	src = fmt.Sprintf(`func bad : callRedeemer(%s, %s, $0, $1)`,
+		wrongHash, bytesLit(byte(helper2Wire)))
+	_, _, err = lib.CompileLocalScriptWithCheck(src, check)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "is not pinned")
+
+	// --- (d) Reject: hash literal is not 32 bytes. ---
+	src = fmt.Sprintf(`func bad : callRedeemer(0xdeadbeef, %s, $0, $1)`,
+		bytesLit(byte(helper2Wire)))
+	_, _, err = lib.CompileLocalScriptWithCheck(src, check)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "must be 32 bytes")
+
+	// --- (e) Reject: hash arg is not a literal at all. ---
+	src = fmt.Sprintf(`func bad : callRedeemer(concat($0, %s), %s, $1, $2)`,
+		hashLit, bytesLit(byte(helper2Wire)))
+	_, _, err = lib.CompileLocalScriptWithCheck(src, check)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "must be a 32-byte literal hash")
+
+	// --- (f) Reject: fnIdx out of range for the pinned binary. ---
+	oob := byte(libScript.NumFunctions())
+	src = fmt.Sprintf(`func bad : callRedeemer(%s, %s, $0, $1)`,
+		hashLit, bytesLit(oob))
+	_, _, err = lib.CompileLocalScriptWithCheck(src, check)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "out of range")
+
+	// --- (g) Reject: arity mismatch (helper2 expects 2 forwarded args). ---
+	src = fmt.Sprintf(`func bad : callRedeemer(%s, %s, $0, $1, $2)`,
+		hashLit, bytesLit(byte(helper2Wire)))
+	_, _, err = lib.CompileLocalScriptWithCheck(src, check)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "expected 2 forwarded args, got 3")
+
+	// --- (h) Decode-time defense: a bin compiled WITHOUT the check (or
+	//     compiled in a different process / pinned set) is still loadable
+	//     under LocalScriptFromBytesWithCheck for re-validation. ---
+	src = fmt.Sprintf(`func ok : callRedeemer(%s, %s, $0, $1)`,
+		hashLit, bytesLit(byte(helper2Wire)))
+	bin, err := lib.CompileLocalScript(src)
+	require.NoError(t, err)
+	_, err = lib.LocalScriptFromBytesWithCheck(bin, check)
+	require.NoError(t, err)
+	// And: same bin re-checked under a different pinned set fails.
+	otherCheck := func(_ string, callee *Expression[any]) error {
+		if callee.FunctionName == "callRedeemer" {
+			return fmt.Errorf("callRedeemer not pinned in this context")
+		}
+		return nil
+	}
+	_, err = lib.LocalScriptFromBytesWithCheck(bin, otherCheck)
+	require.Error(t, err)
+}
+
+// blake2bSum32 returns blake2b-256 of data as a 32-byte array.
+func blake2bSum32(data []byte) [32]byte {
+	h, err := blake2b.New256(nil)
+	if err != nil {
+		panic(err)
+	}
+	h.Write(data)
+	var out [32]byte
+	copy(out[:], h.Sum(nil))
+	return out
+}
+
+// TestLocalScriptCheck_NilIsNoop confirms a nil hook is the same as the
+// non-Check entry point.
+func TestLocalScriptCheck_NilIsNoop(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+	bin1, idx1, err := lib.CompileLocalScriptWithCheck(`func f : concat($0, 0xaa)`, nil)
+	require.NoError(t, err)
+	bin2, idx2, err := lib.CompileLocalScriptWithIndex(`func f : concat($0, 0xaa)`)
+	require.NoError(t, err)
+	require.Equal(t, bin2, bin1)
+	require.Equal(t, idx2, idx1)
 }
 
 // =============================================================================

@@ -63,6 +63,16 @@ func (lib *Library[T]) CompileLocalScript(source string) (LocalScriptBin, error)
 // invoke a specific function by source name; the decoded *LocalScript[T]
 // uses synthetic "script#i" symbols and has no knowledge of source names.
 func (lib *Library[T]) CompileLocalScriptWithIndex(source string) (LocalScriptBin, map[string]int, error) {
+	return lib.compileLocalScript(source, nil)
+}
+
+// compileLocalScript is the shared implementation of
+// CompileLocalScriptWithIndex (check == nil) and CompileLocalScriptWithCheck.
+// When check is non-nil it is invoked once per non-trivial call site after
+// cycle / forbidden-funCode checks but before bytecode is encoded —
+// callers see source-level names for both the calling function and any
+// local callees.
+func (lib *Library[T]) compileLocalScript(source string, check LocalScriptCallSiteCheck[T]) (LocalScriptBin, map[string]int, error) {
 	// ---- Phase 1: parse
 	parsed, err := parseFunctions(source)
 	if err != nil {
@@ -139,6 +149,23 @@ func (lib *Library[T]) CompileLocalScriptWithIndex(source string) (LocalScriptBi
 		}
 	}
 
+	// ---- Phase 5.5: user-supplied call-site check (if any)
+	// Decode each pre-toposort bytecode into an Expression tree using the
+	// source-name scope, then walk for the user check. Source-level names
+	// are visible for both the caller and any local callees.
+	if check != nil {
+		for i, bc := range bytecodes {
+			expr, err := lib.ExpressionFromBytecode(bc, scope)
+			if err != nil {
+				return nil, nil, fmt.Errorf("local script: rebuilding expression for check in '%s': %v",
+					scope.funByFunCode[i].sym, err)
+			}
+			if err := walkExpressionCalls(scope.funByFunCode[i].sym, expr, check); err != nil {
+				return nil, nil, err
+			}
+		}
+	}
+
 	// ---- Phase 6: topological sort + encode in dependency order
 	order, err := topologicalSortLocal(bytecodes)
 	if err != nil {
@@ -155,6 +182,109 @@ func (lib *Library[T]) CompileLocalScriptWithIndex(source string) (LocalScriptBi
 		symIndex[parsed[oldIdx].Sym] = wireIdx
 	}
 	return bin, symIndex, nil
+}
+
+// LocalScriptCallSiteCheck is a per-call-site validation hook invoked by
+// CompileLocalScriptWithCheck and LocalScriptFromBytesWithCheck. For every
+// non-trivial call expression encountered while walking each function body
+// (excluding inline-data literals and $0..$14 parameter references) the
+// hook receives the source-level name of the calling function plus the
+// Expression node representing the call. Returning a non-nil error fails
+// the operation with that error.
+//
+// The hook lets a host enforce its own composability rules — typically
+// "callRedeemer's first argument must be a 32-byte literal whose value
+// hashes to a known binary" — without baking those rules into easyfl.
+// It runs in addition to the built-in notInLocalScript check.
+type LocalScriptCallSiteCheck[T any] func(callerSym string, callee *Expression[T]) error
+
+// IsInlineData reports whether the expression is an inline-data literal
+// (the high bit of CallPrefix[0] is set per the bytecode format). Inline
+// data has its full payload embedded in CallPrefix.
+func (e *Expression[T]) IsInlineData() bool {
+	return len(e.CallPrefix) > 0 && e.CallPrefix[0]&FirstByteDataMask != 0
+}
+
+// InlineData returns the literal bytes for an inline-data expression, or
+// nil if the expression is not inline data. Both the short form
+// (`0x80|len + payload`) and the long form (`0xff + len[2] + payload`)
+// are decoded.
+func (e *Expression[T]) InlineData() []byte {
+	if !e.IsInlineData() {
+		return nil
+	}
+	if e.CallPrefix[0] == 0xff {
+		if len(e.CallPrefix) < 3 {
+			return nil
+		}
+		return e.CallPrefix[3:]
+	}
+	return e.CallPrefix[1:]
+}
+
+// IsParameterRef reports whether the expression is a $0..$14 parameter
+// reference (a single-byte short call with funCode in the reserved range).
+func (e *Expression[T]) IsParameterRef() bool {
+	if e.IsInlineData() || len(e.CallPrefix) != 1 {
+		return false
+	}
+	return uint16(e.CallPrefix[0]) <= LastEmbeddedReserved
+}
+
+// walkExpressionCalls invokes cb once per non-trivial call site (not inline
+// data, not parameter ref) found in expr, in preorder.
+func walkExpressionCalls[T any](callerSym string, expr *Expression[T], cb LocalScriptCallSiteCheck[T]) error {
+	if cb == nil {
+		return nil
+	}
+	if !expr.IsInlineData() && !expr.IsParameterRef() {
+		if err := cb(callerSym, expr); err != nil {
+			return err
+		}
+	}
+	for _, arg := range expr.Args {
+		if err := walkExpressionCalls(callerSym, arg, cb); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// CompileLocalScriptWithCheck is like CompileLocalScriptWithIndex but
+// additionally invokes `check` for every non-trivial call site in the
+// compiled bodies. Returning a non-nil error from `check` fails
+// compilation.
+//
+// Local-call call-sites carry their source-level name in the callee's
+// FunctionName when invoked from this entry point (the parent script's
+// scope is used to decode). Caller-symbol names are the source-level
+// function names from the script.
+//
+// Use this to enforce host-side composability rules without modifying
+// easyfl. A `check == nil` is equivalent to CompileLocalScriptWithIndex.
+func (lib *Library[T]) CompileLocalScriptWithCheck(source string, check LocalScriptCallSiteCheck[T]) (LocalScriptBin, map[string]int, error) {
+	return lib.compileLocalScript(source, check)
+}
+
+// LocalScriptFromBytesWithCheck is like LocalScriptFromBytes but also
+// invokes `check` for every non-trivial call site in the decoded bodies.
+// Caller-symbol names are the synthesised "script#i" form used at decode
+// time. Useful for hosts validating an arbitrary binary they did not
+// compile.
+func (lib *Library[T]) LocalScriptFromBytesWithCheck(bin LocalScriptBin, check LocalScriptCallSiteCheck[T]) (*LocalScript[T], error) {
+	s, err := lib.LocalScriptFromBytes(bin)
+	if err != nil {
+		return nil, err
+	}
+	if check == nil {
+		return s, nil
+	}
+	for i := 0; i < s.NumFunctions(); i++ {
+		if err := walkExpressionCalls(s.funByFunCode[i].sym, s.expressions[i], check); err != nil {
+			return nil, err
+		}
+	}
+	return s, nil
 }
 
 // LocalScriptFromBytes parses a LocalScriptBin into the executable form.
