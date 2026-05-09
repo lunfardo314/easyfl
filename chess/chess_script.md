@@ -2,17 +2,22 @@
 
 ## Purpose
 
-Stress-test the local-script feature with a non-trivial real-world covenant:
-validate a single chess move against the rules of chess, expressed entirely
-as an EasyFL local script (no Go-level chess knowledge). The script is
-compiled once via `Library[T].CompileLocalScript`, decoded into
-`*LocalScript[T]`, and invoked from Go test cases that exercise legal moves,
-illegal moves, and the starting-position predicate.
+This file specifies a **chess-validator local script** — a rule-pure,
+reusable EasyFL building block. It validates a single chess half-move
+against the rules of chess, exposed via a small set of predicates
+(`boardOK`, `isStart`, `playerMove`, `isCheck`, `sideToMove`). It does
+**not** implement the on-chain game protocol (bounty, deadlines, tie
+acceptance, resignation, signatures) — those belong in a higher-level
+**chessGame redeemer** that consumes a UTXO carrying a minimal
+`chess()` constraint and invokes the validator for move-rule
+predicates. See [§9](#9-game-flow-at-the-covenant-level) for the
+chessGame layer.
 
-This is a test, not a production engine. Several rules are out of scope (see
-[§6](#6-out-of-scope-v1-simplifications)); the goal is to exercise the
-local-script feature end to end with realistic intra-script call patterns,
-not to build a chess engine.
+The validator stress-tests the local-script feature with a non-trivial
+real-world payload: realistic intra-script call patterns, no Go-level
+chess knowledge, all logic in EasyFL. Several rules are out of scope
+(see [§6](#6-out-of-scope-v1-simplifications)) but the public surface
+is the load-bearing API for any chessGame redeemer that wraps it.
 
 ## 1. Board encoding (69 bytes)
 
@@ -700,37 +705,64 @@ test (or once via testing helpers and reused).
 11. Compile via `Library[T].CompileLocalScriptWithIndex` so tests can
     invoke functions by source-level name.
 
-## 9. Game flow at the covenant level
+## 9. Game flow at the chessGame-redeemer level
 
-These rules belong to the surrounding Proxima covenant, not to this script.
-They are listed here so the script's public surface (`boardOK`, `move`,
-`isCheck`, `playerMove`, `isStart`) is judged in context.
+This script is the **chessValidator**: pure rules, no on-chain protocol.
+The on-chain protocol — bounty, deadlines, tie acceptance, resignation,
+signature checks — belongs in a separate **chessGame** redeemer that
+consumes a UTXO carrying a minimal `chess()` constraint. The intent is
+to keep UTXO-side logic almost empty (`chess()` just delegates to the
+redeemer); all of the protocol lives in chessGame, which composes
+chessValidator for the move-rule predicates.
+
+This section sketches that chessGame layer so the validator's public
+surface is judged in context. The chessGame redeemer itself is not
+in this repo; the contract here is the API listed in §9.0.
+
+### 9.0 Validator entry points used by chessGame
+
+| Symbol | Argument shape | Returns | Used by chessGame for |
+| --- | --- | --- | --- |
+| `boardOK(board)` | 69-byte board | truthy iff structurally valid | one-shot: validate the initial board at game-start |
+| `isStart(board)` | 69-byte board | truthy iff equal to the canonical start position | optional: enforce "play from the standard start" |
+| `sideToMove(board)` | 69-byte board | the side byte (`0x10` / `0x20`) | decide whose signature is required to spend the game UTXO |
+| `playerMove(kingColor, start, spec, result)` | colour byte + two boards + 5-byte spec | truthy iff a complete legal half-move | the per-move predicate on every "ordinary" branch |
+| `isCheck(kingColor, board)` | colour byte + board | truthy iff that king is currently in check | optional, e.g. UI / SAN flag reconstruction |
+
+`move` and the per-piece helpers (`geometryOK`, `castleOK`, `epOK`, …)
+are *not* called from chessGame; they are wrapped inside `playerMove`.
+chessGame's authoritative move-validity call is `playerMove` — it
+composes (a)..(i) of [§3](#3-functions-exposed-by-the-local-script),
+plus the "moving piece is mine", "it is my turn", and "result is not
+self-check" rules.
 
 ### 9.1 Setup and bounty
-- The two players post a bounty into a single UTXO (the "game UTXO"), which
-  carries the current 69-byte board (squares + king-pos + castling rights
-  + EP target + side-to-move) and a per-move deadline. The covenant
-  validates the initial board with `boardOK` (and optionally `isStart`
-  for "play from the standard start").
+- The two players post a bounty into a single UTXO (the "game UTXO")
+  carrying a `chess()` constraint and the current 69-byte board
+  (squares + king-pos + castling rights + EP target + side-to-move),
+  alongside a per-move deadline. chessGame validates the initial
+  board with `boardOK` (and optionally `isStart` for "play from the
+  standard start").
 
 ### 9.2 A normal half-move
 - The player whose turn it is consumes the game UTXO and produces a
-  successor whose board is `result`. The covenant requires `playerMove
+  successor whose board is `result`. chessGame requires `playerMove
   (myColor, oldBoard, spec, result)` to hold; this single predicate
   covers (a)–(i) of `move`, the matching `byte(start, 68) == myColor`
   alternation rule, and the "do not leave own king in check" rule.
   Side-to-move flipping is enforced inside `move` via `sideTransOK`.
-- The deadline on the successor is shifted by the move-time budget.
-- `sideToMove(result)` tells the covenant whose signature is required
-  to spend the next UTXO.
+- chessGame also checks the player's signature, shifts the deadline
+  by the move-time budget, and forwards the bounty.
+- `sideToMove(result)` tells chessGame whose signature is required to
+  spend the next UTXO.
 
 ### 9.3 No legal move = mate-or-deadline
-- Detecting checkmate / stalemate inside the script would require
-  enumerating all candidate moves; we don't do that. Instead the rule
-  becomes:
+- Detecting checkmate / stalemate inside the validator would require
+  enumerating all candidate moves; we don't do that. Instead the
+  chessGame rule becomes:
   - If the side to move cannot produce a `playerMove` before the
     deadline, the game UTXO becomes consumable by the *opposite* side
-    via a "deadline branch" of the covenant.
+    via a "deadline branch" of chessGame.
   - Whoever consumes via that branch claims the full bounty. This
     collapses both "checkmate" and "actual time-out" into the same
     on-chain rule — the player who is mated is, by definition, also a
@@ -739,21 +771,65 @@ They are listed here so the script's public surface (`boardOK`, `move`,
     that this rule is harsher than the FIDE rule (which awards a draw
     for stalemate).
 - A symmetric branch handles the case where the wrong side tries to act
-  on a deadline before it expires — that is rejected by the deadline
-  predicate; only the player whose turn it is **not** can claim on
-  deadline.
+  on a deadline before it expires — only the player whose turn it is
+  **not** can claim on deadline.
 
-### 9.4 Tie by agreement
-- A "tie proposal" branch lets the side to move emit a successor that is
-  byte-for-byte the same board, with a `tieProposed` flag set and the
+### 9.4 Tie by agreement, resign
+- A "tie proposal" branch lets the side to move emit a successor that
+  is byte-for-byte the same board, with a `tieProposed` flag (carried
+  in the chessGame layer, not the validator board) set and the
   deadline carried over.
-- The opposite side, in their turn, may either play a normal `playerMove`
-  (which clears `tieProposed`) or take a "tie accept" branch that splits
-  the bounty equally and finalises the game.
+- The opposite side may either play a normal `playerMove` (which
+  clears `tieProposed`) or take a "tie accept" branch that splits the
+  bounty equally and finalises the game.
+- "Resign" is a sibling branch in chessGame: the side to move signs a
+  successor that finalises the game and pays the full bounty to the
+  opponent. The validator is not consulted on that branch — resign
+  is a chessGame-level move, not a chess move.
 
 ### 9.5 Out of scope for v1 covenant
 - 50-move rule and threefold repetition need history and would change the
-  UTXO schema. They are not modelled.
-- Castling, en passant, promotion follow the same fate as in the script
-  itself (see [§6](#6-out-of-scope-v1-simplifications)) — adding them is
-  a coordinated change to both the script and the move encoding.
+  UTXO schema. They are not modelled (see also
+  [§6](#6-out-of-scope-v1-simplifications)).
+- Insufficient material (FIDE draw) collapses to "shuffle until someone
+  times out" under the deadline rule — workable but not a true draw.
+
+### 9.6 Composability with other local scripts (forward-looking)
+
+The chessValidator / chessGame split sketched above only really works
+if a local script can invoke another local script. The current
+local-script feature forbids `callRedeemer` from inside a local script
+— that keeps the dependency graph trivially safe but rules out exactly
+this pattern.
+
+A clean relaxation, mirroring the DAG discipline already enforced
+inside the easyfl library at function granularity:
+
+- **Compile-time pinning.** When compiling a local script, the caller
+  passes the binaries of its callees as parameters. The compiler stores
+  their content hashes alongside the bytecode.
+- **Runtime dispatch by hash.** The compiled parent calls
+  `callRedeemer(hash, args)`; the runtime looks up the binary by hash
+  among the pinned set and evaluates it. A hash not in that set is
+  rejected.
+- **Cycles are structurally impossible.** A child binary must already
+  exist (and hash to its content) before the parent is compiled, so
+  there is no way to construct a recursive reference. Same argument as
+  the existing easyfl reference DAG, lifted from function granularity
+  to script granularity.
+- **No "callable / non-callable" flag is needed in the library** — the
+  binary-hash pinning is the gate. Whatever is pinned is callable;
+  everything else is not, by construction.
+
+Reading the redeemer record (`redeem()`) is independent of this — it's
+a pure data accessor with no recursion or composability concern, so
+allowing it inside a local script is harmless even before the above
+relaxation lands.
+
+For chess specifically: chessValidator (this script) ships with EasyFL;
+chessGame is a separately-compiled redeemer that pins chessValidator's
+binary at compile time and calls into `playerMove`, `boardOK`,
+`sideToMove`, etc. via hash-based dispatch. Neither source needs to
+know about the other beyond the pinned hash and the API in §9.0. The
+same scheme generalises: a chess-tournament redeemer can pin both
+chessValidator and chessGame as building blocks.
