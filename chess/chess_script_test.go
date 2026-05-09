@@ -52,8 +52,44 @@ const (
 
 func chSq(rank, file int) int { return rank*8 + file }
 
+// Boards are 67 bytes: 64 squares + bytes 64 (white king sq), 65 (black
+// king sq), 66 (castling rights, low 4 bits: WK WQ BK BQ). See
+// chess_script.md §1.
+const chBoardLen = 67
+
+// Castling-rights bit masks. Mirror chess_script.easyfl.
+const (
+	chCR_WK = 0x01 // white kingside
+	chCR_WQ = 0x02 // white queenside
+	chCR_BK = 0x04 // black kingside
+	chCR_BQ = 0x08 // black queenside
+	chCRAll = chCR_WK | chCR_WQ | chCR_BK | chCR_BQ // 0x0f
+)
+
+// chCRMask mirrors crMask in the easyfl source: clears the rights bit(s)
+// for any move that touches one of the 6 special squares (king or rook
+// home squares).
+func chCRMask(sq int) byte {
+	switch sq {
+	case 4: // e1 (white king home)
+		return 0xfc
+	case 7: // h1 (white kingside rook home)
+		return 0xfe
+	case 0: // a1 (white queenside rook home)
+		return 0xfd
+	case 60: // e8 (black king home)
+		return 0xf3
+	case 63: // h8 (black kingside rook home)
+		return 0xfb
+	case 56: // a8 (black queenside rook home)
+		return 0xf7
+	default:
+		return 0xff
+	}
+}
+
 func chNewStartBoard() []byte {
-	b := make([]byte, 64)
+	b := make([]byte, chBoardLen)
 	// rank 0 (white back rank)
 	b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7] = chWR, chWN, chWB, chWQ, chWK, chWB, chWN, chWR
 	// rank 1 (white pawns)
@@ -67,16 +103,36 @@ func chNewStartBoard() []byte {
 	}
 	// rank 7 (black back rank)
 	b[56], b[57], b[58], b[59], b[60], b[61], b[62], b[63] = chBR, chBN, chBB, chBQ, chBK, chBB, chBN, chBR
+	b[64] = byte(chSq(0, 4)) // white king at e1
+	b[65] = byte(chSq(7, 4)) // black king at e8
+	b[66] = chCRAll          // all four castling rights initially available
 	return b
 }
 
-func chEmptyBoard() []byte { return make([]byte, 64) }
+func chEmptyBoard() []byte { return make([]byte, chBoardLen) }
 
+// chSet returns a copy of b with sq set to piece. If piece is a king, the
+// matching king-pos byte is updated too — keeping the redundant king-pos
+// bytes consistent with the squares is the caller's job, and this helper
+// makes the common case automatic.
 func chSet(b []byte, sq int, piece byte) []byte {
-	out := make([]byte, 64)
+	out := make([]byte, len(b))
 	copy(out, b)
 	out[sq] = piece
+	switch piece {
+	case chWK:
+		out[64] = byte(sq)
+	case chBK:
+		out[65] = byte(sq)
+	}
 	return out
+}
+
+// chBoardWithKings returns an empty board with white and black kings
+// placed at the given squares (king-pos bytes updated by chSet).
+func chBoardWithKings(whiteKingSq, blackKingSq int) []byte {
+	b := chSet(chEmptyBoard(), whiteKingSq, chWK)
+	return chSet(b, blackKingSq, chBK)
 }
 
 func chMove(from, to int, piece, flags byte) []byte {
@@ -84,12 +140,49 @@ func chMove(from, to int, piece, flags byte) []byte {
 }
 
 // chApply produces the result-board obtained by applying spec to start.
-// Used to build the "expected result" for valid-move tests.
+// Mirrors what move() expects: square moves, king-pos byte update on king
+// moves, and rights-byte AND'd with the from/to masks. When the castling
+// flag (bit 3) is set, the rook also moves to its post-castle square.
 func chApply(start, spec []byte) []byte {
-	out := make([]byte, 64)
+	out := make([]byte, len(start))
 	copy(out, start)
-	out[spec[0]] = chEMPTY
-	out[spec[1]] = spec[2]
+	from, to, piece, flags := spec[0], spec[1], spec[2], spec[3]
+
+	out[from] = chEMPTY
+	out[to] = piece
+
+	if flags&0x08 != 0 {
+		// Castling: also move the rook. Determine the rook's home square
+		// and post-castle square from (color, kingside vs. queenside).
+		var rookFrom, rookTo int
+		var rook byte
+		switch {
+		case from == byte(chSq(0, 4)) && to == byte(chSq(0, 6)): // white kingside
+			rookFrom, rookTo, rook = chSq(0, 7), chSq(0, 5), chWR
+		case from == byte(chSq(0, 4)) && to == byte(chSq(0, 2)): // white queenside
+			rookFrom, rookTo, rook = chSq(0, 0), chSq(0, 3), chWR
+		case from == byte(chSq(7, 4)) && to == byte(chSq(7, 6)): // black kingside
+			rookFrom, rookTo, rook = chSq(7, 7), chSq(7, 5), chBR
+		case from == byte(chSq(7, 4)) && to == byte(chSq(7, 2)): // black queenside
+			rookFrom, rookTo, rook = chSq(7, 0), chSq(7, 3), chBR
+		}
+		out[rookFrom] = chEMPTY
+		out[rookTo] = rook
+	}
+
+	switch piece {
+	case chWK:
+		out[64] = to
+	case chBK:
+		out[65] = to
+	}
+
+	// Rights-byte: result[66] = start[66] & mask(from) & mask(to). For
+	// boards built with chBoardLen the rights byte exists; older 64-byte
+	// fixtures wouldn't, but the harness has been bumped to 67.
+	if len(out) > 66 {
+		out[66] = start[66] & chCRMask(int(from)) & chCRMask(int(to))
+	}
 	return out
 }
 
@@ -141,7 +234,7 @@ func TestChess_isStart_Tampered(t *testing.T) {
 
 func TestChess_isStart_WrongLength(t *testing.T) {
 	h := loadChessScript(t)
-	require.Empty(t, h.call(t, "isStart", chNewStartBoard()[:63]))
+	require.Empty(t, h.call(t, "isStart", chNewStartBoard()[:chBoardLen-1]))
 }
 
 // =============================================================================
@@ -373,9 +466,9 @@ func TestChess_WireFormatBadLengths(t *testing.T) {
 	good := chApply(start, spec)
 
 	// Wrong start length.
-	require.Empty(t, h.call(t, "move", start[:63], spec, good))
+	require.Empty(t, h.call(t, "move", start[:chBoardLen-1], spec, good))
 	// Wrong result length.
-	require.Empty(t, h.call(t, "move", start, spec, good[:63]))
+	require.Empty(t, h.call(t, "move", start, spec, good[:chBoardLen-1]))
 	// Wrong moveSpec length.
 	require.Empty(t, h.call(t, "move", start, spec[:4], good))
 }
@@ -428,4 +521,436 @@ func TestChess_SampleGame_SpanishOpening(t *testing.T) {
 		require.NotEmpty(t, got, "move %q rejected", m.sym)
 		board = next
 	}
+}
+
+// =============================================================================
+// Tests: boardOK (king-pos invariants)
+// =============================================================================
+
+func TestChess_BoardOK_StartingPosition(t *testing.T) {
+	h := loadChessScript(t)
+	require.NotEmpty(t, h.call(t, "boardOK", chNewStartBoard()))
+}
+
+func TestChess_BoardOK_EmptyHasNoKings(t *testing.T) {
+	h := loadChessScript(t)
+	// All-zero board: king-pos bytes point at sq 0, but sq 0 is empty (not
+	// a king of either color), so boardOK must reject.
+	require.Empty(t, h.call(t, "boardOK", chEmptyBoard()))
+}
+
+func TestChess_BoardOK_KingPosByteOutOfRange(t *testing.T) {
+	h := loadChessScript(t)
+	b := chBoardWithKings(chSq(0, 4), chSq(7, 4))
+	b[64] = 64 // out of range
+	require.Empty(t, h.call(t, "boardOK", b))
+}
+
+func TestChess_BoardOK_KingPosByteMisaligned(t *testing.T) {
+	h := loadChessScript(t)
+	b := chBoardWithKings(chSq(0, 4), chSq(7, 4))
+	b[64] = byte(chSq(0, 0)) // claims white king is at a1, but a1 is empty
+	require.Empty(t, h.call(t, "boardOK", b))
+}
+
+// =============================================================================
+// Tests: isCheck
+// =============================================================================
+
+func TestChess_IsCheck_StartingPositionNeitherInCheck(t *testing.T) {
+	h := loadChessScript(t)
+	start := chNewStartBoard()
+	require.Empty(t, h.call(t, "isCheck", []byte{chWHITE}, start),
+		"white king must not be in check at the start")
+	require.Empty(t, h.call(t, "isCheck", []byte{chBLACK}, start),
+		"black king must not be in check at the start")
+}
+
+func TestChess_IsCheck_RookOnClearFile(t *testing.T) {
+	h := loadChessScript(t)
+	// White king a1, black king e8, white rook e1: rook attacks black king
+	// up the clear e-file.
+	b := chBoardWithKings(chSq(0, 0), chSq(7, 4))
+	b = chSet(b, chSq(0, 4), chWR)
+	require.NotEmpty(t, h.call(t, "isCheck", []byte{chBLACK}, b),
+		"black king must be in check from the rook on e1")
+	require.Empty(t, h.call(t, "isCheck", []byte{chWHITE}, b),
+		"white king has no attackers")
+}
+
+func TestChess_IsCheck_RookBlocked(t *testing.T) {
+	h := loadChessScript(t)
+	b := chBoardWithKings(chSq(0, 0), chSq(7, 4))
+	b = chSet(b, chSq(0, 4), chWR)
+	b = chSet(b, chSq(3, 4), chWP) // white pawn on e4 blocks the file
+	require.Empty(t, h.call(t, "isCheck", []byte{chBLACK}, b))
+}
+
+func TestChess_IsCheck_KnightFork(t *testing.T) {
+	h := loadChessScript(t)
+	// White knight on f3 attacks e1 (and other L-shape squares). Place the
+	// black king on e1 so it sits on one of those squares.
+	b := chBoardWithKings(chSq(7, 0), chSq(0, 4)) // wK a8, bK e1
+	b = chSet(b, chSq(2, 5), chWN)                // wN f3
+	require.NotEmpty(t, h.call(t, "isCheck", []byte{chBLACK}, b))
+	require.Empty(t, h.call(t, "isCheck", []byte{chWHITE}, b))
+}
+
+func TestChess_IsCheck_PawnDiagonalAttack(t *testing.T) {
+	h := loadChessScript(t)
+	// White pawn on d7 attacks e8 (diagonal forward). Black king on e8.
+	b := chBoardWithKings(chSq(0, 0), chSq(7, 4))
+	b = chSet(b, chSq(6, 3), chWP)
+	require.NotEmpty(t, h.call(t, "isCheck", []byte{chBLACK}, b))
+}
+
+func TestChess_IsCheck_PawnInFrontIsNotCheck(t *testing.T) {
+	h := loadChessScript(t)
+	// Black pawn directly in front of white king. Pawns do not attack
+	// forward, so the king is not in check.
+	b := chBoardWithKings(chSq(0, 4), chSq(7, 0)) // wK e1, bK a8
+	b = chSet(b, chSq(1, 4), chBP)                // bP e2
+	require.Empty(t, h.call(t, "isCheck", []byte{chWHITE}, b))
+}
+
+func TestChess_IsCheck_BishopDiagonal(t *testing.T) {
+	h := loadChessScript(t)
+	// White bishop a1 → black king h8: long diagonal clear.
+	b := chBoardWithKings(chSq(0, 4), chSq(7, 7))
+	b = chSet(b, chSq(0, 0), chWB)
+	require.NotEmpty(t, h.call(t, "isCheck", []byte{chBLACK}, b))
+}
+
+func TestChess_IsCheck_BishopBlocked(t *testing.T) {
+	h := loadChessScript(t)
+	b := chBoardWithKings(chSq(0, 4), chSq(7, 7))
+	b = chSet(b, chSq(0, 0), chWB)
+	b = chSet(b, chSq(3, 3), chBP) // d4 blocks the diagonal
+	require.Empty(t, h.call(t, "isCheck", []byte{chBLACK}, b))
+}
+
+func TestChess_IsCheck_QueenLikeBishopAndRook(t *testing.T) {
+	h := loadChessScript(t)
+	// White queen attacking black king diagonally (a1 → h8).
+	b := chBoardWithKings(chSq(0, 4), chSq(7, 7))
+	b = chSet(b, chSq(0, 0), chWQ)
+	require.NotEmpty(t, h.call(t, "isCheck", []byte{chBLACK}, b))
+
+	// Same queen, but now the black king is on a8 (rook-like along a-file).
+	b2 := chBoardWithKings(chSq(0, 4), chSq(7, 0))
+	b2 = chSet(b2, chSq(0, 0), chWQ)
+	require.NotEmpty(t, h.call(t, "isCheck", []byte{chBLACK}, b2))
+}
+
+// =============================================================================
+// Tests: playerMove (full per-player turn predicate)
+// =============================================================================
+
+func TestChess_PlayerMove_LegalFromStart(t *testing.T) {
+	h := loadChessScript(t)
+	start := chNewStartBoard()
+	spec := chMove(chSq(1, 4), chSq(3, 4), chWP, 0) // 1. e4
+	require.NotEmpty(t, h.call(t, "playerMove",
+		[]byte{chWHITE}, start, spec, chApply(start, spec)))
+}
+
+func TestChess_PlayerMove_WrongColorRejected(t *testing.T) {
+	h := loadChessScript(t)
+	// White claims to move on its own turn but the spec carries a black
+	// pawn. The move would be individually legal for black; playerMove must
+	// still reject because the moving piece is not white's.
+	start := chNewStartBoard()
+	spec := chMove(chSq(6, 4), chSq(4, 4), chBP, 0)
+	require.Empty(t, h.call(t, "playerMove",
+		[]byte{chWHITE}, start, spec, chApply(start, spec)))
+}
+
+func TestChess_PlayerMove_LeavesOwnKingInCheckRejected(t *testing.T) {
+	h := loadChessScript(t)
+	// White king e1, white rook e3 (the only thing blocking the e-file),
+	// black rook e8. Moving the rook off the e-file exposes the king.
+	b := chBoardWithKings(chSq(0, 4), chSq(7, 0)) // wK e1, bK a8
+	b = chSet(b, chSq(2, 4), chWR)                // wR e3
+	b = chSet(b, chSq(7, 4), chBR)                // bR e8
+	spec := chMove(chSq(2, 4), chSq(2, 0), chWR, 0) // Re3-a3
+	res := chApply(b, spec)
+
+	require.NotEmpty(t, h.call(t, "move", b, spec, res),
+		"the move itself is geometrically legal")
+	require.Empty(t, h.call(t, "playerMove",
+		[]byte{chWHITE}, b, spec, res),
+		"playerMove must reject moves that leave the mover in check")
+}
+
+func TestChess_PlayerMove_CapturingTheThreatIsLegal(t *testing.T) {
+	h := loadChessScript(t)
+	// Same pinning setup, but white captures the threatening rook on e8.
+	// After the capture, no black piece can attack e1 — playerMove
+	// accepts.
+	b := chBoardWithKings(chSq(0, 4), chSq(7, 0))
+	b = chSet(b, chSq(2, 4), chWR)
+	b = chSet(b, chSq(7, 4), chBR)
+	spec := chMove(chSq(2, 4), chSq(7, 4), chWR, 0x01) // Rxe8
+	require.NotEmpty(t, h.call(t, "playerMove",
+		[]byte{chWHITE}, b, spec, chApply(b, spec)))
+}
+
+func TestChess_PlayerMove_KingMoveUpdatesPosByte(t *testing.T) {
+	h := loadChessScript(t)
+	// White king walks one square. The king-pos byte must follow; chApply
+	// already does this, so the move passes kingPosOK and (with no black
+	// pieces around) playerMove.
+	b := chBoardWithKings(chSq(0, 4), chSq(7, 0)) // wK e1, bK a8
+	spec := chMove(chSq(0, 4), chSq(1, 4), chWK, 0)
+	res := chApply(b, spec)
+	require.Equal(t, byte(chSq(1, 4)), res[64], "king-pos byte updated")
+	require.NotEmpty(t, h.call(t, "playerMove",
+		[]byte{chWHITE}, b, spec, res))
+}
+
+// =============================================================================
+// Tests: castling
+// =============================================================================
+
+// chCastleSetup returns a minimal board for testing one castle:
+// white king at e1, black king at a8 (out of the way), and the white rook
+// the test cares about placed on its home square. Rights start at chCRAll.
+// Caller adds extra pieces / clears rights / etc. before invoking move.
+func chCastleSetup(extraPieces ...struct {
+	sq    int
+	piece byte
+}) []byte {
+	b := chBoardWithKings(chSq(0, 4), chSq(7, 0)) // wK e1, bK a8
+	for _, p := range extraPieces {
+		b = chSet(b, p.sq, p.piece)
+	}
+	b[66] = chCRAll
+	return b
+}
+
+func TestChess_Castling_WhiteKingsideLegal(t *testing.T) {
+	h := loadChessScript(t)
+	b := chCastleSetup(struct {
+		sq    int
+		piece byte
+	}{chSq(0, 7), chWR}) // wR h1
+	spec := chMove(chSq(0, 4), chSq(0, 6), chWK, 0x08)
+	res := chApply(b, spec)
+	require.NotEmpty(t, h.call(t, "playerMove",
+		[]byte{chWHITE}, b, spec, res))
+	require.Equal(t, byte(chWK), res[chSq(0, 6)], "king on g1")
+	require.Equal(t, byte(chWR), res[chSq(0, 5)], "rook on f1")
+	require.Equal(t, byte(chEMPTY), res[chSq(0, 4)], "e1 empty")
+	require.Equal(t, byte(chEMPTY), res[chSq(0, 7)], "h1 empty")
+	require.Equal(t, byte(chSq(0, 6)), res[64], "king-pos byte updated to g1")
+	require.Equal(t, byte(chCR_BK|chCR_BQ), res[66],
+		"both white rights cleared, black rights preserved")
+}
+
+func TestChess_Castling_WhiteQueensideLegal(t *testing.T) {
+	h := loadChessScript(t)
+	b := chCastleSetup(struct {
+		sq    int
+		piece byte
+	}{chSq(0, 0), chWR}) // wR a1
+	spec := chMove(chSq(0, 4), chSq(0, 2), chWK, 0x08)
+	res := chApply(b, spec)
+	require.NotEmpty(t, h.call(t, "playerMove",
+		[]byte{chWHITE}, b, spec, res))
+	require.Equal(t, byte(chWK), res[chSq(0, 2)], "king on c1")
+	require.Equal(t, byte(chWR), res[chSq(0, 3)], "rook on d1")
+	require.Equal(t, byte(chEMPTY), res[chSq(0, 0)], "a1 empty")
+	require.Equal(t, byte(chEMPTY), res[chSq(0, 4)], "e1 empty")
+	require.Equal(t, byte(chSq(0, 2)), res[64], "king-pos byte updated to c1")
+	require.Equal(t, byte(chCR_BK|chCR_BQ), res[66])
+}
+
+func TestChess_Castling_BlackKingsideLegal(t *testing.T) {
+	h := loadChessScript(t)
+	// Black to castle. Place white king out of the way (a1) and black king
+	// at e8.
+	b := chBoardWithKings(chSq(0, 0), chSq(7, 4))
+	b = chSet(b, chSq(7, 7), chBR) // bR h8
+	b[66] = chCRAll
+	spec := chMove(chSq(7, 4), chSq(7, 6), chBK, 0x08)
+	res := chApply(b, spec)
+	require.NotEmpty(t, h.call(t, "playerMove",
+		[]byte{chBLACK}, b, spec, res))
+	require.Equal(t, byte(chBK), res[chSq(7, 6)])
+	require.Equal(t, byte(chBR), res[chSq(7, 5)])
+	require.Equal(t, byte(chSq(7, 6)), res[65])
+	require.Equal(t, byte(chCR_WK|chCR_WQ), res[66],
+		"both black rights cleared, white rights preserved")
+}
+
+func TestChess_Castling_BlackQueensideLegal(t *testing.T) {
+	h := loadChessScript(t)
+	b := chBoardWithKings(chSq(0, 0), chSq(7, 4))
+	b = chSet(b, chSq(7, 0), chBR) // bR a8
+	b[66] = chCRAll
+	spec := chMove(chSq(7, 4), chSq(7, 2), chBK, 0x08)
+	res := chApply(b, spec)
+	require.NotEmpty(t, h.call(t, "playerMove",
+		[]byte{chBLACK}, b, spec, res))
+	require.Equal(t, byte(chBK), res[chSq(7, 2)])
+	require.Equal(t, byte(chBR), res[chSq(7, 3)])
+}
+
+func TestChess_Castling_RightAlreadyLost(t *testing.T) {
+	h := loadChessScript(t)
+	b := chCastleSetup(struct {
+		sq    int
+		piece byte
+	}{chSq(0, 7), chWR})
+	b[66] = chCRAll & ^byte(chCR_WK) // WK right cleared
+	spec := chMove(chSq(0, 4), chSq(0, 6), chWK, 0x08)
+	require.Empty(t, h.call(t, "move", b, spec, chApply(b, spec)),
+		"castling without the rights bit must be rejected")
+}
+
+func TestChess_Castling_PathBlocked(t *testing.T) {
+	h := loadChessScript(t)
+	b := chCastleSetup(
+		struct {
+			sq    int
+			piece byte
+		}{chSq(0, 7), chWR}, // wR h1
+		struct {
+			sq    int
+			piece byte
+		}{chSq(0, 5), chWN}, // wN f1 blocks
+	)
+	spec := chMove(chSq(0, 4), chSq(0, 6), chWK, 0x08)
+	require.Empty(t, h.call(t, "move", b, spec, chApply(b, spec)))
+}
+
+func TestChess_Castling_KingInCheckRejected(t *testing.T) {
+	h := loadChessScript(t)
+	// Black rook on e2 attacks white king on e1 — king is currently in
+	// check and cannot castle.
+	b := chCastleSetup(
+		struct {
+			sq    int
+			piece byte
+		}{chSq(0, 7), chWR}, // wR h1
+		struct {
+			sq    int
+			piece byte
+		}{chSq(1, 4), chBR}, // bR e2 attacks e1
+	)
+	spec := chMove(chSq(0, 4), chSq(0, 6), chWK, 0x08)
+	require.Empty(t, h.call(t, "move", b, spec, chApply(b, spec)))
+}
+
+func TestChess_Castling_PassThroughCheckRejected(t *testing.T) {
+	h := loadChessScript(t)
+	// Black rook on f8 attacks f1 — the king's pass-through square for
+	// kingside castling. King is not currently in check, but it would walk
+	// through an attacked square.
+	b := chCastleSetup(
+		struct {
+			sq    int
+			piece byte
+		}{chSq(0, 7), chWR}, // wR h1
+		struct {
+			sq    int
+			piece byte
+		}{chSq(7, 5), chBR}, // bR f8 attacks f1
+	)
+	spec := chMove(chSq(0, 4), chSq(0, 6), chWK, 0x08)
+	require.Empty(t, h.call(t, "move", b, spec, chApply(b, spec)))
+}
+
+func TestChess_Castling_DestinationCheckRejectedByPlayerMove(t *testing.T) {
+	h := loadChessScript(t)
+	// Black rook on g8 attacks g1 — king's destination for kingside
+	// castling. move() itself doesn't check the destination (it's the same
+	// rule as "no self-check after move"); playerMove rejects via isCheck
+	// on the result.
+	b := chCastleSetup(
+		struct {
+			sq    int
+			piece byte
+		}{chSq(0, 7), chWR},
+		struct {
+			sq    int
+			piece byte
+		}{chSq(7, 6), chBR}, // bR g8 attacks g1
+	)
+	spec := chMove(chSq(0, 4), chSq(0, 6), chWK, 0x08)
+	res := chApply(b, spec)
+	require.NotEmpty(t, h.call(t, "move", b, spec, res),
+		"move alone accepts (destination check is playerMove's job)")
+	require.Empty(t, h.call(t, "playerMove",
+		[]byte{chWHITE}, b, spec, res))
+}
+
+func TestChess_Castling_RookMissingRejected(t *testing.T) {
+	h := loadChessScript(t)
+	// Rights bit claims castling is still available, but the rook is not
+	// on h1. (Stale-state stress: a buggy covenant could try to castle.)
+	b := chCastleSetup() // no rook placed
+	spec := chMove(chSq(0, 4), chSq(0, 6), chWK, 0x08)
+	require.Empty(t, h.call(t, "move", b, spec, chApply(b, spec)))
+}
+
+func TestChess_Castling_RightsClearedOnRookMove(t *testing.T) {
+	h := loadChessScript(t)
+	// Move the h1 rook one step north. The move itself is legal; the
+	// kingside castling right must be cleared.
+	b := chCastleSetup(struct {
+		sq    int
+		piece byte
+	}{chSq(0, 7), chWR})
+	spec := chMove(chSq(0, 7), chSq(1, 7), chWR, 0)
+	res := chApply(b, spec)
+	require.NotEmpty(t, h.call(t, "move", b, spec, res))
+	require.Equal(t, byte(chCRAll&^chCR_WK), res[66],
+		"WK right cleared because the kingside rook moved")
+}
+
+func TestChess_Castling_RightsClearedOnKingMove(t *testing.T) {
+	h := loadChessScript(t)
+	// Just walk the king one square. Both white rights must clear.
+	b := chCastleSetup()
+	spec := chMove(chSq(0, 4), chSq(1, 4), chWK, 0)
+	res := chApply(b, spec)
+	require.NotEmpty(t, h.call(t, "move", b, spec, res))
+	require.Equal(t, byte(chCR_BK|chCR_BQ), res[66])
+}
+
+func TestChess_Castling_CaptureOnCornerClearsRight(t *testing.T) {
+	h := loadChessScript(t)
+	// A piece lands on a8. Even if there's no rook there (covenant might
+	// have placed an enemy on it), the BQ right must clear — once anything
+	// has touched a8, that rook can't have stayed put.
+	b := chBoardWithKings(chSq(0, 4), chSq(7, 4)) // wK e1, bK e8
+	b = chSet(b, chSq(7, 0), chBR)                // bR a8
+	b = chSet(b, chSq(5, 1), chWN)                // wN b6
+	b[66] = chCRAll
+	spec := chMove(chSq(5, 1), chSq(7, 0), chWN, 0x01) // Nxa8
+	res := chApply(b, spec)
+	require.NotEmpty(t, h.call(t, "move", b, spec, res))
+	require.Equal(t, byte(chCRAll&^chCR_BQ), res[66])
+}
+
+func TestChess_Castling_FlagsByteRejectsHighBitsButAllowsCastleBit(t *testing.T) {
+	h := loadChessScript(t)
+	// Bit 4 (0x10) is reserved — wireOK must reject. Bit 3 (0x08, castle)
+	// alone must pass wireOK and is then validated by castleOK.
+	b := chCastleSetup(struct {
+		sq    int
+		piece byte
+	}{chSq(0, 7), chWR})
+	bad := chMove(chSq(0, 4), chSq(0, 6), chWK, 0x18) // castle + bit 4
+	require.Empty(t, h.call(t, "move", b, bad, chApply(b, bad)))
+	good := chMove(chSq(0, 4), chSq(0, 6), chWK, 0x08)
+	require.NotEmpty(t, h.call(t, "move", b, good, chApply(b, good)))
+}
+
+func TestChess_Castling_BoardOK_RejectsInvalidRightsBits(t *testing.T) {
+	h := loadChessScript(t)
+	b := chNewStartBoard()
+	b[66] = 0x10 // bit 4 — reserved
+	require.Empty(t, h.call(t, "boardOK", b))
 }
