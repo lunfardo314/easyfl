@@ -14,10 +14,11 @@ This is a test, not a production engine. Several rules are out of scope (see
 local-script feature end to end with realistic intra-script call patterns,
 not to build a chess engine.
 
-## 1. Board encoding (67 bytes)
+## 1. Board encoding (69 bytes)
 
-The board state is a 67-byte array: 64 square bytes followed by 2 redundant
-king-position bytes and one castling-rights byte.
+The board state is a 69-byte array: 64 square bytes followed by redundant
+king-position bytes, the castling-rights byte, the en-passant target byte,
+and the side-to-move byte.
 
 | Bytes | Meaning |
 | --- | --- |
@@ -25,6 +26,8 @@ king-position bytes and one castling-rights byte.
 | 64 | white king square (0..63) |
 | 65 | black king square (0..63) |
 | 66 | castling rights (low 4 bits, see [§1.1](#11-castling-rights-byte)) |
+| 67 | en-passant target (0..63 if available, `0xff` if none) |
+| 68 | side to move (`0x10` white, `0x20` black) |
 
 ### 1.1 Castling-rights byte
 
@@ -49,6 +52,28 @@ its home square, which the same rule already drains both rights for that
 color. So "rights bit cleared" subsumes "already castled / king moved /
 rook moved / rook captured" — the validator does not need to distinguish
 those four causes, and a player who castled cannot castle again.
+
+### 1.2 En-passant target byte
+
+Byte 67 is the FEN-equivalent of the EP target square. After every move
+it is set by `epTargetOK`:
+
+- After a 2-square pawn push (any pawn moving 2 ranks): set to the
+  midpoint square — the empty square the pawn passed over.
+- After any other move (including castling and EP itself): set to
+  `0xff` ("none").
+
+EP capture is then legal only on the *next* half-move and only when the
+attacker's diagonal destination matches byte 67.
+
+### 1.3 Side-to-move byte
+
+Byte 68 is `0x10` (white to move) or `0x20` (black to move). Inside
+`move`, `sideTransOK` requires byte 68 of the result to be the opposite
+of byte 68 of the start. `move` itself does **not** check that the
+moving piece's color matches byte 68 — that is the role of `playerMove`,
+which compares `byte(start, 68)` with the `kingColor` argument. The
+covenant exposes byte 68 read-only via `sideToMove(board)`.
 
 Each square byte encodes:
 
@@ -88,9 +113,11 @@ rank 1 (white pawns): P P P P P P P P
 ranks 2..5:           empty
 rank 6 (black pawns): p p p p p p p p
 rank 7 (black back):  r n b q k b n r     -> black king at e8, sq=60
-white king pos byte = 0x04
-black king pos byte = 0x3c
-castling rights byte = 0x0f (all four rights initially available)
+white king pos byte (64) = 0x04
+black king pos byte (65) = 0x3c
+castling rights byte (66) = 0x0f (all four rights initially available)
+en-passant target byte (67) = 0xff (none)
+side-to-move byte (68)     = 0x10 (white moves first)
 ```
 
 ## 2. Move encoding (5 bytes)
@@ -102,17 +129,35 @@ A move is a 5-byte tuple:
 | 0 | from | 0..63 |
 | 1 | to | 0..63 |
 | 2 | piece | full byte: `color\|type` — same encoding as the board |
-| 3 | flags | bit 0 (`0x01`) capture (validated against target square); bit 1 (`0x02`) check (recorded; **not** verified); bit 2 (`0x04`) checkmate (recorded; **not** verified); bit 3 (`0x08`) castling (validated, see [§3.5](#35-castling-move)) |
-| 4 | reserved | must be `0x00` |
+| 3 | flags | see flag-bit table below |
+| 4 | promotion piece | non-zero only when this is a promoting pawn move; otherwise must be `0x00` (validated by `promotionOK`) |
+
+Flag bits in `moveSpec[3]`:
+
+| Bit | Mask | Meaning |
+| --- | --- | --- |
+| 0 | `0x01` | capture (validated against target square; required for diagonal pawn captures and for EP) |
+| 1 | `0x02` | check  (recorded; **not** verified) |
+| 2 | `0x04` | mate   (recorded; **not** verified) |
+| 3 | `0x08` | castling — see [§3.5](#35-castling-move) |
+| 4 | `0x10` | en passant — see [§3.6](#36-en-passant-capture) |
+| 5..7 | `0xe0` | reserved, must be zero |
 
 The check / checkmate flags are accepted as-is and not validated — verifying
 them would require a full move-generation engine. They are kept in the spec
 to mirror SAN/PGN conventions.
 
-Bits 4..7 of the flags byte are reserved and must be zero — `wireOK`
-rejects anything in `0xf0`. Capture and castling are mutually exclusive
-(castling never captures); setting both at once causes `targetOK` to fail
-because the destination of a castle is empty.
+Capture and castling are mutually exclusive (castling never captures);
+setting both at once causes `targetOK` to fail because the destination of
+a castle is empty. EP requires the capture flag (the geometry is a
+diagonal pawn capture).
+
+`moveSpec[4]` is the **promotion piece** byte. For a pawn reaching the
+back rank (rank 7 for white, rank 0 for black) it must be one of the
+four valid promotion pieces of the same color (Q/R/B/N). For any other
+move it must be `0x00`. The piece that lands on the destination square
+is the promotion piece (not the pawn from `moveSpec[2]`), tracked via
+the `effectivePiece` helper in `resOK`.
 
 ## 3. Functions exposed by the local script
 
@@ -136,11 +181,20 @@ position. Implementation: a single `equal(board, 0x<66 hex bytes>)`.
 ### `boardOK(board)`
 
 Returns truthy iff `board` is structurally valid as a game-state snapshot:
-`len == 67`, both king-pos bytes are in `0..63`, the squares they index
-hold a white king (`0x16`) and a black king (`0x26`) respectively, and the
-castling-rights byte uses only the low 4 bits. The covenant should call
-this once at game-start to validate the initial board; per-move integrity
-is then preserved by `kingPosOK` and `crOK` inside `move`.
+- `len == 69`;
+- king-pos bytes (64, 65) in `0..63`, indexed squares hold matching kings;
+- castling-rights byte (66) uses only the low 4 bits;
+- EP target byte (67) is in `0..63` or `0xff`;
+- side-to-move byte (68) is `0x10` or `0x20`.
+
+The covenant should call this once at game-start to validate the initial
+board; per-move integrity is then preserved by `kingPosOK`, `crOK`,
+`epTargetOK` and `sideTransOK` inside `move`.
+
+### `sideToMove(board)`
+
+Returns `byte(board, 68)` — `0x10` (white) or `0x20` (black). The covenant
+uses this to decide whose signature is required to spend the game UTXO.
 
 ### `move(startBoard, moveSpec, resultBoard)`
 
@@ -148,12 +202,12 @@ Returns truthy iff the move described by `moveSpec` is legal in `startBoard`
 **and** applying it produces `resultBoard`. Specifically:
 
 #### (a) Wire-format checks
-- `len(startBoard) == 67`
-- `len(resultBoard) == 67`
+- `len(startBoard) == 69`
+- `len(resultBoard) == 69`
 - `len(moveSpec) == 5`
 - `moveSpec[0]` (from) and `moveSpec[1]` (to) are both in 0..63
-- `moveSpec[4]` is `0x00`
-- `flags` only has valid bits set (lower 4 bits — `flags & 0xf0 == 0`)
+- `flags` only has valid bits set (lower 5 bits — `flags & 0xe0 == 0`)
+- `moveSpec[4]` is validated by `promotionOK` (see [§3.7](#37-promotion-rule)), not by `wireOK`
 
 #### (b) Source square sanity
 - `byte(startBoard, from) == moveSpec[2]` (declared piece is there)
@@ -209,12 +263,25 @@ or any move that lands there at all — once anything is on a8 the BQ rook
 can no longer have stayed). Castling itself is naturally subsumed: the
 king moves from e1/e8, so the from-mask drains both that color's rights.
 
-`move` applies (a)..(g) for both ordinary moves and castling. (d)+(e) are
-replaced by §3.5 below when the castling flag is set.
+#### (h) En-passant target byte
+`epTargetOK`:
+- if the move is a 2-square pawn push: `byte(resultBoard, 67) == (from+to)/2`
+- otherwise: `byte(resultBoard, 67) == 0xff`
+
+#### (i) Side-to-move byte
+`sideTransOK`:
+- `byte(resultBoard, 68) == flip(byte(startBoard, 68))`
+
+`move` applies (a), (b), (c), (f)..(i) for every move. (d) (geometry) and
+(e) (resulting board) are replaced by `castleOK` ([§3.5](#35-castling-move))
+when the castling flag is set, or by `epOK` ([§3.6](#36-en-passant-capture))
+when the EP flag is set. The promotion-piece byte is validated by
+`promotionOK` ([§3.7](#37-promotion-rule)) on every move.
 
 `move` deliberately does **not** verify whose turn it is, nor that the
 mover does not leave their own king in check. Both are concerns of
-`playerMove`.
+`playerMove` (which adds `byte(start, 68) == kingColor` and `not(isCheck
+(kingColor, result))`).
 
 #### 3.5 Castling move
 
@@ -248,6 +315,51 @@ path — a valid castle has an empty destination square, so this falls out.
 
 Out of scope for §3.5: no Chess960 / Fischer Random support; no record of
 *how* the right was lost (intentionally — see §1.1).
+
+#### 3.6 En-passant capture
+
+When `flags & 0x10` is set (and `flags & 0x08` is not), `move` runs `epOK`
+in place of (c)+(d)+(e):
+
+1. **Piece is a pawn.**
+2. **EP target available.** `byte(start, 67) < 64`.
+3. **Destination matches.** `to == byte(start, 67)`.
+4. **Geometry.** File diff between `from` and `to` is 1; rank diff is 1
+   in the right direction (white: from rank 4 to rank 5; black: from rank
+   3 to rank 2).
+5. **Destination empty.** `byte(start, to) == 0` (EP destinations are
+   always empty squares).
+6. **Captured pawn present.** The square adjacent to `to` on the
+   capturer's starting rank holds an opposite-color pawn:
+   - white EP: `byte(start, to-8) == 0x21`;
+   - black EP: `byte(start, to+8) == 0x11`.
+7. **Result board.** Three squares change: `from -> empty`, `to -> moving
+   pawn`, captured-square `-> empty`. All other 61 squares unchanged.
+   `epTargetOK` then sets byte 67 of result to `0xff` (cleared after EP).
+
+Note: EP capture requires the capture flag (`0x01`) — the geometry is a
+diagonal pawn capture, which `targetOK` would reject without the flag.
+Setting only the EP flag without the capture flag is rejected because
+`epOK` requires the destination to be empty AND the bit-3 flag combination
+must round-trip via `flag bit 4 set, flag bit 0 set` for spec authors who
+want to be explicit; if not set, `targetOK` (still in the common path
+when EP bit is clear) doesn't run for EP at all — the dispatch routes
+around it.
+
+#### 3.7 Promotion rule
+
+`promotionOK(piece, to, promote)`:
+- if `typeOf(piece) == 1` AND `to` is on the back rank for that color:
+  `promote` must be a piece with the same color as `piece` and
+  `typeOf(promote) ∈ {2, 3, 4, 5}` (knight, bishop, rook, queen — no king,
+  no pawn);
+- otherwise: `promote == 0x00`.
+
+Result-board impact: `resOK` is called with `effectivePiece(piece, to,
+promote)` instead of `piece` in the common path. For a promoting pawn,
+the destination square ends up holding the promotion piece; everywhere
+else the moving piece is unchanged. Castling and EP have their own
+result-board paths and are not affected.
 
 ### `isCheck(kingColor, board)`
 
@@ -356,6 +468,18 @@ the 3-byte intra-script call prefix. This is the main thing being stressed.
 - `castleCase(piece, from, to)` — returns 0 (none) / 1..4 (WK / WQ / BK / BQ)
 - `castleOK(start, result, from, to, piece)` — `selectCaseByIndex` dispatch on `castleCase`
 
+### En passant
+- `epTargetOK(result, spec)` — byte 67 reflects "is EP available next move?"
+- `epCapturedSq(to, piece)` — the square holding the captured pawn for an EP capture
+- `expAt3` / `chunkRes3` / `resOKEP` — generalised result-board equality with 3 changed squares
+- `epOK(start, result, from, to, piece)` — full EP-capture predicate
+
+### Promotion + side-to-move
+- `isPromoting(piece, to)` — pawn move whose destination is the back rank
+- `effectivePiece(piece, to, promote)` — piece that lands on the destination
+- `promotionOK(piece, to, promote)` — `moveSpec[4]` semantics
+- `sideTransOK(start, result)` — byte 68 flips
+
 ## 5.5 Check detection
 
 `isCheck(kingColor, board)` returns truthy iff the king of `kingColor` is
@@ -402,12 +526,18 @@ What is **not** modelled by `isCheck`:
 
 ## 6. Out of scope (v1 simplifications)
 
-- **En passant.** Requires "last move" state.
-- **Pawn promotion.** Requires extending the move encoding with a
-  promotion-piece byte.
 - **Chess960 / Fischer Random castling.** The four castling cases hard-
   code the standard king/rook home squares.
-- 50-move rule, threefold repetition, insufficient material.
+- **50-move rule.** The covenant tracks move count via the UTXO chain
+  and can apply the rule there if needed (the script exposes piece type
+  and capture flag, which are enough to maintain the reset-on-capture-
+  or-pawn counter at the covenant level).
+- **Insufficient material.** Detecting K vs K (etc.) is feasible as a
+  static piece-count check, but in the deadline-driven covenant flow it
+  reduces to "shuffle until someone times out" — a workable, if FIDE-
+  divergent, approximation. Skipped in v1.
+- **Threefold repetition.** Requires the entire game-position history;
+  cannot be done in fixed-size board state.
 - **Stalemate / checkmate detection inside the script.** Both reduce to
   "the side to move has no legal move", which would require enumerating
   all candidate moves — non-trivial without loops. Instead, the
@@ -508,29 +638,67 @@ test (or once via testing helpers and reused).
 - Rights bookkeeping: a normal rook move from a corner clears the
   matching right; a normal king move clears both rights for that color;
   a capture (or any move) landing on a corner clears the matching right.
-- Wire format: `flags = 0x18` (castle + reserved bit 4) is rejected by
+- Wire format: `flags = 0x28` (castle + reserved bit 5) is rejected by
   `wireOK`; `flags = 0x08` is accepted and validated by `castleOK`.
 - `boardOK` rejects a board whose rights byte has any of bits 4..7 set.
 
+### Promotion
+- White pawn reaching rank 7 with a valid promotion piece → true;
+  result has the promotion piece on the destination, not the pawn.
+- All four underpromotions (Q/R/B/N) accepted in both colors.
+- Pawn reaching the back rank with `moveSpec[4] == 0` → false (must
+  promote).
+- Promotion byte is a king (`0x16` / `0x26`) → false (kings are not
+  valid promotion pieces).
+- Promotion byte is a pawn (`0x11` / `0x21`) → false.
+- White pawn promoting to a black piece (or vice versa) → false.
+- Non-promoting move (e.g. e2-e4) with `moveSpec[4] != 0` → false.
+- Non-pawn move (e.g. knight) with `moveSpec[4] != 0` → false.
+
+### En passant
+- White EP capture (after black 2-square push) → true; result has
+  the captured black pawn cleared from its square.
+- Black EP capture mirror → true.
+- After a 2-square pawn push, `byte(result, 67)` is the midpoint.
+- After any other move, `byte(result, 67) == 0xff`.
+- Stale EP target (a non-EP move was played in between) → EP capture
+  rejected.
+- EP destination square non-empty in start → rejected.
+
+### Side-to-move
+- `sideToMove(start)` returns `0x10` on the canonical start position.
+- `sideToMove(after-white-move)` returns `0x20`.
+- A result whose byte 68 did not flip is rejected by `move`.
+- `playerMove(BLACK, start, ...)` is rejected when `byte(start, 68)`
+  is `0x10` (it is white's turn).
+- `boardOK` rejects boards whose EP byte is outside `0..63 ∪ {0xff}`,
+  or whose side byte is anything other than `0x10` or `0x20`.
+
 ## 8. Implementation plan
 
-1. Generate the canonical 67-byte starting position (64 squares +
-   king-pos bytes `0x04`, `0x3c` + rights byte `0x0f`) as a hex literal
-   embedded in the local-script source for `isStart`.
+1. Generate the canonical 69-byte starting position (64 squares +
+   king-pos bytes `0x04 0x3c` + rights byte `0x0f` + EP byte `0xff` +
+   side byte `0x10`) as a hex literal embedded in the local-script
+   source for `isStart`.
 2. Write the helper fns (`colorOf`, `typeOf`, ranks, files, `oppColor`, …) in
    EasyFL.
 3. Write `isXxxMove` geometry checks, then `geometryOK` dispatch.
 4. Write `pathClear` with 6 unrolled checks per direction.
 5. Write `resOK`, `targetOK`, `sourceOK`, `wireOK`, `kingPosOK`,
-   `boardOK`, `crMask`, `crOK`.
+   `boardOK`, `crMask`, `crOK`, `epTargetOK`, `sideTransOK`,
+   `isPromoting`, `effectivePiece`, `promotionOK`.
 6. Write `pawnAttacks`, `pieceAttacks`, `attackerAt`, `chunkAtt`,
    `underAttack`, `isCheck`.
 7. Write `chunkUnchanged` + the per-case castle-result chunks +
    `castleWK / WQ / BK / BQ` + `castleCase` + `castleOK`.
-8. Tie it all together in `move()` (common rules + flag-bit-3 dispatch
-   to `castleOK`) and `playerMove` on top.
-9. Compile via `Library[T].CompileLocalScriptWithIndex` so tests can
-   invoke functions by source-level name.
+8. Write `expAt3` / `chunkRes3` / `resOKEP` + `epCapturedSq` + `epOK`.
+9. Tie it all together in `move()` (common rules + flag-bit-3 dispatch
+   to `castleOK`, then flag-bit-4 dispatch to `epOK`, else common
+   geometry + resOK with `effectivePiece`) and `playerMove` on top
+   (adds piece-color match, side-to-move match, and no-self-check).
+10. Expose `sideToMove(board)` for the covenant.
+11. Compile via `Library[T].CompileLocalScriptWithIndex` so tests can
+    invoke functions by source-level name.
 
 ## 9. Game flow at the covenant level
 
@@ -540,17 +708,21 @@ They are listed here so the script's public surface (`boardOK`, `move`,
 
 ### 9.1 Setup and bounty
 - The two players post a bounty into a single UTXO (the "game UTXO"), which
-  carries the current 66-byte board, the side to move, and a per-move
-  deadline. The covenant validates the initial board with `boardOK` (and
-  optionally `isStart` for "play from the standard start").
+  carries the current 69-byte board (squares + king-pos + castling rights
+  + EP target + side-to-move) and a per-move deadline. The covenant
+  validates the initial board with `boardOK` (and optionally `isStart`
+  for "play from the standard start").
 
 ### 9.2 A normal half-move
 - The player whose turn it is consumes the game UTXO and produces a
-  successor whose board is `result`, and whose side-to-move is flipped.
-  The covenant requires `playerMove(myColor, oldBoard, spec, result)` to
-  hold. That single predicate already covers (a)–(f) of `move`, "moving
-  your own piece", and "do not leave own king in check".
+  successor whose board is `result`. The covenant requires `playerMove
+  (myColor, oldBoard, spec, result)` to hold; this single predicate
+  covers (a)–(i) of `move`, the matching `byte(start, 68) == myColor`
+  alternation rule, and the "do not leave own king in check" rule.
+  Side-to-move flipping is enforced inside `move` via `sideTransOK`.
 - The deadline on the successor is shifted by the move-time budget.
+- `sideToMove(result)` tells the covenant whose signature is required
+  to spend the next UTXO.
 
 ### 9.3 No legal move = mate-or-deadline
 - Detecting checkmate / stalemate inside the script would require

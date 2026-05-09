@@ -52,10 +52,11 @@ const (
 
 func chSq(rank, file int) int { return rank*8 + file }
 
-// Boards are 67 bytes: 64 squares + bytes 64 (white king sq), 65 (black
-// king sq), 66 (castling rights, low 4 bits: WK WQ BK BQ). See
-// chess_script.md §1.
-const chBoardLen = 67
+// Boards are 69 bytes: 64 squares + bytes 64 (white king sq), 65 (black
+// king sq), 66 (castling rights, low 4 bits: WK WQ BK BQ), 67 (en-passant
+// target sq: 0..63 if EP available, 0xff = none), 68 (side to move:
+// 0x10 white / 0x20 black). See chess_script.md §1.
+const chBoardLen = 69
 
 // Castling-rights bit masks. Mirror chess_script.easyfl.
 const (
@@ -64,6 +65,20 @@ const (
 	chCR_BK = 0x04 // black kingside
 	chCR_BQ = 0x08 // black queenside
 	chCRAll = chCR_WK | chCR_WQ | chCR_BK | chCR_BQ // 0x0f
+)
+
+// chEPNone is the byte value used at index 67 when no en-passant capture
+// is available for the next move. Anything outside 0..63 means "none";
+// 0xff is the canonical sentinel (FEN-equivalent of "-").
+const chEPNone = 0xff
+
+// Move flag bits (mirror moveSpec[3] semantics).
+const (
+	chFlagCapture = 0x01
+	chFlagCheck   = 0x02
+	chFlagMate    = 0x04
+	chFlagCastle  = 0x08
+	chFlagEP      = 0x10
 )
 
 // chCRMask mirrors crMask in the easyfl source: clears the rights bit(s)
@@ -106,10 +121,17 @@ func chNewStartBoard() []byte {
 	b[64] = byte(chSq(0, 4)) // white king at e1
 	b[65] = byte(chSq(7, 4)) // black king at e8
 	b[66] = chCRAll          // all four castling rights initially available
+	b[67] = chEPNone         // no en-passant target on move 1
+	b[68] = chWHITE          // white moves first
 	return b
 }
 
-func chEmptyBoard() []byte { return make([]byte, chBoardLen) }
+func chEmptyBoard() []byte {
+	b := make([]byte, chBoardLen)
+	b[67] = chEPNone // no EP target
+	b[68] = chWHITE  // default: white to move
+	return b
+}
 
 // chSet returns a copy of b with sq set to piece. If piece is a king, the
 // matching king-pos byte is updated too — keeping the redundant king-pos
@@ -140,20 +162,28 @@ func chMove(from, to int, piece, flags byte) []byte {
 }
 
 // chApply produces the result-board obtained by applying spec to start.
-// Mirrors what move() expects: square moves, king-pos byte update on king
-// moves, and rights-byte AND'd with the from/to masks. When the castling
-// flag (bit 3) is set, the rook also moves to its post-castle square.
+// Mirrors what move() expects: square moves (with promotion replacing the
+// pawn on the destination), king-pos byte update on king moves, rights
+// byte AND'd with the from/to masks, EP target updated (midpoint on a
+// 2-square pawn push, else 0xff), and side-to-move byte flipped. Castling
+// also moves the rook; en-passant also clears the captured pawn square.
 func chApply(start, spec []byte) []byte {
 	out := make([]byte, len(start))
 	copy(out, start)
-	from, to, piece, flags := spec[0], spec[1], spec[2], spec[3]
+	from, to, piece, flags, promote := spec[0], spec[1], spec[2], spec[3], spec[4]
+
+	// Effective piece landing on `to`: promotion piece if this is a
+	// promoting pawn move, otherwise the pawn / piece itself.
+	effective := piece
+	if (piece&0x0f) == chPAWN && chIsBackRank(piece, int(to)) && promote != 0 {
+		effective = promote
+	}
 
 	out[from] = chEMPTY
-	out[to] = piece
+	out[to] = effective
 
-	if flags&0x08 != 0 {
-		// Castling: also move the rook. Determine the rook's home square
-		// and post-castle square from (color, kingside vs. queenside).
+	if flags&chFlagCastle != 0 {
+		// Castling: also move the rook.
 		var rookFrom, rookTo int
 		var rook byte
 		switch {
@@ -170,6 +200,22 @@ func chApply(start, spec []byte) []byte {
 		out[rookTo] = rook
 	}
 
+	if flags&chFlagEP != 0 && (piece&0x0f) == chPAWN {
+		// En-passant: the captured pawn sits adjacent to `to` on the
+		// rank where the capturer started. White EP captures down a rank
+		// (to-8); black up a rank (to+8). Guarded by piece==pawn so a
+		// malformed spec (EP bit on a non-pawn move) doesn't index OOB.
+		var capturedSq int
+		if piece&0xf0 == chWHITE {
+			capturedSq = int(to) - 8
+		} else {
+			capturedSq = int(to) + 8
+		}
+		if capturedSq >= 0 && capturedSq < 64 {
+			out[capturedSq] = chEMPTY
+		}
+	}
+
 	switch piece {
 	case chWK:
 		out[64] = to
@@ -177,13 +223,45 @@ func chApply(start, spec []byte) []byte {
 		out[65] = to
 	}
 
-	// Rights-byte: result[66] = start[66] & mask(from) & mask(to). For
-	// boards built with chBoardLen the rights byte exists; older 64-byte
-	// fixtures wouldn't, but the harness has been bumped to 67.
 	if len(out) > 66 {
 		out[66] = start[66] & chCRMask(int(from)) & chCRMask(int(to))
 	}
+
+	// EP target byte: midpoint of a 2-square pawn push, else "none".
+	if len(out) > 67 {
+		if (piece&0x0f) == chPAWN && chAbsDiff(int(from)/8, int(to)/8) == 2 {
+			out[67] = byte((int(from) + int(to)) / 2)
+		} else {
+			out[67] = chEPNone
+		}
+	}
+
+	// Side flip.
+	if len(out) > 68 {
+		if start[68] == chWHITE {
+			out[68] = chBLACK
+		} else {
+			out[68] = chWHITE
+		}
+	}
 	return out
+}
+
+// chIsBackRank: `to` is the promotion rank for `piece`'s color (rank 7
+// for white, rank 0 for black).
+func chIsBackRank(piece byte, sq int) bool {
+	rank := sq / 8
+	if piece&0xf0 == chWHITE {
+		return rank == 7
+	}
+	return rank == 0
+}
+
+func chAbsDiff(a, b int) int {
+	if a < b {
+		return b - a
+	}
+	return a - b
 }
 
 // =============================================================================
@@ -210,7 +288,7 @@ func loadChessScript(t testing.TB) *chessHarness {
 	lib := easyfl.NewBaseLibrary[any]()
 	bin, indices, err := lib.CompileLocalScriptWithIndex(chessScriptSource)
 	require.NoError(t, err)
-	t.Logf("chess script bytecode size: %d", len(bin))
+	t.Logf("chess script: %d bytes, %d functions", len(bin), len(indices))
 	s, err := lib.LocalScriptFromBytes(bin)
 	require.NoError(t, err)
 	return &chessHarness{lib: lib, script: s, indices: indices}
@@ -485,7 +563,7 @@ func TestChess_WireFormatReservedNotZero(t *testing.T) {
 func TestChess_WireFormatBadFlags(t *testing.T) {
 	h := loadChessScript(t)
 	start := chNewStartBoard()
-	spec := chMove(chSq(1, 4), chSq(3, 4), chWP, 0x10) // high bit
+	spec := chMove(chSq(1, 4), chSq(3, 4), chWP, 0x20) // bit 5, reserved
 	good := chApply(start, spec)
 	require.Empty(t, h.call(t, "move", start, spec, good))
 }
@@ -772,6 +850,7 @@ func TestChess_Castling_BlackKingsideLegal(t *testing.T) {
 	b := chBoardWithKings(chSq(0, 0), chSq(7, 4))
 	b = chSet(b, chSq(7, 7), chBR) // bR h8
 	b[66] = chCRAll
+	b[68] = chBLACK
 	spec := chMove(chSq(7, 4), chSq(7, 6), chBK, 0x08)
 	res := chApply(b, spec)
 	require.NotEmpty(t, h.call(t, "playerMove",
@@ -788,6 +867,7 @@ func TestChess_Castling_BlackQueensideLegal(t *testing.T) {
 	b := chBoardWithKings(chSq(0, 0), chSq(7, 4))
 	b = chSet(b, chSq(7, 0), chBR) // bR a8
 	b[66] = chCRAll
+	b[68] = chBLACK
 	spec := chMove(chSq(7, 4), chSq(7, 2), chBK, 0x08)
 	res := chApply(b, spec)
 	require.NotEmpty(t, h.call(t, "playerMove",
@@ -936,13 +1016,14 @@ func TestChess_Castling_CaptureOnCornerClearsRight(t *testing.T) {
 
 func TestChess_Castling_FlagsByteRejectsHighBitsButAllowsCastleBit(t *testing.T) {
 	h := loadChessScript(t)
-	// Bit 4 (0x10) is reserved — wireOK must reject. Bit 3 (0x08, castle)
-	// alone must pass wireOK and is then validated by castleOK.
+	// Bits 5..7 (mask 0xe0) are reserved — wireOK must reject. Bit 3
+	// (0x08, castle) alone must pass wireOK and is then validated by
+	// castleOK.
 	b := chCastleSetup(struct {
 		sq    int
 		piece byte
 	}{chSq(0, 7), chWR})
-	bad := chMove(chSq(0, 4), chSq(0, 6), chWK, 0x18) // castle + bit 4
+	bad := chMove(chSq(0, 4), chSq(0, 6), chWK, 0x28) // castle + bit 5
 	require.Empty(t, h.call(t, "move", b, bad, chApply(b, bad)))
 	good := chMove(chSq(0, 4), chSq(0, 6), chWK, 0x08)
 	require.NotEmpty(t, h.call(t, "move", b, good, chApply(b, good)))
@@ -952,5 +1033,277 @@ func TestChess_Castling_BoardOK_RejectsInvalidRightsBits(t *testing.T) {
 	h := loadChessScript(t)
 	b := chNewStartBoard()
 	b[66] = 0x10 // bit 4 — reserved
+	require.Empty(t, h.call(t, "boardOK", b))
+}
+
+// =============================================================================
+// Tests: pawn promotion (moveSpec[4] = promotion piece)
+// =============================================================================
+
+// chPromotionBoard returns a minimal board with white king e1, black king
+// h8 (out of the way of the a-file), and one white pawn on a7 so the pawn
+// can promote in one step.
+func chPromotionBoard(side byte) []byte {
+	b := chBoardWithKings(chSq(0, 4), chSq(7, 7)) // wK e1, bK h8
+	b = chSet(b, chSq(6, 0), chWP)                // wP on a7
+	b[68] = side
+	return b
+}
+
+func TestChess_Promotion_WhiteToQueen(t *testing.T) {
+	h := loadChessScript(t)
+	b := chPromotionBoard(chWHITE)
+	spec := []byte{byte(chSq(6, 0)), byte(chSq(7, 0)), chWP, 0, chWQ}
+	res := chApply(b, spec)
+	require.NotEmpty(t, h.call(t, "playerMove",
+		[]byte{chWHITE}, b, spec, res))
+	require.Equal(t, byte(chWQ), res[chSq(7, 0)],
+		"a8 has the promoted queen, not the pawn")
+}
+
+func TestChess_Promotion_WhiteUnderpromotionsAllSucceed(t *testing.T) {
+	h := loadChessScript(t)
+	for _, p := range []byte{chWQ, chWR, chWB, chWN} {
+		b := chPromotionBoard(chWHITE)
+		spec := []byte{byte(chSq(6, 0)), byte(chSq(7, 0)), chWP, 0, p}
+		res := chApply(b, spec)
+		require.NotEmpty(t, h.call(t, "playerMove",
+			[]byte{chWHITE}, b, spec, res),
+			"underpromotion to %#x should succeed", p)
+		require.Equal(t, p, res[chSq(7, 0)])
+	}
+}
+
+func TestChess_Promotion_BlackToQueen(t *testing.T) {
+	h := loadChessScript(t)
+	// Mirror: black pawn on a2, black to move.
+	b := chBoardWithKings(chSq(0, 7), chSq(7, 0)) // wK h1, bK a8
+	b = chSet(b, chSq(1, 0), chBP)                // bP a2
+	b[68] = chBLACK
+	spec := []byte{byte(chSq(1, 0)), byte(chSq(0, 0)), chBP, 0, chBQ}
+	res := chApply(b, spec)
+	require.NotEmpty(t, h.call(t, "playerMove",
+		[]byte{chBLACK}, b, spec, res))
+	require.Equal(t, byte(chBQ), res[chSq(0, 0)])
+}
+
+func TestChess_Promotion_MissingPieceRejected(t *testing.T) {
+	h := loadChessScript(t)
+	// Pawn reaching back rank but moveSpec[4] = 0: must be rejected.
+	b := chPromotionBoard(chWHITE)
+	spec := []byte{byte(chSq(6, 0)), byte(chSq(7, 0)), chWP, 0, 0}
+	require.Empty(t, h.call(t, "move", b, spec, chApply(b, spec)))
+}
+
+func TestChess_Promotion_KingPieceRejected(t *testing.T) {
+	h := loadChessScript(t)
+	// Promoting to a king (typeOf == 6) is not allowed; only Q/R/B/N.
+	b := chPromotionBoard(chWHITE)
+	spec := []byte{byte(chSq(6, 0)), byte(chSq(7, 0)), chWP, 0, chWK}
+	require.Empty(t, h.call(t, "move", b, spec, chApply(b, spec)))
+}
+
+func TestChess_Promotion_PawnPieceRejected(t *testing.T) {
+	h := loadChessScript(t)
+	// Promoting to a pawn (typeOf == 1) makes no sense; rejected.
+	b := chPromotionBoard(chWHITE)
+	spec := []byte{byte(chSq(6, 0)), byte(chSq(7, 0)), chWP, 0, chWP}
+	require.Empty(t, h.call(t, "move", b, spec, chApply(b, spec)))
+}
+
+func TestChess_Promotion_WrongColorRejected(t *testing.T) {
+	h := loadChessScript(t)
+	// White pawn promoting must promote to a white piece.
+	b := chPromotionBoard(chWHITE)
+	spec := []byte{byte(chSq(6, 0)), byte(chSq(7, 0)), chWP, 0, chBQ}
+	require.Empty(t, h.call(t, "move", b, spec, chApply(b, spec)))
+}
+
+func TestChess_Promotion_NonPromotingMoveByteFourMustBeZero(t *testing.T) {
+	h := loadChessScript(t)
+	// Ordinary e2-e4 with byte 4 = chWQ: rejected (no promotion happening).
+	start := chNewStartBoard()
+	spec := []byte{byte(chSq(1, 4)), byte(chSq(3, 4)), chWP, 0, chWQ}
+	require.Empty(t, h.call(t, "move", start, spec, chApply(start, spec)))
+}
+
+func TestChess_Promotion_NonPawnByteFourMustBeZero(t *testing.T) {
+	h := loadChessScript(t)
+	// Knight move with byte 4 = chWQ: not a pawn, byte 4 must be 0.
+	b := chBoardWithKings(chSq(0, 4), chSq(7, 0))
+	b = chSet(b, chSq(0, 6), chWN)
+	spec := []byte{byte(chSq(0, 6)), byte(chSq(2, 5)), chWN, 0, chWQ}
+	require.Empty(t, h.call(t, "move", b, spec, chApply(b, spec)))
+}
+
+// =============================================================================
+// Tests: en passant
+// =============================================================================
+
+func TestChess_EP_TargetSetAfterTwoSquarePush(t *testing.T) {
+	h := loadChessScript(t)
+	start := chNewStartBoard()
+	spec := chMove(chSq(1, 4), chSq(3, 4), chWP, 0) // e2-e4
+	res := chApply(start, spec)
+	require.NotEmpty(t, h.call(t, "move", start, spec, res))
+	require.Equal(t, byte(chSq(2, 4)), res[67],
+		"EP target = e3 (midpoint of e2-e4)")
+}
+
+func TestChess_EP_TargetClearedAfterOtherMoves(t *testing.T) {
+	h := loadChessScript(t)
+	// After a 2-square push by white, EP target = e3. Then black makes a
+	// non-EP move; EP target must clear back to 0xff.
+	start := chNewStartBoard()
+	push := chMove(chSq(1, 4), chSq(3, 4), chWP, 0) // 1. e4
+	mid := chApply(start, push)
+	require.NotEmpty(t, h.call(t, "move", start, push, mid))
+
+	// 1...Nc6 (no double push, EP must clear).
+	reply := chMove(chSq(7, 1), chSq(5, 2), chBN, 0)
+	res := chApply(mid, reply)
+	require.NotEmpty(t, h.call(t, "move", mid, reply, res))
+	require.Equal(t, byte(chEPNone), res[67])
+}
+
+func TestChess_EP_WhiteCapturesBlack(t *testing.T) {
+	h := loadChessScript(t)
+	// Set up: white pawn on d5, black pawn on e7. Black plays e7-e5,
+	// which sets EP target = e6. White then EP-captures via dxe6.
+	b := chBoardWithKings(chSq(0, 4), chSq(7, 4)) // wK e1, bK e8
+	b = chSet(b, chSq(4, 3), chWP)                // wP d5
+	b = chSet(b, chSq(6, 4), chBP)                // bP e7
+	b[68] = chBLACK
+	push := chMove(chSq(6, 4), chSq(4, 4), chBP, 0) // ...e5
+	afterPush := chApply(b, push)
+	require.NotEmpty(t, h.call(t, "move", b, push, afterPush))
+	require.Equal(t, byte(chSq(5, 4)), afterPush[67],
+		"EP target = e6 after black's 2-square push")
+
+	// White now EP-captures: pawn d5 -> e6, capture flag + EP flag.
+	cap := chMove(chSq(4, 3), chSq(5, 4), chWP, chFlagCapture|chFlagEP)
+	res := chApply(afterPush, cap)
+	require.NotEmpty(t, h.call(t, "playerMove",
+		[]byte{chWHITE}, afterPush, cap, res),
+		"white can capture en passant on e6")
+	require.Equal(t, byte(chWP), res[chSq(5, 4)], "white pawn now on e6")
+	require.Equal(t, byte(chEMPTY), res[chSq(4, 4)], "black pawn captured (e5 cleared)")
+	require.Equal(t, byte(chEMPTY), res[chSq(4, 3)], "white's d5 cleared")
+	require.Equal(t, byte(chEPNone), res[67], "EP cleared after EP capture")
+}
+
+func TestChess_EP_BlackCapturesWhite(t *testing.T) {
+	h := loadChessScript(t)
+	// White pushes e2-e4 with a black pawn on d4 ready to EP-capture.
+	b := chBoardWithKings(chSq(0, 0), chSq(7, 4)) // wK a1, bK e8
+	b = chSet(b, chSq(1, 4), chWP)                // wP e2
+	b = chSet(b, chSq(3, 3), chBP)                // bP d4
+	push := chMove(chSq(1, 4), chSq(3, 4), chWP, 0)
+	afterPush := chApply(b, push)
+	require.NotEmpty(t, h.call(t, "move", b, push, afterPush))
+	require.Equal(t, byte(chSq(2, 4)), afterPush[67])
+
+	cap := chMove(chSq(3, 3), chSq(2, 4), chBP, chFlagCapture|chFlagEP)
+	res := chApply(afterPush, cap)
+	require.NotEmpty(t, h.call(t, "playerMove",
+		[]byte{chBLACK}, afterPush, cap, res))
+	require.Equal(t, byte(chBP), res[chSq(2, 4)])
+	require.Equal(t, byte(chEMPTY), res[chSq(3, 4)], "white pawn at e4 captured")
+}
+
+func TestChess_EP_StaleTargetRejected(t *testing.T) {
+	h := loadChessScript(t)
+	// EP capture is only legal on the move IMMEDIATELY following the
+	// 2-square push. After any intermediate move, EP must clear and the
+	// would-be EP capture must be rejected.
+	b := chBoardWithKings(chSq(0, 4), chSq(7, 4))
+	b = chSet(b, chSq(4, 3), chWP)
+	b = chSet(b, chSq(6, 4), chBP)
+	b[68] = chBLACK
+	// 1...e5
+	push := chMove(chSq(6, 4), chSq(4, 4), chBP, 0)
+	afterPush := chApply(b, push)
+	require.NotEmpty(t, h.call(t, "move", b, push, afterPush))
+	// 2. Kf1 (white waiver — non-EP move). EP target clears.
+	wait := chMove(chSq(0, 4), chSq(0, 5), chWK, 0)
+	afterWait := chApply(afterPush, wait)
+	require.NotEmpty(t, h.call(t, "move", afterPush, wait, afterWait))
+	require.Equal(t, byte(chEPNone), afterWait[67])
+	// 2...Kd8 (any black move using a piece that's actually on the board).
+	// EP target stays cleared.
+	bm := chMove(chSq(7, 4), chSq(7, 3), chBK, 0)
+	afterBlack := chApply(afterWait, bm)
+	require.NotEmpty(t, h.call(t, "move", afterWait, bm, afterBlack))
+	// 3. dxe6 attempted: must be rejected (EP target is 0xff now).
+	stale := chMove(chSq(4, 3), chSq(5, 4), chWP, chFlagCapture|chFlagEP)
+	require.Empty(t, h.call(t, "move", afterBlack, stale, chApply(afterBlack, stale)))
+}
+
+func TestChess_EP_TargetNonEmptyRejected(t *testing.T) {
+	h := loadChessScript(t)
+	// EP destination must be empty in start. If something occupies the EP
+	// target square, the EP capture is wrong.
+	b := chBoardWithKings(chSq(0, 0), chSq(7, 4))
+	b = chSet(b, chSq(4, 3), chWP)
+	b = chSet(b, chSq(4, 4), chBP) // black pawn at e5 (the would-be captured)
+	b = chSet(b, chSq(5, 4), chBN) // something already on e6
+	b[67] = byte(chSq(5, 4))       // claim EP available at e6
+	cap := chMove(chSq(4, 3), chSq(5, 4), chWP, chFlagCapture|chFlagEP)
+	require.Empty(t, h.call(t, "move", b, cap, chApply(b, cap)))
+}
+
+// =============================================================================
+// Tests: side-to-move
+// =============================================================================
+
+func TestChess_SideToMove_StartIsWhite(t *testing.T) {
+	h := loadChessScript(t)
+	got := h.call(t, "sideToMove", chNewStartBoard())
+	require.Equal(t, []byte{chWHITE}, got)
+}
+
+func TestChess_SideToMove_FlipsAfterMove(t *testing.T) {
+	h := loadChessScript(t)
+	start := chNewStartBoard()
+	spec := chMove(chSq(1, 4), chSq(3, 4), chWP, 0)
+	res := chApply(start, spec)
+	require.NotEmpty(t, h.call(t, "move", start, spec, res),
+		"move accepts the result with byte 68 flipped")
+	got := h.call(t, "sideToMove", res)
+	require.Equal(t, []byte{chBLACK}, got)
+}
+
+func TestChess_SideToMove_NoFlipIsRejected(t *testing.T) {
+	h := loadChessScript(t)
+	// Start board says white moves; result with byte 68 still white must
+	// be rejected by sideTransOK inside move.
+	start := chNewStartBoard()
+	spec := chMove(chSq(1, 4), chSq(3, 4), chWP, 0)
+	res := chApply(start, spec)
+	res[68] = chWHITE // tamper: side did not flip
+	require.Empty(t, h.call(t, "move", start, spec, res))
+}
+
+func TestChess_PlayerMove_RejectsWhenNotPlayersTurn(t *testing.T) {
+	h := loadChessScript(t)
+	// Start is white-to-move; black tries to call playerMove(BLACK,...).
+	start := chNewStartBoard()
+	spec := chMove(chSq(6, 4), chSq(4, 4), chBP, 0)
+	require.Empty(t, h.call(t, "playerMove",
+		[]byte{chBLACK}, start, spec, chApply(start, spec)),
+		"black cannot move when byte(start, 68) == white")
+}
+
+func TestChess_BoardOK_RejectsInvalidEPByte(t *testing.T) {
+	h := loadChessScript(t)
+	b := chNewStartBoard()
+	b[67] = 64 // out of 0..63 and not 0xff
+	require.Empty(t, h.call(t, "boardOK", b))
+}
+
+func TestChess_BoardOK_RejectsInvalidSideByte(t *testing.T) {
+	h := loadChessScript(t)
+	b := chNewStartBoard()
+	b[68] = 0x30 // not white (0x10) or black (0x20)
 	require.Empty(t, h.call(t, "boardOK", b))
 }

@@ -248,18 +248,19 @@ func targetOK : if(
 )
 
 // Wire-format checks. $0=startBoard, $1=moveSpec, $2=resultBoard.
-// Boards are 67 bytes: 64 square bytes + 2 king-position bytes (white at
-// 64, black at 65) + 1 castling-rights byte at 66. See chess_script.md §1.
-// The flags byte uses bits 0..3: capture, check, mate, castling. The
-// remaining 4 bits must be zero.
+// Boards are 69 bytes: 64 square bytes + 2 king-position bytes + 1
+// castling-rights byte + 1 en-passant target byte (67) + 1 side-to-move
+// byte (68). See chess_script.md §1.
+// The flags byte uses bits 0..4: capture, check, mate, castling, en
+// passant. Bits 5..7 must be zero. Byte 4 of the spec is the promotion
+// piece (validated by promotionOK below); not all-zero anymore.
 func wireOK : and(
-    equal(len($0), u64/67),
-    equal(len($2), u64/67),
+    equal(len($0), u64/69),
+    equal(len($2), u64/69),
     equal(len($1), u64/5),
     lessThan(byte($1, 0), 64),
     lessThan(byte($1, 1), 64),
-    isZero(byte($1, 4)),
-    isZero(bitwiseAND(byte($1, 3), 0xf0))
+    isZero(bitwiseAND(byte($1, 3), 0xe0))
 )
 
 // expAt: byte at idx in the "expected" result board.
@@ -303,17 +304,23 @@ func kingPosOK : and(
     equal(byte($1, 65), if(equal($3, 0x26), $2, byte($0, 65)))
 )
 
-// boardOK: structural integrity of a board (length, king-pos bytes in
-// range, indexed squares hold matching kings, rights byte uses only the 4
-// low bits). The covenant should call this once at game start; per-move
-// integrity is then preserved by kingPosOK and crOK inside move().
+// boardOK: structural integrity of a board snapshot.
+//   - length == 69
+//   - king-pos bytes (64,65) in 0..63 and indexed squares hold matching kings
+//   - rights byte (66) uses only the 4 low bits
+//   - EP target byte (67) is either 0..63 (valid square) or 0xff (none)
+//   - side byte (68) is 0x10 (white) or 0x20 (black)
+// The covenant calls this once at game start; per-move integrity is then
+// preserved by kingPosOK + crOK + epTargetOK + sideTransOK inside move().
 func boardOK : and(
-    equal(len($0), u64/67),
+    equal(len($0), u64/69),
     lessThan(byte($0, 64), 64),
     lessThan(byte($0, 65), 64),
     equal(byte($0, byte($0, 64)), 0x16),
     equal(byte($0, byte($0, 65)), 0x26),
-    isZero(bitwiseAND(byte($0, 66), 0xf0))
+    isZero(bitwiseAND(byte($0, 66), 0xf0)),
+    or(lessThan(byte($0, 67), 64), equal(byte($0, 67), 0xff)),
+    or(equal(byte($0, 68), 0x10), equal(byte($0, 68), 0x20))
 )
 
 //// check detection ////
@@ -596,41 +603,182 @@ func castleOK : selectCaseByIndex(
     castleBQ($0, $1)
 )
 
+//// promotion ////
+
+// isPromoting: this is a pawn move whose destination is the back rank
+// for the pawn's color (white rank 7, black rank 0). $0=piece, $1=to.
+func isPromoting : and(
+    equal(typeOf($0), 1),
+    if(equal(colorOf($0), 0x10),
+       equal(rankOf($1), 7),
+       equal(rankOf($1), 0))
+)
+
+// effectivePiece: piece that lands on the destination square. For a
+// promoting pawn move, the promotion piece (moveSpec[4]); otherwise the
+// moving piece itself. $0=piece, $1=to, $2=promote.
+func effectivePiece : if(isPromoting($0, $1), $2, $0)
+
+// promotionOK: the promote byte (moveSpec[4]) matches the move type.
+//   - promoting move: must be a Q/R/B/N (typeOf in 2..5) of the same color
+//   - non-promoting move: must be 0
+// $0=piece, $1=to, $2=promote.
+func promotionOK : if(
+    isPromoting($0, $1),
+    and(
+        equal(colorOf($2), colorOf($0)),
+        not(lessThan(typeOf($2), 2)),
+        not(lessThan(5, typeOf($2)))
+    ),
+    isZero($2)
+)
+
+//// en-passant target byte + side-to-move byte ////
+
+// epTargetOK: byte 67 of result reflects "EP target after this move".
+//   - if the move is a 2-square pawn push: midpoint = (from+to)/2
+//   - otherwise: 0xff (none)
+// Uniform across all moves; clears any prior EP. $0=result, $1=spec.
+func epTargetOK : equal(
+    byte($0, 67),
+    if(
+        and(
+            equal(typeOf(byte($1, 2)), 1),
+            equal(absDiff(rankOf(byte($1, 0)), rankOf(byte($1, 1))), 2)
+        ),
+        sq1(div(add(byte($1, 0), byte($1, 1)), 2)),
+        0xff
+    )
+)
+
+// sideTransOK: byte 68 of result is the opposite of byte 68 of start.
+// Uniform — does NOT enforce which side starts (that's playerMove's job).
+// $0=start, $1=result.
+func sideTransOK : equal(
+    byte($1, 68),
+    if(equal(byte($0, 68), 0x10), 0x20, 0x10)
+)
+
+//// en-passant capture: result-board with 3 changed squares ////
+
+// expAt3: expected byte at idx in result, with 3 special squares:
+// from -> empty, captured -> empty, to -> piece.
+// $0=start, $1=from, $2=to, $3=captured, $4=piece, $5=idx.
+func expAt3 : if(equal($5, $1), 0,
+            if(equal($5, $3), 0,
+            if(equal($5, $2), $4,
+            byte($0, $5))))
+
+// chunkRes3: equality of 8 consecutive squares with 3 special squares.
+// $0=start, $1=result, $2=from, $3=to, $4=captured, $5=piece, $6=baseIdx.
+func chunkRes3 : and(
+    equal(byte($1, $6),                  expAt3($0, $2, $3, $4, $5, $6)),
+    equal(byte($1, sq1(add($6, 1))),     expAt3($0, $2, $3, $4, $5, sq1(add($6, 1)))),
+    equal(byte($1, sq1(add($6, 2))),     expAt3($0, $2, $3, $4, $5, sq1(add($6, 2)))),
+    equal(byte($1, sq1(add($6, 3))),     expAt3($0, $2, $3, $4, $5, sq1(add($6, 3)))),
+    equal(byte($1, sq1(add($6, 4))),     expAt3($0, $2, $3, $4, $5, sq1(add($6, 4)))),
+    equal(byte($1, sq1(add($6, 5))),     expAt3($0, $2, $3, $4, $5, sq1(add($6, 5)))),
+    equal(byte($1, sq1(add($6, 6))),     expAt3($0, $2, $3, $4, $5, sq1(add($6, 6)))),
+    equal(byte($1, sq1(add($6, 7))),     expAt3($0, $2, $3, $4, $5, sq1(add($6, 7))))
+)
+
+// resOKEP: 64-square equality with 3 changed squares (from, to, captured).
+// $0=start, $1=result, $2=from, $3=to, $4=captured, $5=piece.
+func resOKEP : and(
+    chunkRes3($0, $1, $2, $3, $4, $5, 0),
+    chunkRes3($0, $1, $2, $3, $4, $5, 8),
+    chunkRes3($0, $1, $2, $3, $4, $5, 16),
+    chunkRes3($0, $1, $2, $3, $4, $5, 24),
+    chunkRes3($0, $1, $2, $3, $4, $5, 32),
+    chunkRes3($0, $1, $2, $3, $4, $5, 40),
+    chunkRes3($0, $1, $2, $3, $4, $5, 48),
+    chunkRes3($0, $1, $2, $3, $4, $5, 56)
+)
+
+// epCapturedSq: square of the pawn captured by an EP move.
+// White EP: captured = to - 8 (rank below the destination).
+// Black EP: captured = to + 8 (rank above the destination).
+// $0=to, $1=piece (the capturer).
+func epCapturedSq : if(
+    equal(colorOf($1), 0x10),
+    sq1(sub($0, 8)),
+    sq1(add($0, 8))
+)
+
+// epOK: en-passant capture predicate (active when flag bit 4 is set).
+//   - moving piece is a pawn
+//   - byte(start, 67) is in 0..63 (EP target available)
+//   - to == byte(start, 67)
+//   - file diff between from and to is 1
+//   - from/to ranks correct for the capturer's color
+//   - captured square holds an opposite-color pawn in start
+//   - target square is empty in start (EP destination is always empty)
+//   - result board has only the 3 changed squares (from, to, captured)
+// $0=start, $1=result, $2=from, $3=to, $4=piece.
+func epOK : and(
+    equal(typeOf($4), 1),
+    lessThan(byte($0, 67), 64),
+    equal($3, byte($0, 67)),
+    isZero(byte($0, $3)),
+    equal(absDiff(fileOf($2), fileOf($3)), 1),
+    if(equal(colorOf($4), 0x10),
+       and(equal(rankOf($2), 4), equal(rankOf($3), 5),
+           equal(byte($0, sq1(sub($3, 8))), 0x21)),
+       and(equal(rankOf($2), 3), equal(rankOf($3), 2),
+           equal(byte($0, sq1(add($3, 8))), 0x11))),
+    resOKEP($0, $1, $2, $3, epCapturedSq($3, $4), $4)
+)
+
 //// entry points ////
 
 // move(start, spec, result): truthy iff spec is a legal move in start AND
 // applying it yields result. Common rules (length / source / target /
-// king-pos / rights bookkeeping) apply to every move; geometry+resOK or
-// the castling-specific castleOK is selected by the castling flag (bit 3
-// of moveSpec[3]). Does NOT enforce whose turn it is, nor "no self-check"
-// — see playerMove.
+// king-pos / rights / EP-target / side-flip / promotion bookkeeping)
+// apply to every move; the (geometry + resOK), castleOK, or epOK branch
+// is selected by flag bits 3 (castling) and 4 (en passant). Does NOT
+// enforce whose turn it is, nor "no self-check" — see playerMove.
 func move : and(
     wireOK($0, $1, $2),
     sourceOK($0, byte($1, 0), byte($1, 2)),
-    targetOK($0, byte($1, 1), byte($1, 2), byte($1, 3)),
     crOK($0, $2, byte($1, 0), byte($1, 1)),
     kingPosOK($0, $2, byte($1, 1), byte($1, 2)),
+    promotionOK(byte($1, 2), byte($1, 1), byte($1, 4)),
+    epTargetOK($2, $1),
+    sideTransOK($0, $2),
     if(
-        isZero(bitwiseAND(byte($1, 3), 0x08)),
-        and(
-            geometryOK($0, byte($1, 0), byte($1, 1), byte($1, 3), byte($1, 2)),
-            resOK($0, $2, byte($1, 0), byte($1, 1), byte($1, 2))
-        ),
-        castleOK($0, $2, byte($1, 0), byte($1, 1), byte($1, 2))
+        not(isZero(bitwiseAND(byte($1, 3), 0x08))),
+        castleOK($0, $2, byte($1, 0), byte($1, 1), byte($1, 2)),
+        if(
+            not(isZero(bitwiseAND(byte($1, 3), 0x10))),
+            epOK($0, $2, byte($1, 0), byte($1, 1), byte($1, 2)),
+            and(
+                targetOK($0, byte($1, 1), byte($1, 2), byte($1, 3)),
+                geometryOK($0, byte($1, 0), byte($1, 1), byte($1, 3), byte($1, 2)),
+                resOK($0, $2, byte($1, 0), byte($1, 1),
+                      effectivePiece(byte($1, 2), byte($1, 1), byte($1, 4)))
+            )
+        )
     )
 )
 
 // playerMove(kingColor, start, spec, result): the full per-player turn
-// predicate — the moving piece has color kingColor (so the player is
-// moving their own piece), the move itself is legal, and the result does
+// predicate — the moving piece has color kingColor (player is moving
+// their own piece), it is the player's turn (byte 68 of start equals
+// kingColor), the move itself is legal (move()), and the result does
 // not leave the mover's king in check.
 func playerMove : and(
     equal(colorOf(byte($2, 2)), $0),
+    equal(byte($1, 68), $0),
     move($1, $2, $3),
     not(isCheck($0, $3))
 )
 
-// isStart(board): truthy iff board is the canonical 67-byte starting
+// sideToMove(board): byte 68 — 0x10 (white) or 0x20 (black). Exposed for
+// the covenant to query whose turn it is from the on-chain board snapshot.
+func sideToMove : byte($0, 68)
+
+// isStart(board): truthy iff board is the canonical 69-byte starting
 // position. Trailing bytes: 04 = white king sq (e1), 3c = black king sq
-// (e8), 0f = all four castling rights initially available.
-func isStart : equal($0, 0x14121315161312141111111111111111000000000000000000000000000000000000000000000000000000000000000021212121212121212422232526232224043c0f)
+// (e8), 0f = all four castling rights initially available, ff = no EP
+// target, 10 = white moves first.
+func isStart : equal($0, 0x14121315161312141111111111111111000000000000000000000000000000000000000000000000000000000000000021212121212121212422232526232224043c0fff10)
