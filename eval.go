@@ -137,6 +137,14 @@ func (p *CallParams[T]) Arg(n byte) []byte {
 	return ret
 }
 
+// ArgExpression returns the expression tree of the n-th argument of the
+// current call site without evaluating it. Useful for embedded functions
+// that want to introspect call-site shape (e.g. to require an inline-data
+// literal at a specific arg position). Out-of-range n panics.
+func (p *CallParams[T]) ArgExpression(n byte) *Expression[T] {
+	return p.args[n]
+}
+
 func (p *CallParams[T]) Trace(format string, args ...any) {
 	if isNil(p.glb) || !p.glb.Trace() {
 		return

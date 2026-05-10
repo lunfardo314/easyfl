@@ -474,3 +474,60 @@ func TestManyParams(t *testing.T) {
 	})
 
 }
+
+// TestArgExpression registers a custom embedded function that introspects
+// arg 0 via CallParams.ArgExpression. The fn returns the inline-data payload
+// when arg 0 is an inline literal, and panics otherwise — exactly the
+// pattern Proxima uses to require a literal hash/bin at a specific arg
+// position without evaluating it.
+func TestArgExpression(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	// requireLiteral0 returns par.Arg(0) when arg 0 is inline data; panics
+	// when it is anything else (formula call, parameter ref).
+	requireLiteral0 := func(par *CallParams[any]) []byte {
+		expr := par.ArgExpression(0)
+		if !expr.IsInlineData() {
+			par.TracePanic("requireLiteral0: arg 0 must be inline data")
+		}
+		return par.AllocData(expr.InlineData()...)
+	}
+
+	yamlData := `
+functions:
+  -
+    sym: requireLiteral0
+    numArgs: 1
+    embedded_as: requireLiteral0
+`
+	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
+	require.NoError(t, err)
+	resolver := func(sym string) EmbeddedFunction[any] {
+		if sym == "requireLiteral0" {
+			return requireLiteral0
+		}
+		return EmbeddedFunctions[any](lib)(sym)
+	}
+	require.NoError(t, lib.Upgrade(fromYaml, resolver))
+
+	t.Run("inline literal accepted", func(t *testing.T) {
+		ret, err := lib.EvalFromSource(nil, "requireLiteral0(0xdeadbeef)")
+		require.NoError(t, err)
+		require.Equal(t, []byte{0xde, 0xad, 0xbe, 0xef}, ret)
+	})
+
+	t.Run("formula rejected", func(t *testing.T) {
+		// concat is a real call, not inline data — runtime check fires.
+		_, err := lib.EvalFromSource(nil, "requireLiteral0(concat(0xde, 0xad))")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "must be inline data")
+	})
+
+	t.Run("parameter ref rejected", func(t *testing.T) {
+		// Parameter refs are not inline data either — they are short calls
+		// in the reserved range; IsInlineData reports false.
+		_, err := lib.EvalFromSource(nil, "requireLiteral0($0)", []byte{0xde})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "must be inline data")
+	})
+}
