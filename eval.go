@@ -145,6 +145,14 @@ func (p *CallParams[T]) ArgExpression(n byte) *Expression[T] {
 	return p.args[n]
 }
 
+// GlobalData returns the GlobalData[T] wrapper that owns this call.
+// Useful for embedded functions that need to re-enter easyfl with the
+// same trace state — e.g. invoking LocalScript.Eval from within a
+// builtin while preserving the caller's tracing/library context.
+func (p *CallParams[T]) GlobalData() GlobalData[T] {
+	return p.glb
+}
+
 func (p *CallParams[T]) Trace(format string, args ...any) {
 	if isNil(p.glb) || !p.glb.Trace() {
 		return

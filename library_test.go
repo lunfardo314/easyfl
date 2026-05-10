@@ -531,3 +531,42 @@ functions:
 		require.Contains(t, err.Error(), "must be inline data")
 	})
 }
+
+// TestGlobalData registers a custom embedded function that re-emits the
+// library's NumFunctions through par.GlobalData().Library(). Verifies that
+// embedded functions can reach back to the GlobalData wrapper without the
+// host having to stash a back-reference somewhere.
+func TestGlobalData(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	echoNumFunctions := func(par *CallParams[any]) []byte {
+		nf := par.GlobalData().Library().NumFunctions()
+		ret := par.Alloc(2)
+		binary.BigEndian.PutUint16(ret, nf)
+		return ret
+	}
+
+	yamlData := `
+functions:
+  -
+    sym: echoNumFunctions
+    numArgs: 0
+    embedded_as: echoNumFunctions
+`
+	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
+	require.NoError(t, err)
+	resolver := func(sym string) EmbeddedFunction[any] {
+		if sym == "echoNumFunctions" {
+			return echoNumFunctions
+		}
+		return EmbeddedFunctions[any](lib)(sym)
+	}
+	require.NoError(t, lib.Upgrade(fromYaml, resolver))
+
+	expectedNF := lib.NumFunctions()
+	glb := lib.NewGlobalDataNoTrace(nil)
+	ret, err := lib.EvalFromSource(glb, "echoNumFunctions")
+	require.NoError(t, err)
+	require.Equal(t, 2, len(ret))
+	require.Equal(t, expectedNF, binary.BigEndian.Uint16(ret))
+}
