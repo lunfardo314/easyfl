@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/lunfardo314/easyfl/slicepool"
 )
 
 // Local scripts are self-contained, serialized bundles of EasyFL functions.
@@ -422,26 +424,21 @@ func (s *LocalScript[T]) Function(idx int) (*Expression[T], error) {
 
 // Eval evaluates function idx of the script with the given args, in the given
 // data context. Returns the function's result as bytes, or an error (caught
-// from any panic during evaluation).
+// from any panic during evaluation). Creates and disposes its own slice pool,
+// so the returned slice survives this call.
+//
+// For nested dispatch (one script invoked from inside another's evaluation),
+// prefer EvalInPool — it threads the caller's slice pool through, avoiding
+// the per-Eval pool creation + segment churn + result copy-out.
 //
 // Privacy gate: attempts to invoke a private function (source-level name
 // starts with '_') return an error before any evaluation runs. Hosts that
 // dispatch into a script — most notably callRedeemer in proxima — surface
 // this as a script-validation failure on the consuming transaction.
 func (s *LocalScript[T]) Eval(glb GlobalData[T], idx int, args ...[]byte) ([]byte, error) {
-	if idx < 0 || idx >= len(s.funByFunCode) {
-		return nil, fmt.Errorf("local script: function index %d out of bounds (n=%d)", idx, len(s.funByFunCode))
-	}
-	if s.funByFunCode[idx].private {
-		return nil, fmt.Errorf("local script: function #%d is private and cannot be invoked", idx)
-	}
-	expr, err := s.Function(idx)
+	expr, err := s.checkAndGetExpression(idx, len(args))
 	if err != nil {
 		return nil, err
-	}
-	declared := s.funByFunCode[idx].requiredNumParams
-	if declared >= 0 && declared != len(args) {
-		return nil, fmt.Errorf("local script: function #%d expects %d args, got %d", idx, declared, len(args))
 	}
 	var ret []byte
 	defer func() {
@@ -451,6 +448,48 @@ func (s *LocalScript[T]) Eval(glb GlobalData[T], idx int, args ...[]byte) ([]byt
 	}()
 	ret = EvalExpression(glb, expr, args...)
 	return ret, err
+}
+
+// EvalInPool is the nested-dispatch variant of Eval. The caller supplies
+// the slice pool the outer evaluation is using; this call's allocations
+// land in that pool, and the returned slice references pool-owned memory
+// (no defensive copy-out). The caller must keep the pool alive for the
+// duration of any downstream consumption of the returned slice.
+//
+// Used by proxima's callRedeemer to thread the parent eval's spool down
+// into the redeemed script, eliminating per-redeemer pool creation and
+// result copy-out — which dominate allocations in deeply nested covenant
+// validators.
+func (s *LocalScript[T]) EvalInPool(glb GlobalData[T], spool *slicepool.SlicePool, idx int, args ...[]byte) ([]byte, error) {
+	expr, err := s.checkAndGetExpression(idx, len(args))
+	if err != nil {
+		return nil, err
+	}
+	var ret []byte
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("local script: eval #%d: %v", idx, r)
+		}
+	}()
+	ret = EvalExpressionInPool(glb, spool, expr, args...)
+	return ret, err
+}
+
+// checkAndGetExpression validates idx (range + privacy + arity) and
+// returns the expression tree to evaluate. Shared between Eval and
+// EvalInPool so dispatch rules stay in one place.
+func (s *LocalScript[T]) checkAndGetExpression(idx, gotArgs int) (*Expression[T], error) {
+	if idx < 0 || idx >= len(s.funByFunCode) {
+		return nil, fmt.Errorf("local script: function index %d out of bounds (n=%d)", idx, len(s.funByFunCode))
+	}
+	if s.funByFunCode[idx].private {
+		return nil, fmt.Errorf("local script: function #%d is private and cannot be invoked", idx)
+	}
+	declared := s.funByFunCode[idx].requiredNumParams
+	if declared >= 0 && declared != gotArgs {
+		return nil, fmt.Errorf("local script: function #%d expects %d args, got %d", idx, declared, gotArgs)
+	}
+	return s.Function(idx)
 }
 
 // === wire format ===

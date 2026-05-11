@@ -11,7 +11,12 @@ package slicepool
 
 import "sync"
 
-const segmentSize = 1022
+// segmentSize is the per-segment payload size; combined with the 2-byte
+// allocAt field below it keeps each segment at exactly 2 KiB (2048 bytes).
+// Was 1022 (1 KiB segments); raised to 2046 to reduce sync.Pool churn under
+// redeemer-heavy workloads where each tx allocates thousands of small
+// interim slices across nested LocalScript.Eval calls.
+const segmentSize = 2046
 
 type (
 	segment struct {

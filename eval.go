@@ -186,6 +186,15 @@ func (p *CallParams[T]) AllocData(data ...byte) []byte {
 	return p.spool.AllocData(data...)
 }
 
+// Spool returns the slice pool backing the current eval. Hosts that
+// dispatch into another script (notably proxima's callRedeemer →
+// LocalScript.EvalInPool) thread this pool through so nested evaluations
+// share allocations with the outer one — avoiding per-redeemer pool
+// creation, segment churn, and result copy-out.
+func (p *CallParams[T]) Spool() *slicepool.SlicePool {
+	return p.spool
+}
+
 func (p *CallParams[T]) EvalParam(paramNr byte) []byte {
 	return p.varScope[paramNr].Eval()
 }
@@ -204,28 +213,35 @@ func evalExpression[T any](glb GlobalData[T], spool *slicepool.SlicePool, f *Exp
 	return newEvalContext(varScope, glb, spool).eval(f)
 }
 
-// EvalExpression evaluates the expression, in the context of any data context and given values of parameters
+// EvalExpression evaluates the expression in the context of any data
+// context and given values of parameters. Allocates and disposes its own
+// slice pool for the call, and returns the result copied to the Go heap
+// so it survives the Dispose. Use this at one-shot entry points where
+// the caller doesn't already own a pool.
 func EvalExpression[T any](glb GlobalData[T], f *Expression[T], args ...[]byte) []byte {
-	argsForData := make([]*call[T], len(args))
-
 	spool := slicepool.New()
-	ctx := newEvalContext(nil, glb, spool)
-	for i, d := range args {
-		dfun, err := dataFunction[T](d)
-		easyfl_util.AssertNoError(err)
-		argsForData[i] = newCall[T](dfun, nil, ctx)
-	}
-	retp := evalExpression(glb, spool, f, argsForData)
-	ret := make([]byte, len(retp))
-	copy(ret, retp)
-	spool.Dispose()
-
-	return ret
+	defer spool.Dispose()
+	return EvalExpressionWithSlicePool(glb, spool, f, args...)
 }
 
-// EvalExpressionWithSlicePool evaluates expression, in the context of any data context and given values of parameters
-// It must be provided slice pool for allocation of interim  data
-func EvalExpressionWithSlicePool[T any](glb GlobalData[T], spool *slicepool.SlicePool, f *Expression[T], args ...[]byte) []byte {
+// EvalExpressionInPool evaluates an expression using a slice pool
+// supplied by the caller and returns the result *as a slice referencing
+// pool-owned memory*, with no defensive copy-out. The caller must keep
+// the pool alive (i.e. not call Dispose) for as long as the result is
+// consumed.
+//
+// A nil spool degrades each interim allocation to a heap make([]byte,n),
+// which gives the result independent Go-managed lifetime.
+//
+// Intended for nested dispatch paths — most notably LocalScript.EvalInPool
+// (called from proxima's callRedeemer) — to thread the outer eval's spool
+// down into nested scripts so all allocations land in one pool and one
+// Dispose covers the whole chain.
+//
+// For external entry points where the caller wants the result independent
+// of the pool's lifetime (so the pool can be disposed straight after) use
+// EvalExpressionWithSlicePool instead.
+func EvalExpressionInPool[T any](glb GlobalData[T], spool *slicepool.SlicePool, f *Expression[T], args ...[]byte) []byte {
 	argsForData := make([]*call[T], len(args))
 
 	ctx := newEvalContext(nil, glb, spool)
@@ -234,10 +250,21 @@ func EvalExpressionWithSlicePool[T any](glb GlobalData[T], spool *slicepool.Slic
 		easyfl_util.AssertNoError(err)
 		argsForData[i] = newCall[T](dfun, nil, ctx)
 	}
-	retp := evalExpression(glb, spool, f, argsForData)
+	return evalExpression(glb, spool, f, argsForData)
+}
+
+// EvalExpressionWithSlicePool evaluates an expression using the supplied
+// slice pool and copies the result onto the Go heap before returning, so
+// the result outlives any subsequent Dispose on the pool.
+//
+// Use this at entry points where the pool's lifetime is bounded to a
+// single eval and the caller wants to free everything right after. For
+// nested dispatch where the same pool covers the whole chain, prefer
+// EvalExpressionInPool to skip the copy.
+func EvalExpressionWithSlicePool[T any](glb GlobalData[T], spool *slicepool.SlicePool, f *Expression[T], args ...[]byte) []byte {
+	retp := EvalExpressionInPool(glb, spool, f, args...)
 	ret := make([]byte, len(retp))
 	copy(ret, retp)
-
 	return ret
 }
 
