@@ -413,6 +413,115 @@ func TestLocalScript_DecompileSane(t *testing.T) {
 }
 
 // =============================================================================
+// Private entry points (leading-underscore convention)
+// =============================================================================
+
+// TestLocalScript_PrivacyFromSourceName: a source-level function whose name
+// starts with '_' is marked private; (*LocalScript[T]).Eval refuses to
+// dispatch it and reports the privacy violation in the error.
+func TestLocalScript_PrivacyFromSourceName(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+	const source = `
+func _hidden : concat($0, 0xff)
+func visible : 0x42
+`
+	bin, indices, err := lib.CompileLocalScriptWithIndex(source)
+	require.NoError(t, err)
+	s, err := lib.LocalScriptFromBytes(bin)
+	require.NoError(t, err)
+
+	require.True(t, s.IsPrivate(indices["_hidden"]),
+		"_hidden must be marked private")
+	require.False(t, s.IsPrivate(indices["visible"]),
+		"visible must be public")
+
+	// Public dispatch works.
+	out, err := s.Eval(nil, indices["visible"])
+	require.NoError(t, err)
+	require.Equal(t, []byte{0x42}, out)
+
+	// Private dispatch panics with a 'private' error.
+	_, err = s.Eval(nil, indices["_hidden"], []byte{0x01})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "private")
+}
+
+// TestLocalScript_PrivateHelperUsableByPublicFn: privacy gates only the
+// outermost Eval entry — inside the script, public functions can freely
+// call private helpers via the normal local-call mechanism.
+func TestLocalScript_PrivateHelperUsableByPublicFn(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+	const source = `
+func _pair   : concat($0, $1)
+func combine : _pair($0, $1)
+`
+	bin, indices, err := lib.CompileLocalScriptWithIndex(source)
+	require.NoError(t, err)
+	s, err := lib.LocalScriptFromBytes(bin)
+	require.NoError(t, err)
+
+	out, err := s.Eval(nil, indices["combine"], []byte{0xaa}, []byte{0xbb})
+	require.NoError(t, err)
+	require.Equal(t, []byte{0xaa, 0xbb}, out)
+
+	_, err = s.Eval(nil, indices["_pair"], []byte{0xaa}, []byte{0xbb})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "private")
+}
+
+// TestLocalScript_PrivacySurvivesRoundTrip: privacy is encoded in the bin
+// header's flags[n] array (see compileLocalScript / parseLocalScriptHeader).
+// Compile, serialise, decode — privacy bits must round-trip even though the
+// decoded script uses synthesised "script#i" symbols rather than source names.
+func TestLocalScript_PrivacySurvivesRoundTrip(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+	const source = `
+func _h1     : 0x01
+func _h2     : 0x02
+func public1 : concat(_h1, _h2)
+func public2 : 0x42
+`
+	bin, indices, err := lib.CompileLocalScriptWithIndex(source)
+	require.NoError(t, err)
+	s, err := lib.LocalScriptFromBytes(bin)
+	require.NoError(t, err)
+
+	require.True(t, s.IsPrivate(indices["_h1"]))
+	require.True(t, s.IsPrivate(indices["_h2"]))
+	require.False(t, s.IsPrivate(indices["public1"]))
+	require.False(t, s.IsPrivate(indices["public2"]))
+
+	// Re-decode the same bytes — privacy bits remain pinned to the same
+	// wire indices.
+	s2, err := lib.LocalScriptFromBytes(bin)
+	require.NoError(t, err)
+	for i := 0; i < s.NumFunctions(); i++ {
+		require.Equal(t, s.IsPrivate(i), s2.IsPrivate(i),
+			"IsPrivate(%d) must round-trip", i)
+	}
+}
+
+// TestLocalScript_AllPublicWhenNoUnderscores: a script with no underscore-
+// prefixed function names has every function public — nothing surprising
+// happens to scripts that don't use the convention.
+func TestLocalScript_AllPublicWhenNoUnderscores(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+	const source = `
+func a : 0x01
+func b : 0x02
+func c : concat(a, b)
+`
+	bin, err := lib.CompileLocalScript(source)
+	require.NoError(t, err)
+	s, err := lib.LocalScriptFromBytes(bin)
+	require.NoError(t, err)
+	for i := 0; i < s.NumFunctions(); i++ {
+		require.False(t, s.IsPrivate(i),
+			"function #%d must be public when nothing in source starts with _", i)
+	}
+}
+
+// =============================================================================
 // LocalScriptCallSiteCheck (compile- and decode-time hook)
 // =============================================================================
 

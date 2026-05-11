@@ -18,18 +18,33 @@ const MaxLocalScriptFunctions = 256
 //
 //	LocalScriptBin :=
 //	    magic[2]              // 0x45 0x53  ('ES')
-//	    version[1]            // 0x01
+//	    version[1]            // 0x02
 //	    n[2]                  // BE uint16, number of functions, 0..256
 //	    arity[n]              // 1 byte each, declared arity 0..15
+//	    flags[n]              // 1 byte each, per-fn flag bits (bit 0 = private)
 //	    offsets[n*2]          // BE uint16, byte offset of each fn's bytecode within `body`
 //	    bodyLen[2]            // BE uint16
 //	    body[bodyLen]         // concatenated function bytecodes
 //
-// Header total: 5 + 3*n + 2 = 7 + 3*n bytes.
+// Header total: 5 + 4*n + 2 = 7 + 4*n bytes.
+//
+// Version 0x02 added the flags[n] array for the private-entry-point feature
+// (see compileLocalScript and (*LocalScript[T]).Eval). v1 bins are rejected;
+// no backward compatibility is maintained at this stage.
 const (
 	localScriptMagic0  = 0x45 // 'E'
 	localScriptMagic1  = 0x53 // 'S'
-	localScriptVersion = 0x01
+	localScriptVersion = 0x02
+)
+
+// Per-function flag bits in the `flags[n]` header array.
+const (
+	// localScriptFlagPrivate marks a function that cannot be invoked via
+	// (*LocalScript[T]).Eval (or transitively via callRedeemer). Set
+	// automatically at compile time for any source-level function whose name
+	// starts with an underscore. Internal helpers carry an `_` prefix; the
+	// public API does not.
+	localScriptFlagPrivate byte = 1 << 0
 )
 
 // LocalScriptBin is the canonical wire form of a local script.
@@ -106,7 +121,9 @@ func (lib *Library[T]) compileLocalScript(source string, check LocalScriptCallSi
 		seen[p.Sym] = true
 	}
 
-	// ---- Phase 2: introduce stubs in a fresh compile-time scope
+	// ---- Phase 2: introduce stubs in a fresh compile-time scope.
+	// Privacy is decided at this point: any source-level function whose name
+	// starts with '_' is private and will refuse to be dispatched at runtime.
 	scope := &LocalScript[T]{
 		funByName:    make(map[string]*funDescriptor[T], len(parsed)),
 		funByFunCode: make([]*funDescriptor[T], 0, len(parsed)),
@@ -116,6 +133,7 @@ func (lib *Library[T]) compileLocalScript(source string, check LocalScriptCallSi
 			sym:               p.Sym,
 			funCode:           uint16(FirstLocalFunCode) + uint16(i),
 			requiredNumParams: -1, // temporary; set in Phase 2.5
+			private:           strings.HasPrefix(p.Sym, "_"),
 		}
 		scope.funByName[p.Sym] = d
 		scope.funByFunCode = append(scope.funByFunCode, d)
@@ -326,8 +344,11 @@ func (lib *Library[T]) LocalScriptFromBytesWithCheck(bin LocalScriptBin, check L
 }
 
 // LocalScriptFromBytes parses a LocalScriptBin into the executable form.
+// Decoded scripts use synthesised "script#i" symbols (the original source
+// names aren't on the wire), but per-fn privacy survives serialisation via
+// the flags[n] header array — see compileLocalScript for the encoding.
 func (lib *Library[T]) LocalScriptFromBytes(bin LocalScriptBin) (*LocalScript[T], error) {
-	arities, bodies, err := parseLocalScriptHeader(bin)
+	arities, flags, bodies, err := parseLocalScriptHeader(bin)
 	if err != nil {
 		return nil, err
 	}
@@ -346,6 +367,7 @@ func (lib *Library[T]) LocalScriptFromBytes(bin LocalScriptBin) (*LocalScript[T]
 			sym:               sym,
 			funCode:           uint16(FirstLocalFunCode) + uint16(i),
 			requiredNumParams: int(ar),
+			private:           flags[i]&localScriptFlagPrivate != 0,
 		}
 		ret.funByName[sym] = d
 		ret.funByFunCode = append(ret.funByFunCode, d)
@@ -380,6 +402,16 @@ func (s *LocalScript[T]) Arity(idx int) (int, error) {
 	return s.funByFunCode[idx].requiredNumParams, nil
 }
 
+// IsPrivate reports whether function idx is private. Private functions are
+// internal helpers (source-level name starts with '_'); Eval refuses to
+// dispatch them. Indices out of range count as "not private".
+func (s *LocalScript[T]) IsPrivate(idx int) bool {
+	if idx < 0 || idx >= len(s.funByFunCode) {
+		return false
+	}
+	return s.funByFunCode[idx].private
+}
+
 // Function returns the expression tree for function idx.
 func (s *LocalScript[T]) Function(idx int) (*Expression[T], error) {
 	if idx < 0 || idx >= len(s.expressions) {
@@ -391,7 +423,18 @@ func (s *LocalScript[T]) Function(idx int) (*Expression[T], error) {
 // Eval evaluates function idx of the script with the given args, in the given
 // data context. Returns the function's result as bytes, or an error (caught
 // from any panic during evaluation).
+//
+// Privacy gate: attempts to invoke a private function (source-level name
+// starts with '_') return an error before any evaluation runs. Hosts that
+// dispatch into a script — most notably callRedeemer in proxima — surface
+// this as a script-validation failure on the consuming transaction.
 func (s *LocalScript[T]) Eval(glb GlobalData[T], idx int, args ...[]byte) ([]byte, error) {
+	if idx < 0 || idx >= len(s.funByFunCode) {
+		return nil, fmt.Errorf("local script: function index %d out of bounds (n=%d)", idx, len(s.funByFunCode))
+	}
+	if s.funByFunCode[idx].private {
+		return nil, fmt.Errorf("local script: function #%d is private and cannot be invoked", idx)
+	}
 	expr, err := s.Function(idx)
 	if err != nil {
 		return nil, err
@@ -413,44 +456,48 @@ func (s *LocalScript[T]) Eval(glb GlobalData[T], idx int, args ...[]byte) ([]byt
 // === wire format ===
 
 // parseLocalScriptHeader validates the wire format and returns the per-fn
-// declared arities and per-fn bytecode slices (slices are views into bin).
-func parseLocalScriptHeader(bin LocalScriptBin) ([]byte, [][]byte, error) {
+// declared arities, per-fn flag bytes, and per-fn bytecode slices (slices
+// are views into bin).
+func parseLocalScriptHeader(bin LocalScriptBin) (arities, flags []byte, bodies [][]byte, err error) {
 	const fixed = 2 + 1 + 2 + 2 // magic + version + n + bodyLen
 	if len(bin) < fixed {
-		return nil, nil, fmt.Errorf("local script: truncated header")
+		return nil, nil, nil, fmt.Errorf("local script: truncated header")
 	}
 	if bin[0] != localScriptMagic0 || bin[1] != localScriptMagic1 {
-		return nil, nil, fmt.Errorf("local script: bad magic")
+		return nil, nil, nil, fmt.Errorf("local script: bad magic")
 	}
 	if bin[2] != localScriptVersion {
-		return nil, nil, fmt.Errorf("local script: unsupported version 0x%02x", bin[2])
+		return nil, nil, nil, fmt.Errorf("local script: unsupported version 0x%02x", bin[2])
 	}
 	n := int(binary.BigEndian.Uint16(bin[3:5]))
 	if n > MaxLocalScriptFunctions {
-		return nil, nil, fmt.Errorf("local script: too many functions: %d (max %d)", n, MaxLocalScriptFunctions)
+		return nil, nil, nil, fmt.Errorf("local script: too many functions: %d (max %d)", n, MaxLocalScriptFunctions)
 	}
-	headerLen := 5 + 3*n + 2
+	headerLen := 5 + 4*n + 2 // magic+version + n + arity[n] + flags[n] + offsets[n*2] + bodyLen
 	if len(bin) < headerLen {
-		return nil, nil, fmt.Errorf("local script: truncated header (need %d, got %d)", headerLen, len(bin))
+		return nil, nil, nil, fmt.Errorf("local script: truncated header (need %d, got %d)", headerLen, len(bin))
 	}
-	arities := make([]byte, n)
+	arities = make([]byte, n)
 	copy(arities, bin[5:5+n])
 	for i, ar := range arities {
 		if ar > MaxParameters {
-			return nil, nil, fmt.Errorf("local script: function #%d has arity %d (max %d)", i, ar, MaxParameters)
+			return nil, nil, nil, fmt.Errorf("local script: function #%d has arity %d (max %d)", i, ar, MaxParameters)
 		}
 	}
-	offsetsBase := 5 + n
+	flags = make([]byte, n)
+	copy(flags, bin[5+n:5+2*n])
+
+	offsetsBase := 5 + 2*n
 	offsets := make([]int, n)
 	for i := 0; i < n; i++ {
 		offsets[i] = int(binary.BigEndian.Uint16(bin[offsetsBase+2*i : offsetsBase+2*i+2]))
 	}
 	bodyLen := int(binary.BigEndian.Uint16(bin[offsetsBase+2*n : offsetsBase+2*n+2]))
 	if len(bin) != headerLen+bodyLen {
-		return nil, nil, fmt.Errorf("local script: bad bodyLen (header says %d, total wire %d)", bodyLen, len(bin))
+		return nil, nil, nil, fmt.Errorf("local script: bad bodyLen (header says %d, total wire %d)", bodyLen, len(bin))
 	}
 	body := bin[headerLen:]
-	bodies := make([][]byte, n)
+	bodies = make([][]byte, n)
 	for i := 0; i < n; i++ {
 		start := offsets[i]
 		end := bodyLen
@@ -458,12 +505,12 @@ func parseLocalScriptHeader(bin LocalScriptBin) ([]byte, [][]byte, error) {
 			end = offsets[i+1]
 		}
 		if start > end || end > bodyLen {
-			return nil, nil, fmt.Errorf("local script: bad offsets at #%d (start=%d end=%d bodyLen=%d)",
+			return nil, nil, nil, fmt.Errorf("local script: bad offsets at #%d (start=%d end=%d bodyLen=%d)",
 				i, start, end, bodyLen)
 		}
 		bodies[i] = body[start:end]
 	}
-	return arities, bodies, nil
+	return arities, flags, bodies, nil
 }
 
 // encodeLocalScript writes bytecodes in the given topological order and
@@ -499,7 +546,7 @@ func encodeLocalScript[T any](
 		return nil, fmt.Errorf("local script: body too large: %d bytes (max 65535)", totalBody)
 	}
 
-	headerLen := 5 + 3*n + 2
+	headerLen := 5 + 4*n + 2
 	out := make([]byte, headerLen+totalBody)
 	out[0] = localScriptMagic0
 	out[1] = localScriptMagic1
@@ -511,8 +558,17 @@ func encodeLocalScript[T any](
 		out[5+newIdx] = byte(scope.funByFunCode[oldIdx].requiredNumParams)
 	}
 
+	// flags[n] in NEW order. Bit 0 = private. See localScriptFlagPrivate.
+	for newIdx, oldIdx := range order {
+		var f byte
+		if scope.funByFunCode[oldIdx].private {
+			f |= localScriptFlagPrivate
+		}
+		out[5+n+newIdx] = f
+	}
+
 	// offsets[n*2]
-	offsetsBase := 5 + n
+	offsetsBase := 5 + 2*n
 	off := 0
 	for i := 0; i < n; i++ {
 		binary.BigEndian.PutUint16(out[offsetsBase+2*i:offsetsBase+2*i+2], uint16(off))

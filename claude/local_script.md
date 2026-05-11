@@ -50,9 +50,12 @@ Replace the current `tuples.Tuple` envelope with a flat header:
 ```
 LocalScriptBin :=
     magic[2]              // 0x45 0x53  ('ES' = "EasyFL Script")
-    version[1]            // 0x01
+    version[1]            // 0x02
     n[2]                  // big-endian uint16, number of functions, 0..256
     arity[n]              // 1 byte each, declared arity 0..15
+    flags[n]              // 1 byte each, per-function flags
+                          //   bit 0 = private (cannot be dispatched via Eval)
+                          //   bits 1..7 reserved, must be zero
     offsets[n*2]          // big-endian uint16, byte offset of each fn's
                           //   bytecode within `body`
     bodyLen[2]            // big-endian uint16
@@ -61,6 +64,10 @@ LocalScriptBin :=
 
 `n` is two bytes so that a 256-function script is representable; a one-byte
 `n` would alias 256 to 0 (the empty case) on the wire.
+
+Version `0x02` introduced the `flags[n]` array for the private-entry-point
+feature (see §5 below). v1 bins are rejected without translation — no
+backward compatibility is maintained at this stage.
 
 ### Why a flat header
 
@@ -84,6 +91,29 @@ const MaxLocalScriptFunctions = 256
 ```
 
 All compile, decode and call paths must use this constant.
+
+### Private entry points (runtime concept)
+
+Source-level functions whose name begins with `_` are **private**. Privacy
+is enforced at runtime by `(*LocalScript[T]).Eval`: an attempt to invoke a
+private function (and, transitively, anything dispatching through it such
+as proxima's `callRedeemer`) returns an error before the body runs.
+
+- Public functions form the script's public API; covenants typically use
+  one per dispatch branch.
+- Private functions are internal helpers (state-field accessors, arithmetic
+  shims, etc.). They are still freely callable *within* the script — only
+  the outermost `Eval` entry is gated.
+- The leading underscore is the only syntactic marker. No keyword, no
+  attribute — same convention proxima's lib already uses for internal
+  helpers (`_chainLock`, `_htlc`, …).
+- Privacy is encoded into the bin via the per-function flags byte (§4) so
+  the bit survives serialisation. Decoded scripts use synthesised
+  `script#i` symbols, but their `IsPrivate(i)` answer is preserved.
+
+Privacy only applies to local scripts; the global `Library[T]` has no
+notion of private functions (all extended functions there are addressable
+by name).
 
 ## 5. Compilation
 

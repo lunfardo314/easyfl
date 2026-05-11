@@ -75,6 +75,12 @@ type (
 		description string
 		// if true, function cannot be replaced/modified in upgrades
 		immutable bool
+		// local-script privacy: set on funDescriptors that belong to a
+		// *LocalScript[T] whose source-level name starts with '_'.
+		// Privacy is a runtime concept — Eval(idx) panics when idx targets a
+		// private function. Not used for the global Library[T] (where all
+		// functions are public). See local_script.go for the encoding.
+		private bool
 	}
 
 	funInfo struct {
