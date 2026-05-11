@@ -547,7 +547,9 @@ func (lib *Library[T]) evalParseInlineData(par *CallParams[T]) []byte {
 		par.TracePanic("evalParseInlineData: not an inline data function: %s (got decompiled='%v')",
 			easyfl_util.FmtLazy(dataBytecode), deco)
 	}
-	return dataBytecode[1:]
+	// Short-form inline data has a 1-byte prefix [0x80|len]; long-form has
+	// 3 bytes [0xff, len[2]]. StripDataPrefix selects the right offset.
+	return StripDataPrefix(dataBytecode)
 }
 
 // evalParseBytecode takes bytecode of the argument as is.
@@ -592,7 +594,8 @@ func (lib *Library[T]) evalParseBytecode(par *CallParams[T]) (ret []byte) {
 func (lib *Library[T]) evalParseInlineDataArgument(par *CallParams[T]) (ret []byte) {
 	ret = lib.evalParseBytecode(par)
 	par.Require(HasInlineDataPrefix(ret), "evalParseInlineDataArgument: not an inline data function")
-	return ret[1:]
+	// Same short/long handling as evalParseInlineData.
+	return StripDataPrefix(ret)
 }
 
 func (lib *Library[T]) evalParseNumArgs(par *CallParams[T]) []byte {

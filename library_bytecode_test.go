@@ -528,3 +528,35 @@ func TestParseInlineDataArgumentAnyPrefix(t *testing.T) {
 	src2 = fmt.Sprintf("parseInlineDataArgument(0x%s, 3)", hex.EncodeToString(bytecode))
 	lib.MustEqual(src2, "4")
 }
+
+// TestParseInlineDataLongForm: payloads ≥ 127 bytes use the 3-byte long
+// inline-data prefix (0xff || len[2]). parseInlineData and
+// parseInlineDataArgument must skip the full prefix in both forms.
+// Regression for a bug where both functions stripped a fixed 1 byte,
+// leaving the 2 length bytes in the long-form payload.
+func TestParseInlineDataLongForm(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+
+	// 150-byte payload — comfortably above the 127-byte short/long boundary.
+	payload := make([]byte, 150)
+	for i := range payload {
+		payload[i] = byte(i)
+	}
+	payloadHex := hex.EncodeToString(payload)
+
+	// Wrap in or(<long-form>, 0x01) so we can extract arg 0's bytecode
+	// (not its evaluation) via parseBytecode, then feed it to
+	// parseInlineData. Same pattern the test above uses for short data.
+	src1 := fmt.Sprintf("or(0x%s, 0x01)", payloadHex)
+	_, _, bytecode, err := lib.CompileExpression(src1)
+	require.NoError(t, err)
+
+	// parseInlineData(parseBytecode(<callBC>, 0)) — strips the long-form prefix.
+	src2 := fmt.Sprintf("parseInlineData(parseBytecode(0x%s, 0))", hex.EncodeToString(bytecode))
+	lib.MustEqual(src2, fmt.Sprintf("0x%s", payloadHex))
+
+	// parseInlineDataArgument(<callBC>, 0) — same expectation via the
+	// composite accessor used by Proxima covenants.
+	src3 := fmt.Sprintf("parseInlineDataArgument(0x%s, 0)", hex.EncodeToString(bytecode))
+	lib.MustEqual(src3, fmt.Sprintf("0x%s", payloadHex))
+}
