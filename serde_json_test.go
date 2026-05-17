@@ -3,11 +3,26 @@ package easyfl
 import (
 	"encoding/hex"
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+// TestLibraryRenewJSON regenerates library.json from the embedded YAML base
+// library and writes it to disk. Run on demand when the base library changes.
+// Counterpart to TestLibraryRenewYAML.
+func TestLibraryRenewJSON(t *testing.T) {
+	lib := NewLibrary[any]()
+	fromYAML, err := ReadLibraryFromYAML([]byte(baseLibraryDefinitions))
+	require.NoError(t, err)
+	require.NoError(t, lib.Upgrade(fromYAML))
+
+	jsonData := lib.ToJSON(true, true)
+	t.Logf("size of library.json: %d bytes", len(jsonData))
+	require.NoError(t, os.WriteFile("library.json", jsonData, 0644))
+}
 
 // JSON ↔ YAML cross-format hash equality: starting from the same base library,
 // serializing through either carrier must yield identical LibraryHash.
