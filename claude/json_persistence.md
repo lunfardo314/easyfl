@@ -178,7 +178,11 @@ the awkward inconsistency of today's YAML (`numArgs` camelCase but
 
 The phases are designed to keep the tree green at every step.
 
-### Phase 1 — Add JSON serde alongside YAML (no behavior change)
+**Status:** Phases 1–3 complete (commits `443337c`, `8c3dae6`, `2fa5f48`,
+`ec81984` on `develop`). Phase 4 is a coordinated PR in
+`lunfardo314/proxima`, not yet started.
+
+### Phase 1 — Add JSON serde alongside YAML (no behavior change) — DONE (443337c)
 
 1. Add `json:` tags to `LibraryFromYAML` / `FuncDescriptorYAMLAble` structs.
    Keep the existing `yaml:` tags. Field types are unchanged.
@@ -195,7 +199,7 @@ Exit criterion: both YAML and JSON serde paths produce libraries with
 identical `LibraryHash()` for the same logical content. All existing tests
 pass; new JSON tests pass.
 
-### Phase 2 — Generate and embed `library.json`
+### Phase 2 — Generate and embed `library.json` — DONE (8c3dae6, 2fa5f48)
 
 1. Add a one-shot test `TestLibraryRenewJSON` (parallel to `TestLibraryRenewYAML`)
    that loads the current `library.yaml`, runs `lib.ToJSON(true, true)`, and
@@ -212,7 +216,7 @@ pass; new JSON tests pass.
 Exit criterion: `NewBaseLibrary` loads from JSON. Hash unchanged. All tests
 green.
 
-### Phase 3 — Remove YAML
+### Phase 3 — Remove YAML — DONE (ec81984)
 
 1. Delete YAML-specific code in `serde_tools.go`: `ToYAML`,
    `ReadLibraryFromYAML`, `UpgradeFromYAML`, `IntroduceUpdateYAML`,
@@ -232,7 +236,7 @@ green.
 Exit criterion: `grep -i yaml` returns nothing in non-comment Go source. No
 `yaml.v3` dep. Full suite green.
 
-### Phase 4 — Downstream (Proxima)
+### Phase 4 — Downstream (Proxima) — PENDING
 
 Not part of this PR. Coordinated PR in `lunfardo314/proxima`:
 
@@ -243,49 +247,41 @@ Not part of this PR. Coordinated PR in `lunfardo314/proxima`:
 - Add gzip wrapping in the Proxima layer if/where current YAML payloads were
   large enough to justify it.
 
-## Verification plan
+## Verification — results
 
-### During Phase 1
-- New test `TestJSONRoundTrip`:
-  load YAML base lib → `lib.ToJSON(true, false)` → `ReadLibraryFromJSON` →
-  fresh `Upgrade` → assert `LibraryHash` matches the YAML lib's hash.
-- New test `TestJSONCompactVsIndent`:
-  `ToJSON(true, true)` and `ToJSON(true, false)` parse back to equal
-  `LibraryFromJSON` structs and produce equal `LibraryHash`.
-- All existing `Upgrade_*` tests in `serde_tools_test.go` get JSON-shaped
-  duplicates.
+### Phase 1 (DONE)
+- `TestJSON_BaseLib_RoundTripHash` (originally `TestJSON_BaseLib_HashMatchesYAML`):
+  base lib → `ToJSON` → `NewLibraryFromJSON` → hash equality. Passes.
+- `TestJSON_CompactVsIndent`, `TestJSON_CompactVsIndentShape`: both forms parse
+  to equal hashes; compact has no newlines, indented has trailing newline.
+- 13 new JSON tests in `serde_json_test.go` mirror upgrade semantics.
 
-### During Phase 2
-- `library.json`'s top-level `"hash"` equals the literal
-  `5ef6911bad2b4ec3dfac171d8f02bf28cd066e4684ebb091a1b1059a3c2c3bb0`.
-- `NewBaseLibrary()` hash unchanged.
+### Phase 2 (DONE)
+- `library.json` top-level `"hash"` =
+  `5ef6911bad2b4ec3dfac171d8f02bf28cd066e4684ebb091a1b1059a3c2c3bb0`,
+  unchanged from the deleted `library.yaml`.
+- `NewBaseLibrary()` produces the same hash before and after the consumer
+  switch.
 
-### After Phase 3
+### Phase 3 (DONE)
 - `go build ./...` and `go test ./...` clean.
-- `go mod why gopkg.in/yaml.v3` returns "not needed".
+- `go mod why gopkg.in/yaml.v3` shows only the transitive path through
+  `github.com/stretchr/testify`; easyfl no longer imports it directly.
+- `grep -i yaml` in `*.go` returns nothing — exit criterion met.
 
-## Open items
+## Open items — resolutions
 
-1. **Indent width.** Two spaces (Go convention, smallest) or three (matches
-   current `library.yaml` visual feel)? Recommendation: two. Affects only
-   `library.json` and `ToJSON(_, true)` output, not semantics.
-2. **`description` on embedded functions in `library.json`.** Today's YAML
-   keeps long descriptions inline; with `json.MarshalIndent` they end up on
-   one line per function. If line length becomes painful, consider
-   `\n`-escaped multiline descriptions or moving descriptions to a sidecar
-   file. Recommendation: leave as-is for now; revisit if reviewers complain.
-3. **`numArgs: -1` vararg encoding.** JSON numbers handle `-1` natively, so
-   no special casing needed. (YAML's encoding was the same.)
-4. **`hash` location in pretty output.** `encoding/json` emits struct fields
-   in declaration order; if the `Hash` field is declared first in
-   `LibraryFromJSON`, the hash will appear at the top of the file — nicer
-   for diff readability than alphabetical. Confirm declaration order in
-   Phase 1.
-5. **Public API breakage.** Phase 3 is a hard rename. Downstream (Proxima)
-   must update imports in the same release. If a deprecation window is
-   needed, Phase 1's "both serdes coexist" state can be tagged as a
-   transitional release before Phase 3 lands — at the cost of one extra
-   tag/release in `easyfl`.
+1. **Indent width.** Chose two spaces. `library.json` is 380 lines (vs.
+   361 for the old `library.yaml`).
+2. **`description` on embedded functions.** Left inline, one per function.
+   Readable; revisit only if reviewers complain.
+3. **`numArgs: -1` vararg encoding.** JSON numbers handle `-1` natively.
+   `TestJSON_Upgrade_Vararg` and `TestToJSON_VarargExtended` cover it.
+4. **`hash` location in pretty output.** `LibraryFromJSON.Hash` is the first
+   declared field, so `MarshalIndent` puts it at the top of `library.json`
+   — diff-friendly.
+5. **Public API breakage.** Hard rename in phase 3; no deprecation window.
+   Proxima must update imports in lockstep (phase 4 PR).
 
 ## Non-goals (explicitly)
 
