@@ -10,14 +10,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestLibraryRenewJSON regenerates library.json from the embedded YAML base
-// library and writes it to disk. Run on demand when the base library changes.
+// TestLibraryRenewJSON regenerates library.json from the embedded base library
+// and writes it back to disk. Run on demand when the base library changes
+// (e.g. after editing library.json by hand and wanting to canonicalize layout).
 // Counterpart to TestLibraryRenewYAML.
 func TestLibraryRenewJSON(t *testing.T) {
 	lib := NewLibrary[any]()
-	fromYAML, err := ReadLibraryFromYAML([]byte(baseLibraryDefinitions))
+	fromJSON, err := ReadLibraryFromJSON([]byte(baseLibraryDefinitions))
 	require.NoError(t, err)
-	require.NoError(t, lib.Upgrade(fromYAML))
+	require.NoError(t, lib.Upgrade(fromJSON))
 
 	jsonData := lib.ToJSON(true, true)
 	t.Logf("size of library.json: %d bytes", len(jsonData))

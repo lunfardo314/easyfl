@@ -9,7 +9,7 @@ import (
 
 func TestLibraryRenewYAML(t *testing.T) {
 	lib := NewLibrary[any]()
-	fromYAML, err := ReadLibraryFromYAML([]byte(baseLibraryDefinitions))
+	fromYAML, err := ReadLibraryFromYAML([]byte(baseLibraryDefinitionsYAML))
 	require.NoError(t, err)
 	err = lib.Upgrade(fromYAML)
 	require.NoError(t, err)

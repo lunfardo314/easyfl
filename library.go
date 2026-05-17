@@ -38,7 +38,7 @@ func NewLibraryFromYAML[T any](yamlData []byte, embedFun ...func(lib *Library[T]
 }
 
 func NewBaseLibrary[T any]() *Library[T] {
-	lib, err := NewLibraryFromYAML[T]([]byte(baseLibraryDefinitions), func(lib *Library[T]) func(sym string) EmbeddedFunction[T] {
+	lib, err := NewLibraryFromJSON[T]([]byte(baseLibraryDefinitions), func(lib *Library[T]) func(sym string) EmbeddedFunction[T] {
 		return EmbeddedFunctions[T](lib)
 	})
 	easyfl_util.AssertNoError(err)
