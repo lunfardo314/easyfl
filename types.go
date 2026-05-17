@@ -69,7 +69,7 @@ type (
 		embeddedFun EmbeddedFunction[T]
 		// key for resolving Go implementation (empty for extended functions)
 		embeddedAs string
-		// only needed for generating YAML
+		// retained source — only used for re-serialization (ToJSON)
 		source string
 		// any text
 		description string
@@ -103,7 +103,7 @@ type (
 		// VersionData is optional arbitrary data attached to the library (can be nil)
 		VersionData []byte
 		// pendingBatch is a staging area for extended functions collected by
-		// IntroduceUpdateYAML / IntroduceUpdateMany, finalized by CommitUpdate
+		// IntroduceUpdateJSON / IntroduceUpdateMany, finalized by CommitUpdate
 		pendingBatch []pendingExtendedFunc
 	}
 )

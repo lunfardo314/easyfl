@@ -493,22 +493,18 @@ func TestArgExpression(t *testing.T) {
 		return par.AllocData(expr.InlineData()...)
 	}
 
-	yamlData := `
-functions:
-  -
-    sym: requireLiteral0
-    numArgs: 1
-    embedded_as: requireLiteral0
-`
-	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
-	require.NoError(t, err)
+	jsonData := `{
+	  "functions": [
+	    {"sym": "requireLiteral0", "numArgs": 1, "embeddedAs": "requireLiteral0"}
+	  ]
+	}`
 	resolver := func(sym string) EmbeddedFunction[any] {
 		if sym == "requireLiteral0" {
 			return requireLiteral0
 		}
 		return EmbeddedFunctions[any](lib)(sym)
 	}
-	require.NoError(t, lib.Upgrade(fromYaml, resolver))
+	require.NoError(t, lib.UpgradeFromJSON([]byte(jsonData), resolver))
 
 	t.Run("inline literal accepted", func(t *testing.T) {
 		ret, err := lib.EvalFromSource(nil, "requireLiteral0(0xdeadbeef)")
@@ -546,22 +542,18 @@ func TestGlobalData(t *testing.T) {
 		return ret
 	}
 
-	yamlData := `
-functions:
-  -
-    sym: echoNumFunctions
-    numArgs: 0
-    embedded_as: echoNumFunctions
-`
-	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
-	require.NoError(t, err)
+	jsonData := `{
+	  "functions": [
+	    {"sym": "echoNumFunctions", "numArgs": 0, "embeddedAs": "echoNumFunctions"}
+	  ]
+	}`
 	resolver := func(sym string) EmbeddedFunction[any] {
 		if sym == "echoNumFunctions" {
 			return echoNumFunctions
 		}
 		return EmbeddedFunctions[any](lib)(sym)
 	}
-	require.NoError(t, lib.Upgrade(fromYaml, resolver))
+	require.NoError(t, lib.UpgradeFromJSON([]byte(jsonData), resolver))
 
 	expectedNF := lib.NumFunctions()
 	glb := lib.NewGlobalDataNoTrace(nil)

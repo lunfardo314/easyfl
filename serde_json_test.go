@@ -13,7 +13,6 @@ import (
 // TestLibraryRenewJSON regenerates library.json from the embedded base library
 // and writes it back to disk. Run on demand when the base library changes
 // (e.g. after editing library.json by hand and wanting to canonicalize layout).
-// Counterpart to TestLibraryRenewYAML.
 func TestLibraryRenewJSON(t *testing.T) {
 	lib := NewLibrary[any]()
 	fromJSON, err := ReadLibraryFromJSON([]byte(baseLibraryDefinitions))
@@ -25,20 +24,19 @@ func TestLibraryRenewJSON(t *testing.T) {
 	require.NoError(t, os.WriteFile("library.json", jsonData, 0644))
 }
 
-// JSON ↔ YAML cross-format hash equality: starting from the same base library,
-// serializing through either carrier must yield identical LibraryHash.
-func TestJSON_BaseLib_HashMatchesYAML(t *testing.T) {
-	libYAML := NewBaseLibrary[any]()
-	hashYAML := libYAML.LibraryHash()
+// Round-trip: base library serialized to JSON and reloaded produces a library
+// with the same LibraryHash.
+func TestJSON_BaseLib_RoundTripHash(t *testing.T) {
+	base := NewBaseLibrary[any]()
+	hashBase := base.LibraryHash()
 
-	jsonData := libYAML.ToJSON(true, true)
-	libJSON, err := NewLibraryFromJSON[any](jsonData, func(lib *Library[any]) func(sym string) EmbeddedFunction[any] {
+	jsonData := base.ToJSON(true, true)
+	round, err := NewLibraryFromJSON[any](jsonData, func(lib *Library[any]) func(sym string) EmbeddedFunction[any] {
 		return EmbeddedFunctions[any](lib)
 	})
 	require.NoError(t, err)
 
-	hashJSON := libJSON.LibraryHash()
-	require.Equal(t, hashYAML, hashJSON, "base library hash must be format-independent")
+	require.Equal(t, hashBase, round.LibraryHash(), "base library hash must round-trip through JSON")
 }
 
 // Compact and indented JSON must round-trip to libraries with equal hashes.
@@ -208,8 +206,7 @@ func TestJSON_Upgrade_Vararg(t *testing.T) {
 }
 
 // VersionData containing JSON-meaningful characters (quotes, backslashes) must
-// round-trip. This was the original failure mode that motivated yamlEscapeString;
-// encoding/json handles the escaping natively so the test should just pass.
+// round-trip. encoding/json handles the escaping natively.
 func TestJSON_VersionDataEscaping(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 	embedded := `{"txValidation":"txLayoutValidator","key":"value with \"quotes\" and \\ backslash"}`

@@ -14,29 +14,6 @@ func NewLibrary[T any]() *Library[T] {
 	return newLibrary[T]()
 }
 
-func NewLibraryFromYAML[T any](yamlData []byte, embedFun ...func(lib *Library[T]) func(sym string) EmbeddedFunction[T]) (*Library[T], error) {
-	lib := NewLibrary[T]()
-	fromYAML, err := ReadLibraryFromYAML(yamlData)
-	if err != nil {
-		return nil, err
-	}
-	if len(embedFun) > 0 {
-		if err = lib.Upgrade(fromYAML, embedFun[0](lib)); err != nil {
-			return nil, err
-		}
-	} else {
-		if err = lib.Upgrade(fromYAML); err != nil {
-			return nil, err
-		}
-	}
-	// if library is compiled, check consistency
-	hashCalculated := lib.LibraryHash()
-	if len(fromYAML.Hash) > 0 && fromYAML.Hash != hex.EncodeToString(hashCalculated[:]) {
-		return nil, fmt.Errorf("NewLibraryFromYAML: provided and calculated hashes does not match")
-	}
-	return lib, nil
-}
-
 func NewBaseLibrary[T any]() *Library[T] {
 	lib, err := NewLibraryFromJSON[T]([]byte(baseLibraryDefinitions), func(lib *Library[T]) func(sym string) EmbeddedFunction[T] {
 		return EmbeddedFunctions[T](lib)

@@ -9,41 +9,25 @@ import (
 )
 
 // TestUpgrade_ForwardRef_ReplaceCallsNew tests that a replaced function can reference
-// a new function added in the same batch, regardless of YAML ordering.
+// a new function added in the same batch, regardless of definition ordering.
 func TestUpgrade_ForwardRef_ReplaceCallsNew(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
 	// First add a function that we'll later replace
-	yaml1 := `
-functions:
-  -
-    sym: funcA
-    numArgs: 2
-    source: add($0, $1)
-`
-	fromYaml, err := ReadLibraryFromYAML([]byte(yaml1))
-	require.NoError(t, err)
-	err = lib.Upgrade(fromYaml)
-	require.NoError(t, err)
+	require.NoError(t, lib.UpgradeFromJSON([]byte(`{
+	  "functions": [
+	    {"sym": "funcA", "numArgs": 2, "source": "add($0, $1)"}
+	  ]
+	}`)))
 	lib.MustEqual("funcA(3, 5)", "uint8Bytes(8)")
 
 	// Now upgrade: replace funcA to call new funcD. funcA listed BEFORE funcD (forward ref).
-	yaml2 := `
-functions:
-  -
-    sym: funcA
-    numArgs: 2
-    replace: true
-    source: funcD($0, $1)
-  -
-    sym: funcD
-    numArgs: 2
-    source: mul($0, $1)
-`
-	fromYaml, err = ReadLibraryFromYAML([]byte(yaml2))
-	require.NoError(t, err)
-	err = lib.Upgrade(fromYaml)
-	require.NoError(t, err)
+	require.NoError(t, lib.UpgradeFromJSON([]byte(`{
+	  "functions": [
+	    {"sym": "funcA", "numArgs": 2, "replace": true, "source": "funcD($0, $1)"},
+	    {"sym": "funcD", "numArgs": 2, "source": "mul($0, $1)"}
+	  ]
+	}`)))
 
 	// funcA now delegates to funcD (mul)
 	lib.MustEqual("funcA(3, 5)", "uint8Bytes(15)")
@@ -51,26 +35,17 @@ functions:
 }
 
 // TestUpgrade_ForwardRef_NewCallsNew tests that new functions can reference each other
-// regardless of YAML ordering.
+// regardless of definition ordering.
 func TestUpgrade_ForwardRef_NewCallsNew(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
 	// funcE calls funcF, but funcE is listed first
-	yamlData := `
-functions:
-  -
-    sym: funcE
-    numArgs: 2
-    source: funcF($0, $1)
-  -
-    sym: funcF
-    numArgs: 2
-    source: add($0, $1)
-`
-	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
-	require.NoError(t, err)
-	err = lib.Upgrade(fromYaml)
-	require.NoError(t, err)
+	require.NoError(t, lib.UpgradeFromJSON([]byte(`{
+	  "functions": [
+	    {"sym": "funcE", "numArgs": 2, "source": "funcF($0, $1)"},
+	    {"sym": "funcF", "numArgs": 2, "source": "add($0, $1)"}
+	  ]
+	}`)))
 
 	lib.MustEqual("funcE(3, 5)", "uint8Bytes(8)")
 	lib.MustEqual("funcF(3, 5)", "uint8Bytes(8)")
@@ -80,16 +55,11 @@ functions:
 func TestUpgrade_SelfRecursion(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
-	yamlData := `
-functions:
-  -
-    sym: selfRec
-    numArgs: 1
-    source: selfRec($0)
-`
-	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
-	require.NoError(t, err)
-	err = lib.Upgrade(fromYaml)
+	err := lib.UpgradeFromJSON([]byte(`{
+	  "functions": [
+	    {"sym": "selfRec", "numArgs": 1, "source": "selfRec($0)"}
+	  ]
+	}`))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "recursion detected")
 }
@@ -98,20 +68,12 @@ functions:
 func TestUpgrade_MutualRecursion(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
-	yamlData := `
-functions:
-  -
-    sym: mutA
-    numArgs: 1
-    source: mutB($0)
-  -
-    sym: mutB
-    numArgs: 1
-    source: mutA($0)
-`
-	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
-	require.NoError(t, err)
-	err = lib.Upgrade(fromYaml)
+	err := lib.UpgradeFromJSON([]byte(`{
+	  "functions": [
+	    {"sym": "mutA", "numArgs": 1, "source": "mutB($0)"},
+	    {"sym": "mutB", "numArgs": 1, "source": "mutA($0)"}
+	  ]
+	}`))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "recursion detected")
 }
@@ -120,24 +82,13 @@ functions:
 func TestUpgrade_IndirectCycle(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
-	yamlData := `
-functions:
-  -
-    sym: cycA
-    numArgs: 1
-    source: cycB($0)
-  -
-    sym: cycB
-    numArgs: 1
-    source: cycC($0)
-  -
-    sym: cycC
-    numArgs: 1
-    source: cycA($0)
-`
-	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
-	require.NoError(t, err)
-	err = lib.Upgrade(fromYaml)
+	err := lib.UpgradeFromJSON([]byte(`{
+	  "functions": [
+	    {"sym": "cycA", "numArgs": 1, "source": "cycB($0)"},
+	    {"sym": "cycB", "numArgs": 1, "source": "cycC($0)"},
+	    {"sym": "cycC", "numArgs": 1, "source": "cycA($0)"}
+	  ]
+	}`))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "recursion detected")
 }
@@ -148,34 +99,19 @@ func TestUpgrade_ReplaceInducedCycle(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
 	// Add A that calls B
-	yaml1 := `
-functions:
-  -
-    sym: depB
-    numArgs: 1
-    source: byte($0, 0)
-  -
-    sym: depA
-    numArgs: 1
-    source: depB($0)
-`
-	fromYaml, err := ReadLibraryFromYAML([]byte(yaml1))
-	require.NoError(t, err)
-	err = lib.Upgrade(fromYaml)
-	require.NoError(t, err)
+	require.NoError(t, lib.UpgradeFromJSON([]byte(`{
+	  "functions": [
+	    {"sym": "depB", "numArgs": 1, "source": "byte($0, 0)"},
+	    {"sym": "depA", "numArgs": 1, "source": "depB($0)"}
+	  ]
+	}`)))
 
 	// Now replace B to call A — creates cycle A→B→A
-	yaml2 := `
-functions:
-  -
-    sym: depB
-    numArgs: 1
-    replace: true
-    source: depA($0)
-`
-	fromYaml, err = ReadLibraryFromYAML([]byte(yaml2))
-	require.NoError(t, err)
-	err = lib.Upgrade(fromYaml)
+	err := lib.UpgradeFromJSON([]byte(`{
+	  "functions": [
+	    {"sym": "depB", "numArgs": 1, "replace": true, "source": "depA($0)"}
+	  ]
+	}`))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "recursion detected")
 }
@@ -184,29 +120,14 @@ functions:
 func TestUpgrade_DiamondDependency(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
-	yamlData := `
-functions:
-  -
-    sym: diamA
-    numArgs: 1
-    source: add(diamB($0), diamC($0))
-  -
-    sym: diamB
-    numArgs: 1
-    source: diamD($0)
-  -
-    sym: diamC
-    numArgs: 1
-    source: diamD($0)
-  -
-    sym: diamD
-    numArgs: 1
-    source: byte($0, 0)
-`
-	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
-	require.NoError(t, err)
-	err = lib.Upgrade(fromYaml)
-	require.NoError(t, err)
+	require.NoError(t, lib.UpgradeFromJSON([]byte(`{
+	  "functions": [
+	    {"sym": "diamA", "numArgs": 1, "source": "add(diamB($0), diamC($0))"},
+	    {"sym": "diamB", "numArgs": 1, "source": "diamD($0)"},
+	    {"sym": "diamC", "numArgs": 1, "source": "diamD($0)"},
+	    {"sym": "diamD", "numArgs": 1, "source": "byte($0, 0)"}
+	  ]
+	}`)))
 
 	// diamA(0x0102) should compute byte(0x0102, 0) for both paths, then add them
 	lib.MustEqual("diamD(0x0102)", "1")
@@ -220,34 +141,22 @@ func TestClone_Basic(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
 	// Add a function to the original
-	yaml1 := `
-functions:
-  -
-    sym: origFunc
-    numArgs: 2
-    source: add($0, $1)
-`
-	fromYaml, err := ReadLibraryFromYAML([]byte(yaml1))
-	require.NoError(t, err)
-	err = lib.Upgrade(fromYaml)
-	require.NoError(t, err)
+	require.NoError(t, lib.UpgradeFromJSON([]byte(`{
+	  "functions": [
+	    {"sym": "origFunc", "numArgs": 2, "source": "add($0, $1)"}
+	  ]
+	}`)))
 
 	origHash := lib.LibraryHash()
 	origNumFuncs := lib.NumFunctions()
 
 	// Clone and modify the clone
 	clone := lib.Clone()
-	yaml2 := `
-functions:
-  -
-    sym: cloneFunc
-    numArgs: 2
-    source: mul($0, $1)
-`
-	fromYaml, err = ReadLibraryFromYAML([]byte(yaml2))
-	require.NoError(t, err)
-	err = clone.Upgrade(fromYaml)
-	require.NoError(t, err)
+	require.NoError(t, clone.UpgradeFromJSON([]byte(`{
+	  "functions": [
+	    {"sym": "cloneFunc", "numArgs": 2, "source": "mul($0, $1)"}
+	  ]
+	}`)))
 
 	// Original is unchanged
 	require.Equal(t, origHash, lib.LibraryHash())
@@ -267,36 +176,22 @@ functions:
 func TestClone_DiscardOnError(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
-	yaml1 := `
-functions:
-  -
-    sym: stableFunc
-    numArgs: 1
-    source: byte($0, 0)
-`
-	fromYaml, err := ReadLibraryFromYAML([]byte(yaml1))
-	require.NoError(t, err)
-	err = lib.Upgrade(fromYaml)
-	require.NoError(t, err)
+	require.NoError(t, lib.UpgradeFromJSON([]byte(`{
+	  "functions": [
+	    {"sym": "stableFunc", "numArgs": 1, "source": "byte($0, 0)"}
+	  ]
+	}`)))
 
 	origHash := lib.LibraryHash()
 
 	// Clone and attempt upgrade with recursion
 	clone := lib.Clone()
-	yamlBad := `
-functions:
-  -
-    sym: badA
-    numArgs: 1
-    source: badB($0)
-  -
-    sym: badB
-    numArgs: 1
-    source: badA($0)
-`
-	fromYaml, err = ReadLibraryFromYAML([]byte(yamlBad))
-	require.NoError(t, err)
-	err = clone.Upgrade(fromYaml)
+	err := clone.UpgradeFromJSON([]byte(`{
+	  "functions": [
+	    {"sym": "badA", "numArgs": 1, "source": "badB($0)"},
+	    {"sym": "badB", "numArgs": 1, "source": "badA($0)"}
+	  ]
+	}`))
 	require.Error(t, err) // cycle detected
 
 	// Original is completely untouched
@@ -310,21 +205,12 @@ func TestUpgrade_BackwardCompatible_NoForwardRefs(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
 	// Sequential dependency: funcX uses base lib, funcY uses funcX
-	yamlData := `
-functions:
-  -
-    sym: funcX
-    numArgs: 2
-    source: add($0, $1)
-  -
-    sym: funcY
-    numArgs: 2
-    source: funcX($0, $1)
-`
-	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
-	require.NoError(t, err)
-	err = lib.Upgrade(fromYaml)
-	require.NoError(t, err)
+	require.NoError(t, lib.UpgradeFromJSON([]byte(`{
+	  "functions": [
+	    {"sym": "funcX", "numArgs": 2, "source": "add($0, $1)"},
+	    {"sym": "funcY", "numArgs": 2, "source": "funcX($0, $1)"}
+	  ]
+	}`)))
 
 	lib.MustEqual("funcX(3, 5)", "uint8Bytes(8)")
 	lib.MustEqual("funcY(3, 5)", "uint8Bytes(8)")
@@ -336,27 +222,13 @@ func TestUpgrade_MixedEmbeddedAndExtended_ForwardRef(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
 	// Mix: one embedded replacement + two extended with forward ref
-	yamlData := `
-functions:
-  -
-    sym: add
-    numArgs: 2
-    embedded_as: "evalAddUint"
-    short: true
-    replace: true
-  -
-    sym: fwdCaller
-    numArgs: 2
-    source: fwdTarget($0, $1)
-  -
-    sym: fwdTarget
-    numArgs: 2
-    source: add($0, $1)
-`
-	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
-	require.NoError(t, err)
-	err = lib.Upgrade(fromYaml, EmbeddedFunctions[any](lib))
-	require.NoError(t, err)
+	require.NoError(t, lib.UpgradeFromJSON([]byte(`{
+	  "functions": [
+	    {"sym": "add", "numArgs": 2, "embeddedAs": "evalAddUint", "short": true, "replace": true},
+	    {"sym": "fwdCaller", "numArgs": 2, "source": "fwdTarget($0, $1)"},
+	    {"sym": "fwdTarget", "numArgs": 2, "source": "add($0, $1)"}
+	  ]
+	}`), EmbeddedFunctions[any](lib)))
 
 	lib.MustEqual("fwdCaller(3, 5)", "uint8Bytes(8)")
 	lib.MustEqual("fwdTarget(3, 5)", "uint8Bytes(8)")
@@ -400,21 +272,12 @@ func TestCheckForCycles_NoExtended(t *testing.T) {
 func TestUpgrade_VarargForwardRef(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
-	yamlData := `
-functions:
-  -
-    sym: varCaller
-    numArgs: 2
-    source: varTarget($0, $1)
-  -
-    sym: varTarget
-    numArgs: -1
-    source: add($0, $1)
-`
-	fromYaml, err := ReadLibraryFromYAML([]byte(yamlData))
-	require.NoError(t, err)
-	err = lib.Upgrade(fromYaml)
-	require.NoError(t, err)
+	require.NoError(t, lib.UpgradeFromJSON([]byte(`{
+	  "functions": [
+	    {"sym": "varCaller", "numArgs": 2, "source": "varTarget($0, $1)"},
+	    {"sym": "varTarget", "numArgs": -1, "source": "add($0, $1)"}
+	  ]
+	}`)))
 
 	lib.MustEqual("varCaller(3, 5)", "uint8Bytes(8)")
 }
@@ -446,19 +309,17 @@ func cycY : cycX($0)
 	require.Contains(t, err.Error(), "recursion detected")
 }
 
-// TestIntroduceCommit_CrossSourceForwardRef tests that functions from YAML and plain
+// TestIntroduceCommit_CrossSourceForwardRef tests that functions from JSON and plain
 // EasyFL code can reference each other when committed together.
 func TestIntroduceCommit_CrossSourceForwardRef(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
-	// YAML adds funcA that calls funcB (which doesn't exist yet)
-	err := lib.IntroduceUpdateYAML([]byte(`
-functions:
-  -
-    sym: funcA
-    numArgs: 2
-    source: funcB($0, $1)
-`))
+	// JSON adds funcA that calls funcB (which doesn't exist yet)
+	err := lib.IntroduceUpdateJSON([]byte(`{
+	  "functions": [
+	    {"sym": "funcA", "numArgs": 2, "source": "funcB($0, $1)"}
+	  ]
+	}`))
 	require.NoError(t, err)
 
 	// Plain code adds funcB
@@ -479,14 +340,12 @@ func funcB : add($0, $1)
 func TestIntroduceCommit_CrossSourceCycle(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
-	// YAML adds funcA→funcB
-	err := lib.IntroduceUpdateYAML([]byte(`
-functions:
-  -
-    sym: funcA
-    numArgs: 1
-    source: funcB($0)
-`))
+	// JSON adds funcA→funcB
+	err := lib.IntroduceUpdateJSON([]byte(`{
+	  "functions": [
+	    {"sym": "funcA", "numArgs": 1, "source": "funcB($0)"}
+	  ]
+	}`))
 	require.NoError(t, err)
 
 	// Plain code adds funcB→funcA (cycle)
@@ -501,19 +360,17 @@ func funcB : funcA($0)
 	require.Contains(t, err.Error(), "recursion detected")
 }
 
-// TestIntroduceCommit_DuplicateAcrossBatches tests that the same symbol in YAML
+// TestIntroduceCommit_DuplicateAcrossBatches tests that the same symbol in JSON
 // and plain code is detected as a duplicate.
 func TestIntroduceCommit_DuplicateAcrossBatches(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
-	// YAML adds funcDup
-	err := lib.IntroduceUpdateYAML([]byte(`
-functions:
-  -
-    sym: funcDup
-    numArgs: 1
-    source: byte($0, 0)
-`))
+	// JSON adds funcDup
+	err := lib.IntroduceUpdateJSON([]byte(`{
+	  "functions": [
+	    {"sym": "funcDup", "numArgs": 1, "source": "byte($0, 0)"}
+	  ]
+	}`))
 	require.NoError(t, err)
 
 	// Plain code also tries to add funcDup — should fail
@@ -531,28 +388,24 @@ func TestIntroduceCommit_EmptyCommit(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TestIntroduceMulti_YAMLAndSources tests the variadic IntroduceUpdateYAMLMulti
+// TestIntroduceMulti_JSONAndSources tests the variadic IntroduceUpdateJSONMulti
 // and IntroduceUpdateManyMulti with cross-source forward references.
-func TestIntroduceMulti_YAMLAndSources(t *testing.T) {
+func TestIntroduceMulti_JSONAndSources(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
-	yaml1 := []byte(`
-functions:
-  -
-    sym: mFuncA
-    numArgs: 2
-    source: mFuncC($0, $1)
-`)
-	yaml2 := []byte(`
-functions:
-  -
-    sym: mFuncB
-    numArgs: 2
-    source: mFuncA($0, $1)
-`)
+	json1 := []byte(`{
+	  "functions": [
+	    {"sym": "mFuncA", "numArgs": 2, "source": "mFuncC($0, $1)"}
+	  ]
+	}`)
+	json2 := []byte(`{
+	  "functions": [
+	    {"sym": "mFuncB", "numArgs": 2, "source": "mFuncA($0, $1)"}
+	  ]
+	}`)
 
-	// Introduce two YAML sources at once (nil resolver — no embedded)
-	err := lib.IntroduceUpdateYAMLMulti(nil, yaml1, yaml2)
+	// Introduce two JSON sources at once (nil resolver — no embedded)
+	err := lib.IntroduceUpdateJSONMulti(nil, json1, json2)
 	require.NoError(t, err)
 
 	// Introduce two plain EasyFL sources at once

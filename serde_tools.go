@@ -12,40 +12,38 @@ import (
 
 	"github.com/lunfardo314/easyfl/easyfl_util"
 	"golang.org/x/crypto/blake2b"
-	"gopkg.in/yaml.v3"
 )
 
 type (
-	// LibraryFromYAML is parsed description of a library.
-	// Carries both `yaml` and `json` struct tags; the type name will be renamed to
-	// LibraryFromJSON when YAML support is removed (see claude/json_persistence.md).
-	LibraryFromYAML struct {
-		Hash        string                   `yaml:"hash,omitempty"         json:"hash,omitempty"`         // if Hash != "", library is compiled
-		VersionData string                   `yaml:"version_data,omitempty" json:"versionData,omitempty"` // optional version data as string
-		Functions   []FuncDescriptorYAMLAble `yaml:"functions"              json:"functions"`
+	// LibraryFromJSON is a parsed library description (carrier struct for JSON
+	// serialization and the Upgrade pipeline).
+	LibraryFromJSON struct {
+		Hash        string               `json:"hash,omitempty"`        // if Hash != "", library is compiled
+		VersionData string               `json:"versionData,omitempty"` // optional version data as string
+		Functions   []FuncDescriptorJSON `json:"functions"`
 	}
 
-	// FuncDescriptorYAMLAble contains all information about embedded or extended function
+	// FuncDescriptorJSON contains all information about an embedded or extended function.
 	// Mandatory fields:
-	// - for compiled library: Sym, FunCode, NumArgs. Bytecode and Source only for extended functions
-	// - for not compiled library Sym, NumArgs. Source only for extended functions
-	// EmbeddedAs is the key for resolving Go implementation. If empty, function is extended (not embedded)
-	// Replace: if true, function must exist in target library and will be replaced; if false/absent, function must not exist
-	// Immutable: if true, function cannot be replaced/modified in upgrades
+	//   - for a compiled library: Sym, FunCode, NumArgs; plus Bytecode and Source for extended functions
+	//   - for a non-compiled library: Sym, NumArgs; plus Source for extended functions
+	// EmbeddedAs is the key for resolving the Go implementation. Empty means the function is extended.
+	// Replace: if true, function must exist in the target library and will be replaced; if false/absent, function must not exist.
+	// Immutable: if true, function cannot be replaced/modified in future upgrades.
 	//
 	// Field order matches the desired JSON pretty-print layout: sym, description,
 	// funCode, numArgs, embeddedAs, short, replace, immutable, source, bytecode.
-	FuncDescriptorYAMLAble struct {
-		Sym         string `yaml:"sym"                    json:"sym"`
-		Description string `yaml:"description,omitempty"  json:"description,omitempty"`
-		FunCode     uint16 `yaml:"funCode,omitempty"      json:"funCode,omitempty"`
-		NumArgs     int    `yaml:"numArgs"                json:"numArgs"`
-		EmbeddedAs  string `yaml:"embedded_as,omitempty"  json:"embeddedAs,omitempty"`
-		Short       bool   `yaml:"short,omitempty"        json:"short,omitempty"`
-		Replace     bool   `yaml:"replace,omitempty"      json:"replace,omitempty"`
-		Immutable   bool   `yaml:"immutable,omitempty"    json:"immutable,omitempty"`
-		Source      string `yaml:"source,omitempty"       json:"source,omitempty"`
-		Bytecode    string `yaml:"bytecode,omitempty"     json:"bytecode,omitempty"`
+	FuncDescriptorJSON struct {
+		Sym         string `json:"sym"`
+		Description string `json:"description,omitempty"`
+		FunCode     uint16 `json:"funCode,omitempty"`
+		NumArgs     int    `json:"numArgs"`
+		EmbeddedAs  string `json:"embeddedAs,omitempty"`
+		Short       bool   `json:"short,omitempty"`
+		Replace     bool   `json:"replace,omitempty"`
+		Immutable   bool   `json:"immutable,omitempty"`
+		Source      string `json:"source,omitempty"`
+		Bytecode    string `json:"bytecode,omitempty"`
 	}
 )
 
@@ -121,150 +119,11 @@ func (fd *funDescriptor[T]) write(w io.Writer) {
 	_, _ = w.Write([]byte{immutableByte})
 }
 
-// ToYAML generates YAML data. Prefix is added at the beginning, usually it is a comment
-// If compiled = true, it also adds hash of the library and each function descriptor contain funCode and compiled bytecode (whenever relevant)
-func (lib *Library[T]) ToYAML(compiled bool, prefix ...string) []byte {
-	var buf bytes.Buffer
-
-	if len(prefix) > 0 {
-		prn(&buf, "%s\n", prefix[0])
-	}
-	if compiled {
-		h := lib.LibraryHash()
-		prn(&buf, "hash: %s\n", hex.EncodeToString(h[:]))
-	}
-	if len(lib.VersionData) > 0 {
-		prn(&buf, "version_data: \"%s\"\n", yamlEscapeString(string(lib.VersionData)))
-	}
-
-	functions := make([]*FuncDescriptorYAMLAble, 0)
-	for sym := range lib.funByName {
-		functions = append(functions, lib.mustFunYAMLAbleByName(sym))
-	}
-
-	if compiled {
-		// sort by funCodes
-		sort.Slice(functions, func(i, j int) bool {
-			return functions[i].FunCode < functions[j].FunCode
-		})
-	} else {
-		// sort by name
-		sort.Slice(functions, func(i, j int) bool {
-			return functions[i].Sym < functions[j].Sym
-		})
-	}
-
-	prn(&buf, "functions:\n")
-
-	prn(&buf, "# BEGIN EMBEDDED function definitions\n")
-	if compiled {
-		prn(&buf, "#    function codes (opcodes) from %d to %d are reserved for predefined parameter access functions $i\n", FirstEmbeddedReserved, LastEmbeddedReserved)
-	}
-	prn(&buf, "# BEGIN SHORT EMBEDDED function definitions\n")
-	if compiled {
-		prn(&buf, "#    function codes (opcodes) from %d to %d are reserved for 'SHORT EMBEDDED function codes'\n", FirstEmbeddedShort, LastEmbeddedShort)
-	}
-	for _, dscr := range functions {
-		if dscr.EmbeddedAs != "" && dscr.Short {
-			prnFuncDescription(&buf, dscr, compiled)
-		}
-	}
-	prn(&buf, "# END SHORT EMBEDDED function definitions\n")
-
-	prn(&buf, "# BEGIN LONG EMBEDDED function definitions\n")
-	if compiled {
-		prn(&buf, "#    function codes (opcodes) from %d to %d are reserved for 'LONG EMBEDDED function codes'\n", FirstEmbeddedLong, LastEmbeddedLong)
-	}
-	for _, dscr := range functions {
-		if dscr.EmbeddedAs != "" && !dscr.Short {
-			prnFuncDescription(&buf, dscr, compiled)
-		}
-	}
-	prn(&buf, "# END LONG EMBEDDED function definitions\n")
-
-	prn(&buf, "# BEGIN EXTENDED function definitions (defined by EasyFL formulas)\n")
-	if compiled {
-		prn(&buf, "#    function codes (opcodes) from %d and up to maximum %d are reserved for 'EXTENDED function codes'\n", FirstExtended, LastGlobalFunCode)
-	}
-	for _, dscr := range functions {
-		if dscr.EmbeddedAs == "" {
-			prnFuncDescription(&buf, dscr, compiled)
-		}
-	}
-	prn(&buf, "# END EXTENDED function definitions (defined by EasyFL formulas)\n")
-	prn(&buf, "# END all function definitions\n")
-
-	return buf.Bytes()
-}
-
-const (
-	ident  = "   "
-	ident2 = ident + ident
-	ident3 = ident + ident + ident
-)
-
-func prn(w io.Writer, format string, a ...any) {
-	_, err := fmt.Fprintf(w, format, a...)
-	easyfl_util.AssertNoError(err)
-}
-
-// yamlEscapeString escapes a string for use in YAML double-quoted format.
-// It escapes backslashes, double quotes, and control characters.
-func yamlEscapeString(s string) string {
-	var buf strings.Builder
-	buf.Grow(len(s) + 10) // pre-allocate with some extra space for escapes
-
-	for _, r := range s {
-		switch r {
-		case '\\':
-			buf.WriteString("\\\\")
-		case '"':
-			buf.WriteString("\\\"")
-		case '\n':
-			buf.WriteString("\\n")
-		case '\r':
-			buf.WriteString("\\r")
-		case '\t':
-			buf.WriteString("\\t")
-		default:
-			buf.WriteRune(r)
-		}
-	}
-	return buf.String()
-}
-
-func prnFuncDescription(w io.Writer, f *FuncDescriptorYAMLAble, compiled bool) {
-	prn(w, ident+"-\n")
-	prn(w, ident2+"sym: \"%s\"\n", yamlEscapeString(f.Sym))
-	if f.Description != "" {
-		prn(w, ident2+"description: \"%s\"\n", yamlEscapeString(f.Description))
-	}
-	if compiled {
-		prn(w, ident2+"funCode: %d\n", f.FunCode)
-	}
-	prn(w, ident2+"numArgs: %d\n", f.NumArgs)
-	if f.EmbeddedAs != "" {
-		prn(w, ident2+"embedded_as: \"%s\"\n", yamlEscapeString(f.EmbeddedAs))
-	}
-	if f.Short {
-		prn(w, ident2+"short: true\n")
-	}
-	if f.Immutable {
-		prn(w, ident2+"immutable: true\n")
-	}
-	if f.EmbeddedAs == "" {
-		if compiled {
-			prn(w, ident2+"bytecode: %s\n", f.Bytecode)
-		}
-		prn(w, ident2+"source: >\n%s\n", ident3+strings.Replace(f.Source, "\n", "\n"+ident3, -1))
-	}
-}
-
-func (lib *Library[T]) mustFunYAMLAbleByName(sym string) *FuncDescriptorYAMLAble {
+func (lib *Library[T]) mustFuncDescriptor(sym string) *FuncDescriptorJSON {
 	fi, err := lib.functionByName(sym)
 	easyfl_util.AssertNoError(err)
 	d := lib.funByFunCode[fi.FunCode]
-	return &FuncDescriptorYAMLAble{
+	return &FuncDescriptorJSON{
 		Description: d.description,
 		Sym:         d.sym,
 		FunCode:     d.funCode,
@@ -277,26 +136,16 @@ func (lib *Library[T]) mustFunYAMLAbleByName(sym string) *FuncDescriptorYAMLAble
 	}
 }
 
-// ReadLibraryFromYAML parses YAML
-func ReadLibraryFromYAML(data []byte) (*LibraryFromYAML, error) {
-	fromYAML := &LibraryFromYAML{}
-	err := yaml.Unmarshal(data, &fromYAML)
-	if err != nil {
-		return nil, err
-	}
-	return fromYAML, nil
-}
-
-// introduceFromParsed is the internal implementation that works with an already-parsed
-// library description (originally from YAML, now also from JSON).
-// It stages extended functions for CommitUpdate and processes embedded functions immediately.
-func (lib *Library[T]) introduceFromParsed(fromYAML *LibraryFromYAML, embed ...func(sym string) EmbeddedFunction[T]) error {
+// introduceFromParsed is the internal implementation that works with an
+// already-parsed library description. It stages extended functions for
+// CommitUpdate and processes embedded functions immediately.
+func (lib *Library[T]) introduceFromParsed(fromJSON *LibraryFromJSON, embed ...func(sym string) EmbeddedFunction[T]) error {
 	// Update VersionData only if new value is non-empty (after trimming whitespace)
-	if vd := strings.TrimSpace(fromYAML.VersionData); vd != "" {
+	if vd := strings.TrimSpace(fromJSON.VersionData); vd != "" {
 		lib.VersionData = []byte(vd)
 	}
 
-	for _, d := range fromYAML.Functions {
+	for _, d := range fromJSON.Functions {
 		exists := lib.existsFunction(d.Sym)
 
 		// Check replace flag consistency against library and pendingBatch
@@ -357,51 +206,21 @@ func (lib *Library[T]) introduceFromParsed(fromYAML *LibraryFromYAML, embed ...f
 	return nil
 }
 
-// IntroduceUpdateYAML parses raw YAML data and stages extended functions for later
-// processing by CommitUpdate. Embedded functions are processed immediately.
-// Validates replace/existence flags against both the library and the current pendingBatch.
-//
-// Multiple calls to IntroduceUpdateYAML and IntroduceUpdateMany can be made before
-// a single CommitUpdate to accumulate functions from different sources.
-func (lib *Library[T]) IntroduceUpdateYAML(yamlData []byte, embed ...func(sym string) EmbeddedFunction[T]) error {
-	fromYAML, err := ReadLibraryFromYAML(yamlData)
-	if err != nil {
-		return err
-	}
-	return lib.introduceFromParsed(fromYAML, embed...)
-}
-
-// IntroduceUpdateYAMLMulti is a variadic version of IntroduceUpdateYAML.
-// It processes multiple raw YAML data sequentially, staging all extended functions
-// into the same pendingBatch. embed is the resolver for embedded functions (may be nil).
-func (lib *Library[T]) IntroduceUpdateYAMLMulti(embed func(sym string) EmbeddedFunction[T], yamlDatas ...[]byte) error {
-	for _, yamlData := range yamlDatas {
-		if embed != nil {
-			if err := lib.IntroduceUpdateYAML(yamlData, embed); err != nil {
-				return err
-			}
-		} else {
-			if err := lib.IntroduceUpdateYAML(yamlData); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-// Upgrade adds or replaces functions in the library from YAML definitions.
-// It uses a multi-phase approach that allows forward references between extended functions
-// within the same upgrade batch and explicitly checks for recursion via call graph analysis.
+// Upgrade adds or replaces functions in the library from a parsed library
+// description. It uses a multi-phase approach that allows forward references
+// between extended functions within the same upgrade batch and explicitly
+// checks for recursion via call graph analysis.
 //
 // For safe upgrades, use Clone() first: clone := lib.Clone(); err := clone.Upgrade(...).
 // If the upgrade fails, simply discard the clone.
 //
 // The Replace flag controls behavior:
-// - Replace=true: function must exist in library, its definition will be replaced (funCode preserved)
-// - Replace=false (default): function must not exist, will be added as new
-// The Immutable flag controls whether the function can be replaced in future upgrades
-func (lib *Library[T]) Upgrade(fromYAML *LibraryFromYAML, embed ...func(sym string) EmbeddedFunction[T]) error {
-	if err := lib.introduceFromParsed(fromYAML, embed...); err != nil {
+//   - Replace=true: function must exist in library, its definition will be replaced (funCode preserved)
+//   - Replace=false (default): function must not exist, will be added as new
+//
+// The Immutable flag controls whether the function can be replaced in future upgrades.
+func (lib *Library[T]) Upgrade(fromJSON *LibraryFromJSON, embed ...func(sym string) EmbeddedFunction[T]) error {
+	if err := lib.introduceFromParsed(fromJSON, embed...); err != nil {
 		return fmt.Errorf("Upgrade: %v", err)
 	}
 	if err := lib.CommitUpdate(); err != nil {
@@ -410,25 +229,20 @@ func (lib *Library[T]) Upgrade(fromYAML *LibraryFromYAML, embed ...func(sym stri
 	return nil
 }
 
-func (lib *Library[T]) UpgradeFromYAML(yamlData []byte, embed ...func(sym string) EmbeddedFunction[T]) error {
-	fromYAML, err := ReadLibraryFromYAML(yamlData)
-	if err != nil {
-		return err
-	}
-	return lib.Upgrade(fromYAML, embed...)
-}
-
-func ValidateCompiled[T any](libYAML *LibraryFromYAML) error {
-	hashProvidedBin, err := hex.DecodeString(libYAML.Hash)
+// ValidateCompiled checks that a compiled library description (one with a
+// non-empty Hash field) is internally consistent: the declared bytecodes,
+// funCodes, and top-level hash all reproduce when the library is rebuilt.
+func ValidateCompiled[T any](libJSON *LibraryFromJSON) error {
+	hashProvidedBin, err := hex.DecodeString(libJSON.Hash)
 	if err != nil || len(hashProvidedBin) != sha256.Size {
 		return fmt.Errorf("ValidateCompiled: not compiled or wrong hash string")
 	}
 	lib := NewLibrary[T]()
-	if err = lib.Upgrade(libYAML); err != nil {
+	if err = lib.Upgrade(libJSON); err != nil {
 		return err
 	}
 
-	for _, d := range libYAML.Functions {
+	for _, d := range libJSON.Functions {
 		if d.EmbeddedAs == "" {
 			fd, found := lib.funByFunCode[d.FunCode]
 			easyfl_util.Assertf(found, "ValidateCompiled: func code %d (name: '%s') not found", d.FunCode, d.Sym)
@@ -443,8 +257,8 @@ func ValidateCompiled[T any](libYAML *LibraryFromYAML) error {
 	}
 
 	hashCompiled := lib.LibraryHash()
-	if hex.EncodeToString(hashCompiled[:]) != libYAML.Hash {
-		return fmt.Errorf("ValidateCompiled: library hash does not match: compiled %s != provided %s", hex.EncodeToString(hashCompiled[:]), libYAML.Hash)
+	if hex.EncodeToString(hashCompiled[:]) != libJSON.Hash {
+		return fmt.Errorf("ValidateCompiled: library hash does not match: compiled %s != provided %s", hex.EncodeToString(hashCompiled[:]), libJSON.Hash)
 	}
 	return nil
 }

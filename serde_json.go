@@ -7,14 +7,6 @@ import (
 	"sort"
 )
 
-// JSON-form aliases. After Phase 3 of the YAML→JSON migration (see
-// claude/json_persistence.md) the YAML-named types and APIs disappear and
-// these become the canonical names.
-type (
-	LibraryFromJSON    = LibraryFromYAML
-	FuncDescriptorJSON = FuncDescriptorYAMLAble
-)
-
 // ToJSON serializes the library to JSON.
 //   - compiled=true emits funCode/bytecode fields and the top-level hash.
 //   - indent=true emits human-readable indented JSON with a trailing newline.
@@ -31,7 +23,7 @@ func (lib *Library[T]) ToJSON(compiled, indent bool) []byte {
 	}
 
 	for sym := range lib.funByName {
-		d := *lib.mustFunYAMLAbleByName(sym)
+		d := *lib.mustFuncDescriptor(sym)
 		if !compiled {
 			// non-compiled output: drop funCode and bytecode (they are runtime artifacts)
 			d.FunCode = 0
@@ -79,7 +71,6 @@ func ReadLibraryFromJSON(data []byte) (*LibraryFromJSON, error) {
 
 // IntroduceUpdateJSON parses raw JSON data and stages extended functions for
 // later processing by CommitUpdate. Embedded functions are processed immediately.
-// Mirrors IntroduceUpdateYAML.
 func (lib *Library[T]) IntroduceUpdateJSON(jsonData []byte, embed ...func(sym string) EmbeddedFunction[T]) error {
 	fromJSON, err := ReadLibraryFromJSON(jsonData)
 	if err != nil {
@@ -115,8 +106,8 @@ func (lib *Library[T]) UpgradeFromJSON(jsonData []byte, embed ...func(sym string
 }
 
 // NewLibraryFromJSON constructs a fresh library and upgrades it from JSON.
-// Mirrors NewLibraryFromYAML: if the JSON contains a non-empty "hash" field
-// (compiled library), the computed hash is checked against it.
+// If the JSON contains a non-empty "hash" field (i.e. compiled library), the
+// computed hash is checked against it.
 func NewLibraryFromJSON[T any](jsonData []byte, embedFun ...func(lib *Library[T]) func(sym string) EmbeddedFunction[T]) (*Library[T], error) {
 	lib := NewLibrary[T]()
 	fromJSON, err := ReadLibraryFromJSON(jsonData)
