@@ -16,11 +16,13 @@ import (
 )
 
 type (
-	// LibraryFromYAML is parsed YAML description of a library
+	// LibraryFromYAML is parsed description of a library.
+	// Carries both `yaml` and `json` struct tags; the type name will be renamed to
+	// LibraryFromJSON when YAML support is removed (see claude/json_persistence.md).
 	LibraryFromYAML struct {
-		Hash        string                   `yaml:"hash,omitempty"`         // if Hash != "", library is compiled
-		VersionData string                   `yaml:"version_data,omitempty"` // optional version data as string
-		Functions   []FuncDescriptorYAMLAble `yaml:"functions"`
+		Hash        string                   `yaml:"hash,omitempty"         json:"hash,omitempty"`         // if Hash != "", library is compiled
+		VersionData string                   `yaml:"version_data,omitempty" json:"versionData,omitempty"` // optional version data as string
+		Functions   []FuncDescriptorYAMLAble `yaml:"functions"              json:"functions"`
 	}
 
 	// FuncDescriptorYAMLAble contains all information about embedded or extended function
@@ -30,17 +32,20 @@ type (
 	// EmbeddedAs is the key for resolving Go implementation. If empty, function is extended (not embedded)
 	// Replace: if true, function must exist in target library and will be replaced; if false/absent, function must not exist
 	// Immutable: if true, function cannot be replaced/modified in upgrades
+	//
+	// Field order matches the desired JSON pretty-print layout: sym, description,
+	// funCode, numArgs, embeddedAs, short, replace, immutable, source, bytecode.
 	FuncDescriptorYAMLAble struct {
-		Sym              string `yaml:"sym"`
-		FunCode     uint16 `yaml:"funCode,omitempty"`
-		NumArgs     int    `yaml:"numArgs"`
-		EmbeddedAs  string `yaml:"embedded_as,omitempty"`
-		Short       bool   `yaml:"short,omitempty"`
-		Replace     bool   `yaml:"replace,omitempty"`
-		Immutable   bool   `yaml:"immutable,omitempty"`
-		Source      string `yaml:"source,omitempty"`
-		Bytecode    string `yaml:"bytecode,omitempty"`
-		Description string `yaml:"description,omitempty"`
+		Sym         string `yaml:"sym"                    json:"sym"`
+		Description string `yaml:"description,omitempty"  json:"description,omitempty"`
+		FunCode     uint16 `yaml:"funCode,omitempty"      json:"funCode,omitempty"`
+		NumArgs     int    `yaml:"numArgs"                json:"numArgs"`
+		EmbeddedAs  string `yaml:"embedded_as,omitempty"  json:"embeddedAs,omitempty"`
+		Short       bool   `yaml:"short,omitempty"        json:"short,omitempty"`
+		Replace     bool   `yaml:"replace,omitempty"      json:"replace,omitempty"`
+		Immutable   bool   `yaml:"immutable,omitempty"    json:"immutable,omitempty"`
+		Source      string `yaml:"source,omitempty"       json:"source,omitempty"`
+		Bytecode    string `yaml:"bytecode,omitempty"     json:"bytecode,omitempty"`
 	}
 )
 
@@ -282,9 +287,10 @@ func ReadLibraryFromYAML(data []byte) (*LibraryFromYAML, error) {
 	return fromYAML, nil
 }
 
-// introduceFromParsedYAML is the internal implementation that works with already-parsed YAML.
+// introduceFromParsed is the internal implementation that works with an already-parsed
+// library description (originally from YAML, now also from JSON).
 // It stages extended functions for CommitUpdate and processes embedded functions immediately.
-func (lib *Library[T]) introduceFromParsedYAML(fromYAML *LibraryFromYAML, embed ...func(sym string) EmbeddedFunction[T]) error {
+func (lib *Library[T]) introduceFromParsed(fromYAML *LibraryFromYAML, embed ...func(sym string) EmbeddedFunction[T]) error {
 	// Update VersionData only if new value is non-empty (after trimming whitespace)
 	if vd := strings.TrimSpace(fromYAML.VersionData); vd != "" {
 		lib.VersionData = []byte(vd)
@@ -362,7 +368,7 @@ func (lib *Library[T]) IntroduceUpdateYAML(yamlData []byte, embed ...func(sym st
 	if err != nil {
 		return err
 	}
-	return lib.introduceFromParsedYAML(fromYAML, embed...)
+	return lib.introduceFromParsed(fromYAML, embed...)
 }
 
 // IntroduceUpdateYAMLMulti is a variadic version of IntroduceUpdateYAML.
@@ -395,7 +401,7 @@ func (lib *Library[T]) IntroduceUpdateYAMLMulti(embed func(sym string) EmbeddedF
 // - Replace=false (default): function must not exist, will be added as new
 // The Immutable flag controls whether the function can be replaced in future upgrades
 func (lib *Library[T]) Upgrade(fromYAML *LibraryFromYAML, embed ...func(sym string) EmbeddedFunction[T]) error {
-	if err := lib.introduceFromParsedYAML(fromYAML, embed...); err != nil {
+	if err := lib.introduceFromParsed(fromYAML, embed...); err != nil {
 		return fmt.Errorf("Upgrade: %v", err)
 	}
 	if err := lib.CommitUpdate(); err != nil {
