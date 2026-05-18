@@ -2,7 +2,6 @@ package easyfl
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -234,7 +233,7 @@ func (lib *Library[T]) Upgrade(fromJSON *LibraryFromJSON, embed ...func(sym stri
 // funCodes, and top-level hash all reproduce when the library is rebuilt.
 func ValidateCompiled[T any](libJSON *LibraryFromJSON) error {
 	hashProvidedBin, err := hex.DecodeString(libJSON.Hash)
-	if err != nil || len(hashProvidedBin) != sha256.Size {
+	if err != nil || len(hashProvidedBin) != blake2b.Size256 {
 		return fmt.Errorf("ValidateCompiled: not compiled or wrong hash string")
 	}
 	lib := NewLibrary[T]()

@@ -15,7 +15,6 @@ only for the **Proxima backend** build, which keeps using the standard Go toolch
 | YAML library serde (`gopkg.in/yaml.v3`) | **dropped** | kept |
 | Crypto embedded fns (`blake2b`, `ed25519`) | **moved out** to host (Proxima) | provided by Proxima |
 | `slicepool` optimized allocator | **simplified** to pure `make`/`append` | kept |
-| `crypto/sha256` (for hash validation) | not needed | kept |
 | `reflect` (one isolated call) | **removed** | n/a (also removed) |
 
 ## Audit findings
@@ -39,7 +38,7 @@ Affected surface in `serde_tools.go`:
 - `(*Library).IntroduceUpdateYAMLMulti(...)` (line 371)
 - `(*Library).Upgrade(...)` (line 397) — takes `*LibraryFromYAML`
 - `(*Library).UpgradeFromYAML(...)` (line 407)
-- `ValidateCompiled[T]` (line 415) — uses `sha256.Size`
+- `ValidateCompiled[T]` (line 415)
 
 #### B2. `reflect` — `library_embed.go:10, 93`
 
@@ -130,7 +129,7 @@ Verified via grep across non-test files:
 | `eval.go` | `sync.Pool` (callPool, varScopePool); `slicepool` | replace pools with direct alloc |
 | `types.go` | `sync.Pool` (expr arrays) | replace pools with direct alloc |
 | `library_embed.go` | `reflect`, `crypto/ed25519`, `blake2b` | remove reflect; move crypto out |
-| `serde_tools.go` | `yaml.v3`, `sha256`, `blake2b` | exclude entire file from WASM build |
+| `serde_tools.go` | `yaml.v3`, `blake2b` | exclude entire file from WASM build |
 | `library_yaml.go` | `//go:embed library.yaml` (string only) | exclude or keep as string asset |
 | `local_script.go` | none | keep |
 | `recursion.go` | none | keep |
