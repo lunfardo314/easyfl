@@ -8,7 +8,6 @@ import (
 
 	"github.com/lunfardo314/easyfl/easyfl_util"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/crypto/blake2b"
 )
 
 func TestCases(t *testing.T) {
@@ -197,11 +196,6 @@ func TestEmbed(t *testing.T) {
 		lib.MustTrue("equal(rshift64(u64/2001, u64/3), div(u64/2001, 8))")
 		lib.MustEqual("rshift64(u64/2001, nil)", "u64/2001")
 
-	})
-	t.Run("base crypto", func(t *testing.T) {
-		h := blake2b.Sum256([]byte{1})
-		lib.MustEqual("len(blake2b(1))", "u64/32")
-		lib.MustEqual("blake2b(1)", fmt.Sprintf("0x%s", hex.EncodeToString(h[:])))
 	})
 	t.Run("bytecode manipulation", func(t *testing.T) {
 		_, _, binCode, err := lib.CompileExpression("slice(0x01020304,1,2)")

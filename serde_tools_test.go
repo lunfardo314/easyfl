@@ -25,7 +25,7 @@ func TestLibrary_Upgrade_Mixed(t *testing.T) {
 	  "functions": [
 	    {"sym": "newfun", "description": "some description", "numArgs": 0, "source": "concat(0x, 0x111111, 2)"},
 	    {"sym": "newfun2", "description": "none", "numArgs": 0, "source": "add(5,7)"},
-	    {"sym": "long-source", "numArgs": 2, "source": "if(equal($0,$1), blake2b($0), blake2b(concat($0,$1)))"},
+	    {"sym": "long-source", "numArgs": 2, "source": "if(equal($0,$1), concat($0), concat($0,$1))"},
 	    {"sym": "dummy", "numArgs": 0, "source": "add(5,7)"},
 	    {"sym": "@dummy", "numArgs": 0, "source": "add(5,7)"}
 	  ]

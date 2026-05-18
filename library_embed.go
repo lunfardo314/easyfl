@@ -2,7 +2,6 @@ package easyfl
 
 import (
 	"bytes"
-	"crypto/ed25519"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -12,7 +11,6 @@ import (
 	"github.com/lunfardo314/easyfl/easyfl_util"
 	"github.com/lunfardo314/easyfl/slicepool"
 	"github.com/lunfardo314/easyfl/tuples"
-	"golang.org/x/crypto/blake2b"
 )
 
 // list of standard embedded functions
@@ -58,9 +56,6 @@ func unboundEmbeddedFunctions[T any]() map[string]EmbeddedFunction[T] {
 		// bitwise long
 		"evalLShift64": evalLShift64[T],
 		"evalRShift64": evalRShift64[T],
-		// base crypto
-		"evalValidSignatureED25519": evalValidSigED25519[T],
-		"evalBlake2b":               evalBlake2b[T],
 		// tuples
 		"evalAtTuple8": evalAtTuple8[T],
 		"evalTupleLen": evalNumElementsOfTuple[T],
@@ -417,31 +412,6 @@ func evalLessThan[T any](par *CallParams[T]) []byte {
 	}
 	par.Trace("lessThan: %s, %s -> false", easyfl_util.FmtLazy(a0), easyfl_util.FmtLazy(a1))
 	return nil // equal -> false
-}
-
-func evalValidSigED25519[T any](par *CallParams[T]) []byte {
-	msg := par.Arg(0)
-	signature := par.Arg(1)
-	pubKey := par.Arg(2)
-
-	if ed25519.Verify(pubKey, msg, signature) {
-		par.Trace("ValidSigED25519: msg=%s, sig=%s, pubKey=%s -> true",
-			easyfl_util.FmtLazy(msg), easyfl_util.FmtLazy(signature), easyfl_util.FmtLazy(pubKey))
-		return par.AllocData(0xff) // true
-	}
-	par.Trace("ValidSigED25519: msg=%s, sig=%s, pubKey=%s -> false",
-		easyfl_util.FmtLazy(msg), easyfl_util.FmtLazy(signature), easyfl_util.FmtLazy(pubKey))
-	return nil
-}
-
-func evalBlake2b[T any](par *CallParams[T]) []byte {
-	var buf bytes.Buffer
-	for i := byte(0); i < par.Arity(); i++ {
-		buf.Write(par.Arg(i))
-	}
-	ret := blake2b.Sum256(buf.Bytes())
-	par.Trace("blake2b: %d params -> %s", par.Arity(), easyfl_util.FmtLazy(ret[:]))
-	return par.AllocData(ret[:]...) // true
 }
 
 func evalBitwiseAND[T any](par *CallParams[T]) []byte {

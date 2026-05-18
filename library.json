@@ -1,5 +1,5 @@
 {
-  "hash": "5ef6911bad2b4ec3dfac171d8f02bf28cd066e4684ebb091a1b1059a3c2c3bb0",
+  "hash": "86efd216d65141773b3a6709d5a78da3195db3d62c42bd1f601b727bfcdcdad2",
   "functions": [
     {
       "sym": "fail",
@@ -241,58 +241,44 @@
       "embeddedAs": "evalRShift64"
     },
     {
-      "sym": "validSignatureED25519",
-      "description": "validSignatureED25519($0,$1,$2) returns non-empty value if $1 represents valid ED25519 signature of message $0 and  public key $2",
-      "funCode": 73,
-      "numArgs": 3,
-      "embeddedAs": "evalValidSignatureED25519"
-    },
-    {
-      "sym": "blake2b",
-      "description": "returns 32 bytes of the blake2b hash of the argument",
-      "funCode": 74,
-      "numArgs": -1,
-      "embeddedAs": "evalBlake2b"
-    },
-    {
       "sym": "parseBytecode",
       "description": "parseBytecode($0,$1 [,$2...]) treats $0 as bytecode and $1 is either 1-byte index of the argument or 0x for the call prefix. It check if its call prefix is equal to $2 list if any",
-      "funCode": 75,
+      "funCode": 73,
       "numArgs": -1,
       "embeddedAs": "evalParseBytecode"
     },
     {
       "sym": "parseInlineData",
       "description": "treats $0 as bytecode of the inline data call. Strips the call prefix, returns the data",
-      "funCode": 76,
+      "funCode": 74,
       "numArgs": 1,
       "embeddedAs": "evalParseInlineData"
     },
     {
       "sym": "parseInlineDataArgument",
       "description": "same as parseBytecode, only enforces result to be inline data and strips call prefix",
-      "funCode": 77,
+      "funCode": 75,
       "numArgs": -1,
       "embeddedAs": "evalParseInlineDataArgument"
     },
     {
       "sym": "parseNumArgs",
       "description": "treats $0 as bytecode of the inline data call. Returns number of parameters in the call as 1 byte",
-      "funCode": 78,
+      "funCode": 76,
       "numArgs": 1,
       "embeddedAs": "evalParseNumArgs"
     },
     {
       "sym": "atTuple8",
       "description": "returns element of the serialized tuple $0 at index $1 which must be 1 byte-long",
-      "funCode": 79,
+      "funCode": 77,
       "numArgs": 2,
       "embeddedAs": "evalAtTuple8"
     },
     {
       "sym": "tupleLen",
       "description": "returns number of elements of a serialized tuple at $0 as 8 byte-long big-endian value",
-      "funCode": 80,
+      "funCode": 78,
       "numArgs": 1,
       "embeddedAs": "evalTupleLen"
     },
