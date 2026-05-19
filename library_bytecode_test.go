@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lunfardo314/easyfl/easyfl_util"
+	"github.com/lunfardo314/easyfl/easyfl_util/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -190,7 +191,7 @@ func TestInlineCode(t *testing.T) {
 		data := strings.Repeat("f", MaxSourceSize-1)
 		src := fmt.Sprintf("0x%s", data)
 		_, _, _, err := lib.CompileExpression(src)
-		easyfl_util.RequireErrorWith(t, err, "source is too long")
+		testutil.RequireErrorWith(t, err, "source is too long")
 	})
 	t.Run("long inline", func(t *testing.T) {
 		data := strings.Repeat("f", MaxSourceSize-2)

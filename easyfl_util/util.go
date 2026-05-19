@@ -5,9 +5,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"testing"
-
-	"github.com/stretchr/testify/require"
 )
 
 func Concat(data ...interface{}) []byte {
@@ -48,11 +45,6 @@ func CatchPanicOrError(f func() error) error {
 		err = f()
 	}()
 	return err
-}
-
-func RequireErrorWith(t *testing.T, err error, s string) {
-	require.Error(t, err)
-	require.Contains(t, err.Error(), s)
 }
 
 func Assertf(cond bool, format string, args ...interface{}) {

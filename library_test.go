@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lunfardo314/easyfl/easyfl_util"
+	"github.com/lunfardo314/easyfl/easyfl_util/testutil"
 	"github.com/lunfardo314/easyfl/slicepool"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/blake2b"
@@ -129,11 +130,11 @@ func TestCompile(t *testing.T) {
 		require.NoError(t, err)
 		t.Logf("!!!ciao! code = %s", easyfl_util.Fmt(code))
 		_, err = lib.EvalFromBytecode(nil, code)
-		easyfl_util.RequireErrorWith(t, err, "SCRIPT FAIL: 'ciao!'")
+		testutil.RequireErrorWith(t, err, "SCRIPT FAIL: 'ciao!'")
 
 		src := fmt.Sprintf("x/%s", hex.EncodeToString(code))
 		_, err = lib.EvalFromSource(nil, src)
-		easyfl_util.RequireErrorWith(t, err, "SCRIPT FAIL: 'ciao!'")
+		testutil.RequireErrorWith(t, err, "SCRIPT FAIL: 'ciao!'")
 	})
 }
 

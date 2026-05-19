@@ -400,7 +400,7 @@ func parseLiteral[T any](lib *Library[T], sym string, w io.Writer) (bool, int, e
 		if err != nil {
 			return false, 0, fmt.Errorf("%v: '%s'", err, sym)
 		}
-		if n < 0 || n > math.MaxUint32 {
+		if n < 0 || uint64(n) > math.MaxUint32 {
 			return false, 0, fmt.Errorf("wrong u32 constant: '%s'", sym)
 		}
 		var b [4]byte
@@ -458,7 +458,7 @@ func parseLiteral[T any](lib *Library[T], sym string, w io.Writer) (bool, int, e
 		if err != nil {
 			return false, 0, fmt.Errorf("%v: '%s'", err, sym)
 		}
-		if n < 0 || n > math.MaxUint32 {
+		if n < 0 || uint64(n) > math.MaxUint32 {
 			return false, 0, fmt.Errorf("wrong z32 constant: '%s'", sym)
 		}
 		var b [4]byte

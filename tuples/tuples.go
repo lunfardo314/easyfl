@@ -315,7 +315,7 @@ func calcLenPrefix(data [][]byte) (lenPrefixType, error) {
 	for _, d := range data {
 		t = dataLenBytes0
 		switch {
-		case len(d) > math.MaxUint32:
+		case uint64(len(d)) > math.MaxUint32:
 			return 0, errors.New("data can't be longer that MaxInt32")
 		case len(d) > math.MaxUint16:
 			t = dataLenBytes32

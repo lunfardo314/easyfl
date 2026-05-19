@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/lunfardo314/easyfl/easyfl_util/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -17,7 +18,7 @@ func TestUint64FromBytes(t *testing.T) {
 	t.Run("1", func(t *testing.T) {
 		data := bytes.Repeat([]byte{0}, 9)
 		_, err := Uint64FromBytes(data)
-		RequireErrorWith(t, err, "can't be more than 8 bytes")
+		testutil.RequireErrorWith(t, err, "can't be more than 8 bytes")
 	})
 	t.Run("2", func(t *testing.T) {
 		data := []byte{1, 0xff}
