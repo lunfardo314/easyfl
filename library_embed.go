@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math"
-	"reflect"
 
 	"github.com/lunfardo314/easyfl/easyfl_util"
 	"github.com/lunfardo314/easyfl/slicepool"
@@ -84,15 +83,10 @@ func EmbeddedFunctions[T any](targetLib *Library[T]) func(sym string) EmbeddedFu
 
 // -----------------------------------------------------------------
 
-func isNil(p interface{}) bool {
-	return p == nil || (reflect.ValueOf(p).Kind() == reflect.Ptr && reflect.ValueOf(p).IsNil())
-}
-
 // evalArity returns the number of arguments in the enclosing function's var scope.
 // This is the embedded function for the $$ literal.
 func evalArity[T any](par *CallParams[T]) []byte {
 	arity := par.VarScopeArity()
-	par.Trace("arity:: -> %d", arity)
 	return par.AllocData(arity)
 }
 
@@ -121,7 +115,6 @@ func evalSlice[T any](par *CallParams[T]) []byte {
 		par.TracePanic("slice:: data: %s, from: %s, to: %s -- slice out of bounds. ", easyfl_util.Fmt(data), easyfl_util.Fmt(from), easyfl_util.Fmt(to))
 	}
 	ret := data[from[0]:upper]
-	par.Trace("slice:: data: %s, from: %s, to: %s -> %s", easyfl_util.FmtLazy(data), easyfl_util.FmtLazy(from), easyfl_util.FmtLazy(to), easyfl_util.FmtLazy(ret))
 	return ret
 }
 
@@ -132,7 +125,6 @@ func evalByte[T any](par *CallParams[T]) []byte {
 		par.TracePanic("byte:: data: %s, idx: %s -- wrong index value", easyfl_util.FmtLazy(data), easyfl_util.FmtLazy(idx))
 	}
 	ret := data[idx[0] : idx[0]+1]
-	par.Trace("byte:: data: %s, idx: %s -> %s", easyfl_util.FmtLazy(data), easyfl_util.FmtLazy(idx), easyfl_util.FmtLazy(ret))
 	return ret
 }
 
@@ -143,7 +135,6 @@ func evalTail[T any](par *CallParams[T]) []byte {
 		par.TracePanic("tail:: data: %s, from: %s -- index out of bounds. ", easyfl_util.FmtLazy(data), easyfl_util.FmtLazy(from))
 	}
 	ret := data[from[0]:]
-	par.Trace("tail:: data: %s, from: %s -> %s", easyfl_util.FmtLazy(data), easyfl_util.FmtLazy(from), easyfl_util.FmtLazy(ret))
 	return ret
 }
 
@@ -154,7 +145,6 @@ func evalEqual[T any](par *CallParams[T]) []byte {
 	if bytes.Equal(p0, p1) {
 		ret = par.AllocData(0xff)
 	}
-	par.Trace("equal:: %s, %s -> %s", easyfl_util.FmtLazy(p0), easyfl_util.FmtLazy(p1), easyfl_util.FmtLazy(ret))
 	return ret
 }
 
@@ -165,7 +155,6 @@ func evalHasPrefix[T any](par *CallParams[T]) []byte {
 	if bytes.HasPrefix(data, prefix) {
 		ret = par.AllocData(0xff)
 	}
-	par.Trace("hasPrefix:: %s, %s -> %s", easyfl_util.FmtLazy(data), easyfl_util.FmtLazy(prefix), easyfl_util.FmtLazy(ret))
 	return ret
 }
 
@@ -176,7 +165,6 @@ func evalRepeat[T any](par *CallParams[T]) []byte {
 		par.TracePanic("evalRepeat: count must be 1-byte long")
 	}
 	ret := par.AllocData(bytes.Repeat(fragment, int(n[0]))...)
-	par.Trace("hasPrefix:: %s, %s -> %s", easyfl_util.FmtLazy(fragment), easyfl_util.FmtLazy(n), easyfl_util.FmtLazy(ret))
 	return ret
 }
 
@@ -184,7 +172,6 @@ func evalLen[T any](par *CallParams[T]) []byte {
 	data := par.Arg(0)
 	ret := par.Alloc(8)
 	binary.BigEndian.PutUint64(ret, uint64(len(data)))
-	par.Trace("len:: %s -> %s", easyfl_util.FmtLazy(data), easyfl_util.FmtLazy(ret))
 	return ret
 }
 
@@ -192,11 +179,9 @@ func evalIf[T any](par *CallParams[T]) []byte {
 	cond := par.Arg(0)
 	if len(cond) != 0 {
 		yes := par.Arg(1)
-		par.Trace("if:: %s -> %s", easyfl_util.FmtLazy(cond), easyfl_util.FmtLazy(yes))
 		return yes
 	}
 	no := par.Arg(2)
-	par.Trace("if:: %s -> %s", easyfl_util.FmtLazy(cond), easyfl_util.FmtLazy(no))
 	return no
 }
 
@@ -204,11 +189,9 @@ func evalIf[T any](par *CallParams[T]) []byte {
 func evalFirstCaseIndex[T any](par *CallParams[T]) []byte {
 	for i := byte(0); i < par.Arity(); i++ {
 		if c := par.Arg(i); len(c) > 0 {
-			par.Trace("firstCaseIndex:: -> %d", i)
 			return par.AllocData(i)
 		}
 	}
-	par.Trace("firstCaseIndex:: -> nil")
 	return nil
 }
 
@@ -220,11 +203,9 @@ func evalFirstEqualIndex[T any](par *CallParams[T]) []byte {
 	v := par.Arg(0)
 	for i := byte(1); i < par.Arity(); i++ {
 		if bytes.Equal(v, par.Arg(i)) {
-			par.Trace("firstEqualIndex:: -> %d", i)
 			return par.AllocData(i - 1)
 		}
 	}
-	par.Trace("firstEqualIndex:: -> nil")
 	return nil
 }
 
@@ -246,20 +227,16 @@ func evalSelectCaseByIndex[T any](par *CallParams[T]) []byte {
 func evalIsZero[T any](par *CallParams[T]) []byte {
 	arg := par.Arg(0)
 	if easyfl_util.IsZero(arg) {
-		par.Trace("isZero:: %s -> true", easyfl_util.FmtLazy(arg))
 		return par.AllocData(0xff)
 	}
-	par.Trace("isZero:: %s -> nil", easyfl_util.FmtLazy(arg))
 	return nil
 }
 
 func evalNot[T any](par *CallParams[T]) []byte {
 	arg := par.Arg(0)
 	if len(arg) == 0 {
-		par.Trace("not:: %s -> true", easyfl_util.FmtLazy(arg))
 		return par.AllocData(0xff)
 	}
-	par.Trace("not:: %s -> nil", easyfl_util.FmtLazy(arg))
 	return nil
 }
 
@@ -276,29 +253,24 @@ func evalConcat[T any](par *CallParams[T]) []byte {
 	for i := range a {
 		ret = append(ret, a[i]...)
 	}
-	par.Trace("concat:: %d params -> %s", par.Arity(), easyfl_util.FmtLazy(ret))
 	return ret
 }
 
 func evalAnd[T any](par *CallParams[T]) []byte {
 	for i := byte(0); i < par.Arity(); i++ {
 		if len(par.Arg(i)) == 0 {
-			par.Trace("and:: param %d nil -> nil", i)
 			return nil
 		}
 	}
-	par.Trace("and:: %d params -> true", par.Arity)
 	return par.AllocData(0xff)
 }
 
 func evalOr[T any](par *CallParams[T]) []byte {
 	for i := byte(0); i < par.Arity(); i++ {
 		if len(par.Arg(i)) != 0 {
-			par.Trace("or:: param %d -> true", i)
 			return par.AllocData(0xff)
 		}
 	}
-	par.Trace("or:: %d params -> nil", par.Arity)
 	return nil
 }
 
@@ -403,14 +375,11 @@ func evalLessThan[T any](par *CallParams[T]) []byte {
 	for i := range a0 {
 		switch {
 		case a0[i] < a1[i]:
-			par.Trace("lessThan: %s, %s -> true", easyfl_util.Fmt(a0), easyfl_util.Fmt(a1))
 			return par.AllocData(0xff) // true
 		case a0[i] > a1[i]:
-			par.Trace("lessThan: %s, %s -> false", easyfl_util.Fmt(a0), easyfl_util.Fmt(a1))
 			return nil //false
 		}
 	}
-	par.Trace("lessThan: %s, %s -> false", easyfl_util.FmtLazy(a0), easyfl_util.FmtLazy(a1))
 	return nil // equal -> false
 }
 
@@ -425,7 +394,6 @@ func evalBitwiseAND[T any](par *CallParams[T]) []byte {
 	for i := range a0 {
 		ret[i] = a0[i] & a1[i]
 	}
-	par.Trace("evalBitwiseAND: %s, %s -> %s", easyfl_util.FmtLazy(a0), easyfl_util.FmtLazy(a1), easyfl_util.FmtLazy(ret))
 	return ret
 }
 
@@ -439,7 +407,6 @@ func evalBitwiseOR[T any](par *CallParams[T]) []byte {
 	for i := range a0 {
 		ret[i] = a0[i] | a1[i]
 	}
-	par.Trace("evalBitwiseOR: %s, %s -> %s", easyfl_util.FmtLazy(a0), easyfl_util.FmtLazy(a1), easyfl_util.FmtLazy(ret))
 	return ret
 }
 
@@ -453,7 +420,6 @@ func evalBitwiseXOR[T any](par *CallParams[T]) []byte {
 	for i := range a0 {
 		ret[i] = a0[i] ^ a1[i]
 	}
-	par.Trace("evalBitwiseXOR: %s, %s -> %s", easyfl_util.FmtLazy(a0), easyfl_util.FmtLazy(a1), easyfl_util.FmtLazy(ret))
 	return ret
 }
 
@@ -463,7 +429,6 @@ func evalBitwiseNOT[T any](par *CallParams[T]) []byte {
 	for i := range a0 {
 		ret[i] = ^a0[i]
 	}
-	par.Trace("evalBitwiseNOT: %s -> %s", easyfl_util.FmtLazy(a0), easyfl_util.FmtLazy(ret))
 	return ret
 }
 

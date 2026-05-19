@@ -721,10 +721,8 @@ func dataFunction[T any](data []byte) (ret EvalFunction[T], err error) {
 		err = fmt.Errorf("EasyFL: data too large. Max is %d, got %d", MaxDataSize, len(data))
 		return
 	}
-	d := data
 	ret = EvalFunction[T]{
 		EmbeddedFunction: func(par *CallParams[T]) []byte {
-			par.Trace("-> %s", easyfl_util.Fmt(d))
 			return data
 		},
 		bytecode: mustDataWithPrefix(data),
@@ -989,7 +987,6 @@ func makeEmbeddedFunForExpression[T any](sym string, expr *Expression[T]) Embedd
 
 		ret := evalExpression(par.glb, par.spool, expr, varScope)
 
-		par.Trace("'%s':: %d params -> %s", sym, par.Arity(), easyfl_util.Fmt(ret))
 		return ret
 	}
 }

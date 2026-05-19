@@ -22,7 +22,7 @@ func TestParseBin(t *testing.T) {
 		_, _, bin, err := lib.CompileExpression("fun1par(0x00)")
 		require.NoError(t, err)
 		t.Logf("code: %s", easyfl_util.Fmt(bin))
-		res, err := lib.EvalFromBytecode(lib.NewGlobalDataTracePrint(nil), bin)
+		res, err := lib.EvalFromBytecode(nil, bin)
 		require.NoError(t, err)
 		t.Logf("result: %s", easyfl_util.Fmt(res))
 	})
@@ -30,7 +30,7 @@ func TestParseBin(t *testing.T) {
 		_, _, bin, err := lib.CompileExpression("fun2par(0x01, 0x02)")
 		require.NoError(t, err)
 		t.Logf("code: %s", easyfl_util.Fmt(bin))
-		res, err := lib.EvalFromBytecode(lib.NewGlobalDataTracePrint(nil), bin)
+		res, err := lib.EvalFromBytecode(nil, bin)
 		require.NoError(t, err)
 		t.Logf("result: %s", easyfl_util.Fmt(res))
 	})
@@ -38,7 +38,7 @@ func TestParseBin(t *testing.T) {
 		_, _, bin, err := lib.CompileExpression("fun2par($0, $1)")
 		require.NoError(t, err)
 		t.Logf("code: %s", easyfl_util.Fmt(bin))
-		res, err := lib.EvalFromBytecode(lib.NewGlobalDataTracePrint(nil), bin, []byte{1}, []byte{2})
+		res, err := lib.EvalFromBytecode(nil, bin, []byte{1}, []byte{2})
 		require.NoError(t, err)
 		t.Logf("result: %s", easyfl_util.Fmt(res))
 	})
@@ -47,7 +47,7 @@ func TestParseBin(t *testing.T) {
 		_, _, bin, err := lib.CompileExpression(addrStr)
 		require.NoError(t, err)
 		t.Logf("code: %s", easyfl_util.Fmt(bin))
-		res, err := lib.EvalFromBytecode(lib.NewGlobalDataTracePrint(nil), bin)
+		res, err := lib.EvalFromBytecode(nil, bin)
 		require.NoError(t, err)
 		t.Logf("result: %s", easyfl_util.Fmt(res))
 	})
@@ -55,7 +55,7 @@ func TestParseBin(t *testing.T) {
 		_, _, bin, err := lib.CompileExpression("slice(0,0,0)")
 		require.NoError(t, err)
 		t.Logf("code: %s", easyfl_util.Fmt(bin))
-		res, err := lib.EvalFromBytecode(lib.NewGlobalDataTracePrint(nil), bin)
+		res, err := lib.EvalFromBytecode(nil, bin)
 		require.NoError(t, err)
 		t.Logf("result: %s", easyfl_util.Fmt(res))
 	})
@@ -63,29 +63,29 @@ func TestParseBin(t *testing.T) {
 		_, _, bin, err := lib.CompileExpression("0")
 		require.NoError(t, err)
 		t.Logf("code: %s", easyfl_util.Fmt(bin))
-		res, err := lib.EvalFromBytecode(lib.NewGlobalDataTracePrint(nil), bin)
+		res, err := lib.EvalFromBytecode(nil, bin)
 		require.NoError(t, err)
 		t.Logf("result: %s", easyfl_util.Fmt(res))
 	})
 	t.Run("bin code cannot be nil", func(t *testing.T) {
-		_, err := lib.EvalFromBytecode(lib.NewGlobalDataTracePrint(nil), nil)
+		_, err := lib.EvalFromBytecode(nil, nil)
 		require.Error(t, err)
 	})
 	t.Run("0-parameter bin code never starts from 0", func(t *testing.T) {
 		bin := []byte{0}
 		t.Logf("code: %s", easyfl_util.Fmt(bin))
-		_, err := lib.EvalFromBytecode(lib.NewGlobalDataTracePrint(nil), bin)
+		_, err := lib.EvalFromBytecode(nil, bin)
 		require.Error(t, err)
 
 		bin = []byte{0, 0}
 		t.Logf("code: %s", easyfl_util.Fmt(bin))
-		_, err = lib.EvalFromBytecode(lib.NewGlobalDataTracePrint(nil), bin)
+		_, err = lib.EvalFromBytecode(nil, bin)
 		require.Error(t, err)
 	})
 	t.Run("0-started code require 1 parameter", func(t *testing.T) {
 		bin := []byte{0}
 		t.Logf("code: %s", easyfl_util.Fmt(bin))
-		res, err := lib.EvalFromBytecode(lib.NewGlobalDataTracePrint(nil), bin, []byte{10})
+		res, err := lib.EvalFromBytecode(nil, bin, []byte{10})
 		require.NoError(t, err)
 		t.Logf("result: %s", easyfl_util.Fmt(res))
 		require.EqualValues(t, []byte{10}, res)
@@ -93,18 +93,18 @@ func TestParseBin(t *testing.T) {
 	t.Run("0-parameter bin code never starts from 1", func(t *testing.T) {
 		bin := []byte{1}
 		t.Logf("code: %s", easyfl_util.Fmt(bin))
-		_, err := lib.EvalFromBytecode(lib.NewGlobalDataTracePrint(nil), bin)
+		_, err := lib.EvalFromBytecode(nil, bin)
 		require.Error(t, err)
 
 		bin = []byte{0, 0}
 		t.Logf("code: %s", easyfl_util.Fmt(bin))
-		_, err = lib.EvalFromBytecode(lib.NewGlobalDataTracePrint(nil), bin)
+		_, err = lib.EvalFromBytecode(nil, bin)
 		require.Error(t, err)
 	})
 	t.Run("1-started code require 2 parameters", func(t *testing.T) {
 		bin := []byte{1}
 		t.Logf("code: %s", easyfl_util.Fmt(bin))
-		res, err := lib.EvalFromBytecode(lib.NewGlobalDataTracePrint(nil), bin, []byte{10}, []byte{11})
+		res, err := lib.EvalFromBytecode(nil, bin, []byte{10}, []byte{11})
 		require.NoError(t, err)
 		t.Logf("result: %s", easyfl_util.Fmt(res))
 		require.EqualValues(t, []byte{11}, res)
@@ -112,7 +112,7 @@ func TestParseBin(t *testing.T) {
 	t.Run("nil code is 0x80", func(t *testing.T) {
 		bin := []byte{0x80}
 		t.Logf("code: %s", easyfl_util.Fmt(bin))
-		res, err := lib.EvalFromBytecode(lib.NewGlobalDataTracePrint(nil), bin)
+		res, err := lib.EvalFromBytecode(nil, bin)
 		require.NoError(t, err)
 		require.True(t, len(res) == 0)
 		t.Logf("result: %s", easyfl_util.Fmt(res))
@@ -152,7 +152,7 @@ func TestInlineCode(t *testing.T) {
 		require.EqualValues(t, bin2, bin3)
 
 		t.Logf("code with inline: %s", easyfl_util.Fmt(bin3))
-		res, err := lib.EvalFromBytecode(lib.NewGlobalDataTracePrint(nil), bin3)
+		res, err := lib.EvalFromBytecode(nil, bin3)
 		require.NoError(t, err)
 		t.Logf("result: %s", easyfl_util.Fmt(res))
 		require.EqualValues(t, []byte{0, 1, 2}, res)
@@ -167,7 +167,7 @@ func TestInlineCode(t *testing.T) {
 		require.EqualValues(t, bin2, bin3)
 
 		t.Logf("code with inline: %s", easyfl_util.Fmt(bin3))
-		res, err := lib.EvalFromBytecode(lib.NewGlobalDataTracePrint(nil), bin3, []byte{0, 1})
+		res, err := lib.EvalFromBytecode(nil, bin3, []byte{0, 1})
 		require.NoError(t, err)
 		t.Logf("result: %s", easyfl_util.Fmt(res))
 		require.EqualValues(t, []byte{0, 1, 2}, res)
@@ -182,7 +182,7 @@ func TestInlineCode(t *testing.T) {
 		require.EqualValues(t, bin2, bin3)
 
 		t.Logf("code with inline: %s", easyfl_util.Fmt(bin3))
-		res, err := lib.EvalFromBytecode(lib.NewGlobalDataTracePrint(nil), bin3, []byte{2})
+		res, err := lib.EvalFromBytecode(nil, bin3, []byte{2})
 		require.NoError(t, err)
 		t.Logf("result: %s", easyfl_util.Fmt(res))
 		require.EqualValues(t, []byte{0, 2}, res)

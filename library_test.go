@@ -188,8 +188,7 @@ func TestEval(t *testing.T) {
 		require.EqualValues(t, []byte{3, 4}, ret)
 	})
 	t.Run("10", func(t *testing.T) {
-		tr := lib.NewGlobalDataTracePrint(nil)
-		ret, err := lib.EvalFromSource(tr, "if(equal(len($0),u64/3), 0x01, 0x05)", []byte("abc"))
+		ret, err := lib.EvalFromSource(nil, "if(equal(len($0),u64/3), 0x01, 0x05)", []byte("abc"))
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{1}, ret)
 	})
@@ -206,56 +205,56 @@ func TestEval(t *testing.T) {
 				0x0506     // comment2
 			)`
 	t.Run("12", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(lib.NewGlobalDataTracePrint(nil), longer, []byte("abcdef"))
+		ret, err := lib.EvalFromSource(nil, longer, []byte("abcdef"))
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{1}, ret)
 	})
 	t.Run("14", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(lib.NewGlobalDataTracePrint(nil), longer, []byte("abcde"))
+		ret, err := lib.EvalFromSource(nil, longer, []byte("abcde"))
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{5, 6}, ret)
 	})
 	t.Run("15", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(lib.NewGlobalDataTracePrint(nil), "nil")
+		ret, err := lib.EvalFromSource(nil, "nil")
 		require.NoError(t, err)
 		require.True(t, len(ret) == 0)
 	})
 	t.Run("16", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(lib.NewGlobalDataTracePrint(nil), "concat")
+		ret, err := lib.EvalFromSource(nil, "concat")
 		require.NoError(t, err)
 		require.True(t, len(ret) == 0)
 	})
 	t.Run("17", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(lib.NewGlobalDataTracePrint(nil), "u16/256")
+		ret, err := lib.EvalFromSource(nil, "u16/256")
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{1, 0}, ret)
 	})
 	t.Run("18", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(lib.NewGlobalDataTracePrint(nil), "u32/70000")
+		ret, err := lib.EvalFromSource(nil, "u32/70000")
 		require.NoError(t, err)
 		var b [4]byte
 		binary.BigEndian.PutUint32(b[:], 70000)
 		require.EqualValues(t, b[:], ret)
 	})
 	t.Run("19", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(lib.NewGlobalDataTracePrint(nil), "u64/10000000000")
+		ret, err := lib.EvalFromSource(nil, "u64/10000000000")
 		require.NoError(t, err)
 		var b [8]byte
 		binary.BigEndian.PutUint64(b[:], 10000000000)
 		require.EqualValues(t, b[:], ret)
 	})
 	t.Run("20", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(lib.NewGlobalDataTracePrint(nil), "isZero(0x000000)")
+		ret, err := lib.EvalFromSource(nil, "isZero(0x000000)")
 		require.NoError(t, err)
 		require.True(t, len(ret) != 0)
 	})
 	t.Run("21", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(lib.NewGlobalDataTracePrint(nil), "isZero(0x003000)")
+		ret, err := lib.EvalFromSource(nil, "isZero(0x003000)")
 		require.NoError(t, err)
 		require.True(t, len(ret) == 0)
 	})
 	t.Run("21", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(lib.NewGlobalDataTracePrint(nil), "add($0, $1)", []byte{160}, []byte{160})
+		ret, err := lib.EvalFromSource(nil, "add($0, $1)", []byte{160}, []byte{160})
 		require.NoError(t, err)
 		var b [8]byte
 		binary.BigEndian.PutUint64(b[:], 320)
@@ -266,18 +265,17 @@ func TestEval(t *testing.T) {
 		a0 := par.Arg(0)
 		h := blake2b.Sum256(a0)
 		blake2bInvokedNum++
-		par.Trace("blake2b-test:: %v -> %v", a0, h[:])
 		return h[:]
 	}, "blake2b-test")
 	t.Run("23", func(t *testing.T) {
 		blake2bInvokedNum = 0
-		ret, err := lib.EvalFromSource(lib.NewGlobalDataTracePrint(nil), "blake2b-test($0)", []byte{1, 2, 3})
+		ret, err := lib.EvalFromSource(nil, "blake2b-test($0)", []byte{1, 2, 3})
 		require.NoError(t, err)
 		h := blake2b.Sum256([]byte{0x01, 0x02, 0x03})
 		require.EqualValues(t, h[:], ret)
 		require.EqualValues(t, blake2bInvokedNum, 1)
 
-		ret, err = lib.EvalFromSource(lib.NewGlobalDataTracePrint(nil), "blake2b-test($0)", nil)
+		ret, err = lib.EvalFromSource(nil, "blake2b-test($0)", nil)
 		require.NoError(t, err)
 		h = blake2b.Sum256(nil)
 		require.EqualValues(t, h[:], ret)
@@ -288,13 +286,13 @@ func TestEval(t *testing.T) {
 		h2 := blake2b.Sum256([]byte{2})
 		h3 := blake2b.Sum256([]byte{3})
 
-		ret, err := lib.EvalFromSource(lib.NewGlobalDataTracePrint(nil), "if($0,blake2b-test($1),blake2b-test($2))",
+		ret, err := lib.EvalFromSource(nil, "if($0,blake2b-test($1),blake2b-test($2))",
 			[]byte{1}, []byte{2}, []byte{3})
 		require.NoError(t, err)
 		require.EqualValues(t, h2[:], ret)
 		require.EqualValues(t, blake2bInvokedNum, 1)
 
-		ret, err = lib.EvalFromSource(lib.NewGlobalDataTracePrint(nil), "if($0,blake2b-test($1),blake2b-test($2))",
+		ret, err = lib.EvalFromSource(nil, "if($0,blake2b-test($1),blake2b-test($2))",
 			nil, []byte{2}, []byte{3})
 		require.NoError(t, err)
 		require.EqualValues(t, h3[:], ret)
@@ -311,7 +309,7 @@ func TestExtendLib(t *testing.T) {
 	t.Run("ext-3", func(t *testing.T) {
 		_, err := lib.ExtendErr("cat2", "concat($0, $1)")
 		require.NoError(t, err)
-		ret, err := lib.EvalFromSource(lib.NewGlobalDataTracePrint(nil), "cat2(1,2)")
+		ret, err := lib.EvalFromSource(nil, "cat2(1,2)")
 		require.EqualValues(t, []byte{1, 2}, ret)
 	})
 	const complicated = `
@@ -331,12 +329,12 @@ func TestExtendLib(t *testing.T) {
 		return c3
 	}
 	t.Run("ext-4", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(lib.NewGlobalDataTracePrint(nil), "complicated(0,1,2)")
+		ret, err := lib.EvalFromSource(nil, "complicated(0,1,2)")
 		require.NoError(t, err)
 		require.EqualValues(t, compl(d(0), d(1), d(2)), ret)
 	})
 	t.Run("ext-5", func(t *testing.T) {
-		ret, err := lib.EvalFromSource(lib.NewGlobalDataTracePrint(nil), "complicated(0,1,complicated(2,1,0))")
+		ret, err := lib.EvalFromSource(nil, "complicated(0,1,complicated(2,1,0))")
 		require.NoError(t, err)
 		exp := compl(d(0), d(1), compl(d(2), d(1), d(0)))
 		require.EqualValues(t, exp, ret)
@@ -347,16 +345,16 @@ func TestExtendLib(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, 3, arity)
 		t.Logf("compiled bytecode of '%s' is %d-bytes long", source, len(code))
-		ret, err := lib.EvalFromBytecode(lib.NewGlobalDataTracePrint(nil), code, []byte{1}, []byte{2}, []byte{3})
+		ret, err := lib.EvalFromBytecode(nil, code, []byte{1}, []byte{2}, []byte{3})
 		require.NoError(t, err)
 		require.EqualValues(t, []byte{3, 2, 1}, ret)
 	})
 	t.Run("always panics", func(t *testing.T) {
-		_, err := lib.EvalFromSource(lib.NewGlobalDataTracePrint(nil), "byte(0,1)")
+		_, err := lib.EvalFromSource(nil, "byte(0,1)")
 		require.Error(t, err)
 	})
 	t.Run("never panics", func(t *testing.T) {
-		_, err := lib.EvalFromSource(lib.NewGlobalDataTracePrint(nil), "if(concat,byte(0,1),0x01)")
+		_, err := lib.EvalFromSource(nil, "if(concat,byte(0,1),0x01)")
 		require.NoError(t, err)
 	})
 }
@@ -389,7 +387,7 @@ func TestComparison(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 	runTest := func(s string, a0, a1 []byte) bool {
 		t.Logf("---- runTest: '%s'\n", s)
-		ret, err := lib.EvalFromSource(lib.NewGlobalDataTracePrint(nil), s, a0, a1)
+		ret, err := lib.EvalFromSource(nil, s, a0, a1)
 		require.NoError(t, err)
 		if len(ret) == 0 {
 			return false
@@ -557,8 +555,7 @@ func TestGlobalData(t *testing.T) {
 	require.NoError(t, lib.UpgradeFromJSON([]byte(jsonData), resolver))
 
 	expectedNF := lib.NumFunctions()
-	glb := lib.NewGlobalDataNoTrace(nil)
-	ret, err := lib.EvalFromSource(glb, "echoNumFunctions")
+	ret, err := lib.EvalFromSource(lib.NewGlobalDataNoTrace(nil), "echoNumFunctions")
 	require.NoError(t, err)
 	require.Equal(t, 2, len(ret))
 	require.Equal(t, expectedNF, binary.BigEndian.Uint16(ret))

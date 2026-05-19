@@ -10,14 +10,27 @@ import (
 	"github.com/lunfardo314/easyfl/slicepool"
 )
 
-// GlobalData represents the data to be evaluated. It is wrapped into the interface which offers some tracing options
-// Type parameter T is type of data provided in the eval context
+// GlobalData represents the data to be evaluated.
+// Type parameter T is type of data provided in the eval context.
 type GlobalData[T any] interface {
 	Data() T              // return data being evaluated. It is interpreted by the transaction host
-	Trace() bool          // should return true if tracing enabled
-	PutTrace(string)      // hook for tracing messages. Called only if enabled
 	Library() *Library[T] // returns library
 }
+
+// GlobalDataNoTrace is the canonical minimal GlobalData[T] implementation:
+// wraps a data context and a library reference. Used by hosts that don't
+// need any tracing — which, after the Phase B revisit, is every host.
+type GlobalDataNoTrace[T any] struct {
+	glb T
+	lib *Library[T]
+}
+
+func (lib *Library[T]) NewGlobalDataNoTrace(glb T) *GlobalDataNoTrace[T] {
+	return &GlobalDataNoTrace[T]{lib: lib, glb: glb}
+}
+
+func (t *GlobalDataNoTrace[T]) Data() T              { return t.glb }
+func (t *GlobalDataNoTrace[T]) Library() *Library[T] { return t.lib }
 
 // evalContext is the structure through which the EasyFL script accesses data structure it is validating
 type evalContext[T any] struct {
@@ -153,15 +166,7 @@ func (p *CallParams[T]) GlobalData() GlobalData[T] {
 	return p.glb
 }
 
-func (p *CallParams[T]) Trace(format string, args ...any) {
-	if isNil(p.glb) || !p.glb.Trace() {
-		return
-	}
-	p.glb.PutTrace(fmt.Sprintf(format, easyfl_util.EvalLazyArgs(args...)...))
-}
-
 func (p *CallParams[T]) TracePanic(format string, args ...any) {
-	p.Trace("panic: "+format, args...)
 	panic(fmt.Sprintf("panic: "+format, easyfl_util.EvalLazyArgs(args...)...))
 }
 
