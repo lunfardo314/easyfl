@@ -1,4 +1,4 @@
-package easyfl
+package compose
 
 import (
 	"encoding/binary"
@@ -9,7 +9,7 @@ import (
 // extractReferencedFunCodes walks bytecode linearly and returns all
 // referenced global function codes (excluding parameter references and local calls).
 // Bytecode is a preorder serialization, so a linear scan finds all call sites.
-func extractReferencedFunCodes(bytecode []byte) ([]uint16, error) {
+func ExtractReferencedFunCodes(bytecode []byte) ([]uint16, error) {
 	var refs []uint16
 	seen := make(map[uint16]struct{})
 	pos := 0
@@ -63,7 +63,7 @@ func extractReferencedFunCodes(bytecode []byte) ([]uint16, error) {
 // checkForCycles performs DFS cycle detection starting from the given function codes.
 // It traverses into all reachable extended functions. Embedded functions (funCode < FirstExtended)
 // are leaf nodes and cannot participate in cycles.
-func checkForCycles[T any](lib *Library[T], startFunCodes []uint16) error {
+func CheckForCycles[T any](lib *Library[T], startFunCodes []uint16) error {
 	const (
 		colorWhite = 0 // unvisited
 		colorGray  = 1 // on current DFS path
@@ -103,7 +103,7 @@ func checkForCycles[T any](lib *Library[T], startFunCodes []uint16) error {
 		colors[fc] = colorGray
 		path = append(path, name)
 
-		refs, err := extractReferencedFunCodes(fd.bytecode)
+		refs, err := ExtractReferencedFunCodes(fd.bytecode)
 		if err != nil {
 			return fmt.Errorf("checkForCycles: error extracting refs from '%s': %v", name, err)
 		}
@@ -157,7 +157,7 @@ func topologicalSortPartialOrder[T any](lib *Library[T], funCodes []uint16) ([]u
 	for _, fc := range funCodes {
 		fd := lib.funByFunCode[fc]
 		if fd != nil && fd.bytecode != nil {
-			refs, err := extractReferencedFunCodes(fd.bytecode)
+			refs, err := ExtractReferencedFunCodes(fd.bytecode)
 			if err != nil {
 				return nil, err
 			}

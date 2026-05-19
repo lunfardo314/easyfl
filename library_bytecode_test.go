@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lunfardo314/easyfl/compose"
 	"github.com/lunfardo314/easyfl/easyfl_util"
 	"github.com/lunfardo314/easyfl/easyfl_util/testutil"
 	"github.com/stretchr/testify/require"
@@ -15,8 +16,8 @@ import (
 
 func TestParseBin(t *testing.T) {
 	lib := NewBaseLibrary[any]()
-	lib.extend("fun1par", "$0")
-	lib.extend("fun2par", "concat($0,$1)")
+	lib.Extend("fun1par", "$0")
+	lib.Extend("fun2par", "concat($0,$1)")
 
 	t.Run("1", func(t *testing.T) {
 		_, _, bin, err := lib.CompileExpression("fun1par(0x00)")
@@ -140,8 +141,8 @@ func TestParseBin(t *testing.T) {
 
 func TestInlineCode(t *testing.T) {
 	lib := NewBaseLibrary[any]()
-	lib.extend("fun1par", "$0")
-	lib.extend("fun2par", "concat($0,$1)")
+	lib.Extend("fun1par", "$0")
+	lib.Extend("fun2par", "concat($0,$1)")
 	t.Run("1", func(t *testing.T) {
 		_, _, bin1, err := lib.CompileExpression("concat(0,1)")
 		require.NoError(t, err)
@@ -236,8 +237,8 @@ func TestInlineCode(t *testing.T) {
 
 func TestDecompile(t *testing.T) {
 	lib := NewBaseLibrary[any]()
-	lib.extend("fun1par", "$0")
-	lib.extend("fun2par", "concat($0,$1)")
+	lib.Extend("fun1par", "$0")
+	lib.Extend("fun2par", "concat($0,$1)")
 	t.Run("bin-expr 1", func(t *testing.T) {
 		const formula = "concat(0,1)"
 		_, _, bin, err := lib.CompileExpression(formula)
@@ -258,7 +259,7 @@ func TestDecompile(t *testing.T) {
 		sym, _, args, err := lib.ParseBytecodeOneLevel(bin)
 		require.NoError(t, err)
 
-		formulaBack2 := ComposeBytecodeOneLevel(sym, args)
+		formulaBack2 := compose.ComposeBytecodeOneLevel(sym, args)
 		t.Logf("decompiled by level 1: '%s'", formulaBack2)
 
 		_, _, binBack2, err := lib.CompileExpression(formulaBack)
@@ -284,7 +285,7 @@ func TestDecompile(t *testing.T) {
 		sym, _, args, err := lib.ParseBytecodeOneLevel(bin)
 		require.NoError(t, err)
 
-		formulaBack2 := ComposeBytecodeOneLevel(sym, args)
+		formulaBack2 := compose.ComposeBytecodeOneLevel(sym, args)
 		t.Logf("decompiled by level 1: '%s'", formulaBack2)
 
 		_, _, binBack2, err := lib.CompileExpression(formulaBack)
@@ -310,7 +311,7 @@ func TestDecompile(t *testing.T) {
 		sym, _, args, err := lib.ParseBytecodeOneLevel(bin)
 		require.NoError(t, err)
 
-		formulaBack2 := ComposeBytecodeOneLevel(sym, args)
+		formulaBack2 := compose.ComposeBytecodeOneLevel(sym, args)
 		t.Logf("decompiled by level 1: '%s'", formulaBack2)
 
 		_, _, binBack2, err := lib.CompileExpression(formulaBack)
@@ -338,7 +339,7 @@ func TestDecompile(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, 1337, binary.BigEndian.Uint64(StripDataPrefix(args[0])))
 
-		formulaBack2 := ComposeBytecodeOneLevel(sym, args)
+		formulaBack2 := compose.ComposeBytecodeOneLevel(sym, args)
 		t.Logf("decompiled by level 1: '%s'", formulaBack2)
 
 		_, _, binBack2, err := lib.CompileExpression(formulaBack)
@@ -366,7 +367,7 @@ func TestDecompile(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, 1337, binary.BigEndian.Uint64(StripDataPrefix(args[0])))
 
-		formulaBack2 := ComposeBytecodeOneLevel(sym, args)
+		formulaBack2 := compose.ComposeBytecodeOneLevel(sym, args)
 		t.Logf("decompiled by level 1: '%s'", formulaBack2)
 
 		_, _, binBack2, err := lib.CompileExpression(formulaBack)
@@ -438,7 +439,7 @@ func TestParseDataArgument(t *testing.T) {
 			require.NoError(t, err)
 			t.Logf("prefix: %s", easyfl_util.Fmt(prefix))
 
-			_, _, _, sym, err := lib.parseCallPrefix(prefix)
+			_, _, _, sym, err := lib.ParseCallPrefix(prefix)
 			require.NoError(t, err)
 			t.Logf("sym: %s", sym)
 			require.EqualValues(t, "concat", sym)

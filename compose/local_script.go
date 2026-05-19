@@ -1,4 +1,4 @@
-package easyfl
+package compose
 
 import (
 	"encoding/binary"
@@ -105,7 +105,7 @@ func (lib *Library[T]) CompileLocalScriptWithIndex(source string) (LocalScriptBi
 // local callees.
 func (lib *Library[T]) compileLocalScript(source string, check LocalScriptCallSiteCheck[T]) (LocalScriptBin, map[string]int, error) {
 	// ---- Phase 1: parse
-	parsed, err := parseFunctions(source)
+	parsed, err := ParseFunctions(source)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -143,7 +143,7 @@ func (lib *Library[T]) compileLocalScript(source string, check LocalScriptCallSi
 
 	// ---- Phase 2.5: count params from source so #fnName references resolve
 	for i, p := range parsed {
-		n, err := countParametersFromSource(p.SourceCode)
+		n, err := CountParametersFromSource(p.SourceCode)
 		if err != nil {
 			return nil, nil, fmt.Errorf("local script: counting params for '%s': %v", p.Sym, err)
 		}

@@ -19,7 +19,7 @@ func TestLibraryRenewJSON(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, lib.Upgrade(fromJSON))
 
-	jsonData := lib.ToJSON(true, true)
+	jsonData := ToJSON(lib, true, true)
 	t.Logf("size of library.json: %d bytes", len(jsonData))
 	require.NoError(t, os.WriteFile("library.json", jsonData, 0644))
 }
@@ -30,7 +30,7 @@ func TestJSON_BaseLib_RoundTripHash(t *testing.T) {
 	base := NewBaseLibrary[any]()
 	hashBase := base.LibraryHash()
 
-	jsonData := base.ToJSON(true, true)
+	jsonData := ToJSON(base, true, true)
 	round, err := NewLibraryFromJSON[any](jsonData, func(lib *Library[any]) func(sym string) EmbeddedFunction[any] {
 		return EmbeddedFunctions[any](lib)
 	})
@@ -45,7 +45,7 @@ func TestJSON_CompactVsIndent(t *testing.T) {
 	hashBase := base.LibraryHash()
 
 	for _, indent := range []bool{false, true} {
-		data := base.ToJSON(true, indent)
+		data := ToJSON(base, true, indent)
 		lib, err := NewLibraryFromJSON[any](data, func(lib *Library[any]) func(sym string) EmbeddedFunction[any] {
 			return EmbeddedFunctions[any](lib)
 		})
@@ -58,11 +58,11 @@ func TestJSON_CompactVsIndent(t *testing.T) {
 // indented JSON of the same library.
 func TestJSON_CompactVsIndentShape(t *testing.T) {
 	base := NewBaseLibrary[any]()
-	compact := base.ToJSON(true, false)
+	compact := ToJSON(base, true, false)
 	require.NotContains(t, string(compact), "\n", "compact JSON must contain no newlines")
 	require.False(t, strings.HasSuffix(string(compact), "\n"), "compact JSON must not end with newline")
 
-	indented := base.ToJSON(true, true)
+	indented := ToJSON(base, true, true)
 	require.Contains(t, string(indented), "\n", "indented JSON must contain newlines")
 	require.True(t, strings.HasSuffix(string(indented), "\n"), "indented JSON must end with newline")
 	require.Less(t, len(compact), len(indented), "compact JSON must be smaller than indented")
@@ -72,7 +72,7 @@ func TestJSON_CompactVsIndentShape(t *testing.T) {
 // (here: encoding/json into a map).
 func TestJSON_BaseLib_IsValidJSON(t *testing.T) {
 	base := NewBaseLibrary[any]()
-	data := base.ToJSON(true, true)
+	data := ToJSON(base, true, true)
 
 	var generic map[string]interface{}
 	require.NoError(t, json.Unmarshal(data, &generic))
@@ -84,7 +84,7 @@ func TestJSON_BaseLib_IsValidJSON(t *testing.T) {
 // Non-compiled output drops hash and funCode/bytecode.
 func TestJSON_NonCompiled_DropsRuntimeFields(t *testing.T) {
 	base := NewBaseLibrary[any]()
-	data := base.ToJSON(false, true)
+	data := ToJSON(base, false, true)
 
 	var parsed LibraryFromJSON
 	require.NoError(t, json.Unmarshal(data, &parsed))
@@ -98,7 +98,7 @@ func TestJSON_NonCompiled_DropsRuntimeFields(t *testing.T) {
 // Wrong hash in JSON must fail validation in NewLibraryFromJSON.
 func TestJSON_HashMismatch_Fails(t *testing.T) {
 	base := NewBaseLibrary[any]()
-	data := base.ToJSON(true, true)
+	data := ToJSON(base, true, true)
 
 	var parsed LibraryFromJSON
 	require.NoError(t, json.Unmarshal(data, &parsed))
@@ -122,7 +122,7 @@ func TestJSON_Upgrade_AddNewExtended(t *testing.T) {
 	    {"sym": "myNewFunc", "numArgs": 2, "source": "add($0, $1)"}
 	  ]
 	}`
-	require.NoError(t, lib.UpgradeFromJSON([]byte(jsonData)))
+	require.NoError(t, UpgradeFromJSON(lib, []byte(jsonData)))
 	lib.MustEqual("myNewFunc(3, 5)", "uint8Bytes(8)")
 }
 
@@ -135,7 +135,7 @@ func TestJSON_Upgrade_ReplaceNonExistent_Fail(t *testing.T) {
 	    {"sym": "nonExistentFunc", "numArgs": 2, "replace": true, "source": "add($0, $1)"}
 	  ]
 	}`
-	err := lib.UpgradeFromJSON([]byte(jsonData))
+	err := UpgradeFromJSON(lib, []byte(jsonData))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "does not exist")
 }
@@ -143,23 +143,23 @@ func TestJSON_Upgrade_ReplaceNonExistent_Fail(t *testing.T) {
 // Replace an existing extended function — funCode is preserved.
 func TestJSON_Upgrade_ReplaceExtended(t *testing.T) {
 	lib := NewBaseLibrary[any]()
-	require.NoError(t, lib.UpgradeFromJSON([]byte(`{
+	require.NoError(t, UpgradeFromJSON(lib, []byte(`{
 	  "functions": [
 	    {"sym": "myFunc", "numArgs": 2, "source": "add($0, $1)"}
 	  ]
 	}`)))
-	fi, err := lib.functionByName("myFunc")
+	fi, err := lib.FunctionByName("myFunc")
 	require.NoError(t, err)
 	funCodeBefore := fi.FunCode
 
-	require.NoError(t, lib.UpgradeFromJSON([]byte(`{
+	require.NoError(t, UpgradeFromJSON(lib, []byte(`{
 	  "functions": [
 	    {"sym": "myFunc", "numArgs": 2, "replace": true, "source": "mul($0, $1)"}
 	  ]
 	}`)))
 
 	lib.MustEqual("myFunc(3, 5)", "uint8Bytes(15)")
-	fi, err = lib.functionByName("myFunc")
+	fi, err = lib.FunctionByName("myFunc")
 	require.NoError(t, err)
 	require.Equal(t, funCodeBefore, fi.FunCode)
 }
@@ -167,13 +167,13 @@ func TestJSON_Upgrade_ReplaceExtended(t *testing.T) {
 // Immutable flag is honored.
 func TestJSON_Upgrade_ImmutableCannotBeReplaced(t *testing.T) {
 	lib := NewBaseLibrary[any]()
-	require.NoError(t, lib.UpgradeFromJSON([]byte(`{
+	require.NoError(t, UpgradeFromJSON(lib, []byte(`{
 	  "functions": [
 	    {"sym": "lockedFunc", "numArgs": 2, "immutable": true, "source": "add($0, $1)"}
 	  ]
 	}`)))
 
-	err := lib.UpgradeFromJSON([]byte(`{
+	err := UpgradeFromJSON(lib, []byte(`{
 	  "functions": [
 	    {"sym": "lockedFunc", "numArgs": 2, "replace": true, "source": "mul($0, $1)"}
 	  ]
@@ -185,7 +185,7 @@ func TestJSON_Upgrade_ImmutableCannotBeReplaced(t *testing.T) {
 // Vararg encoding round-trips via JSON.
 func TestJSON_Upgrade_Vararg(t *testing.T) {
 	lib := NewBaseLibrary[any]()
-	require.NoError(t, lib.UpgradeFromJSON([]byte(`{
+	require.NoError(t, UpgradeFromJSON(lib, []byte(`{
 	  "functions": [
 	    {"sym": "varargCount", "numArgs": -1, "source": "$$"}
 	  ]
@@ -212,7 +212,7 @@ func TestJSON_VersionDataEscaping(t *testing.T) {
 	embedded := `{"txValidation":"txLayoutValidator","key":"value with \"quotes\" and \\ backslash"}`
 	lib.VersionData = []byte(embedded)
 
-	data := lib.ToJSON(true, true)
+	data := ToJSON(lib, true, true)
 	parsed, err := ReadLibraryFromJSON(data)
 	require.NoError(t, err)
 	require.Equal(t, embedded, parsed.VersionData)
@@ -224,7 +224,7 @@ func TestJSON_IntroduceMulti(t *testing.T) {
 	src1 := []byte(`{"functions":[{"sym":"f1","numArgs":1,"source":"add($0, 1)"}]}`)
 	src2 := []byte(`{"functions":[{"sym":"f2","numArgs":1,"source":"mul($0, 2)"}]}`)
 
-	require.NoError(t, lib.IntroduceUpdateJSONMulti(nil, src1, src2))
+	require.NoError(t, IntroduceUpdateJSONMulti(lib, nil, src1, src2))
 	require.NoError(t, lib.CommitUpdate())
 
 	lib.MustEqual("f1(5)", "uint8Bytes(6)")

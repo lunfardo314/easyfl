@@ -1,4 +1,4 @@
-package easyfl
+package compose
 
 import (
 	"bytes"
@@ -118,8 +118,8 @@ func (fd *funDescriptor[T]) write(w io.Writer) {
 	_, _ = w.Write([]byte{immutableByte})
 }
 
-func (lib *Library[T]) mustFuncDescriptor(sym string) *FuncDescriptorJSON {
-	fi, err := lib.functionByName(sym)
+func (lib *Library[T]) MustFuncDescriptor(sym string) *FuncDescriptorJSON {
+	fi, err := lib.FunctionByName(sym)
 	easyfl_util.AssertNoError(err)
 	d := lib.funByFunCode[fi.FunCode]
 	return &FuncDescriptorJSON{
@@ -135,10 +135,10 @@ func (lib *Library[T]) mustFuncDescriptor(sym string) *FuncDescriptorJSON {
 	}
 }
 
-// introduceFromParsed is the internal implementation that works with an
+// IntroduceUpdate is the internal implementation that works with an
 // already-parsed library description. It stages extended functions for
 // CommitUpdate and processes embedded functions immediately.
-func (lib *Library[T]) introduceFromParsed(fromJSON *LibraryFromJSON, embed ...func(sym string) EmbeddedFunction[T]) error {
+func (lib *Library[T]) IntroduceUpdate(fromJSON *LibraryFromJSON, embed ...func(sym string) EmbeddedFunction[T]) error {
 	// Update VersionData only if new value is non-empty (after trimming whitespace)
 	if vd := strings.TrimSpace(fromJSON.VersionData); vd != "" {
 		lib.VersionData = []byte(vd)
@@ -219,7 +219,7 @@ func (lib *Library[T]) introduceFromParsed(fromJSON *LibraryFromJSON, embed ...f
 //
 // The Immutable flag controls whether the function can be replaced in future upgrades.
 func (lib *Library[T]) Upgrade(fromJSON *LibraryFromJSON, embed ...func(sym string) EmbeddedFunction[T]) error {
-	if err := lib.introduceFromParsed(fromJSON, embed...); err != nil {
+	if err := lib.IntroduceUpdate(fromJSON, embed...); err != nil {
 		return fmt.Errorf("Upgrade: %v", err)
 	}
 	if err := lib.CommitUpdate(); err != nil {

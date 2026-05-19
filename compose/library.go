@@ -1,4 +1,4 @@
-package easyfl
+package compose
 
 import (
 	"encoding/binary"
@@ -10,17 +10,15 @@ import (
 	"github.com/lunfardo314/easyfl/easyfl_util"
 )
 
+// NewLibrary returns an empty Library. The caller is expected to register
+// functions via Register / IntroduceUpdate / Upgrade before using the
+// library for compile / decompile / eval.
+//
+// For the canonical base library (embedded functions + base-library.json
+// descriptors) use the top-level easyfl.NewBaseLibrary which wires this
+// against the easyfl/embed sub-package and the embedded library.json.
 func NewLibrary[T any]() *Library[T] {
 	return newLibrary[T]()
-}
-
-func NewBaseLibrary[T any]() *Library[T] {
-	lib, err := NewLibraryFromJSON[T]([]byte(baseLibraryDefinitions), func(lib *Library[T]) func(sym string) EmbeddedFunction[T] {
-		return EmbeddedFunctions[T](lib)
-	})
-	easyfl_util.AssertNoError(err)
-
-	return lib
 }
 
 func newLibrary[T any]() *Library[T] {
@@ -61,7 +59,7 @@ func (lib *Library[T]) addDescriptor(fd *funDescriptor[T]) {
 }
 
 // embedShort embeds short-callable function into the library
-func (lib *Library[T]) embedShort(sym string, requiredNumPar int, embeddedFun EmbeddedFunction[T], embeddedAs string, description ...string) byte {
+func (lib *Library[T]) EmbedShort(sym string, requiredNumPar int, embeddedFun EmbeddedFunction[T], embeddedAs string, description ...string) byte {
 	ret, err := lib.embedShortErr(sym, requiredNumPar, embeddedFun, embeddedAs, description...)
 	easyfl_util.AssertNoError(err)
 	return ret
@@ -99,7 +97,7 @@ func (lib *Library[T]) embedShortErr(sym string, requiredNumPar int, embeddedFun
 	return byte(dscr.funCode), nil
 }
 
-func (lib *Library[T]) embedLong(sym string, requiredNumPar int, embeddedFun EmbeddedFunction[T], embeddedAs string, description ...string) uint16 {
+func (lib *Library[T]) EmbedLong(sym string, requiredNumPar int, embeddedFun EmbeddedFunction[T], embeddedAs string, description ...string) uint16 {
 	ret, err := lib.embedLongErr(sym, requiredNumPar, embeddedFun, embeddedAs, description...)
 	easyfl_util.AssertNoError(err)
 	return ret
@@ -141,7 +139,7 @@ func (lib *Library[T]) embedLongErr(sym string, requiredNumPar int, embeddedFun 
 }
 
 // extend extends library with the compiled bytecode
-func (lib *Library[T]) extend(sym string, source string, description ...string) uint16 {
+func (lib *Library[T]) Extend(sym string, source string, description ...string) uint16 {
 	ret, err := lib.ExtendErr(sym, source, description...)
 	if err != nil {
 		panic(err)
@@ -226,7 +224,7 @@ func (lib *Library[T]) addExtendedBatch(pending []pendingExtendedFunc) error {
 		if p.isVararg || p.isReplace {
 			continue
 		}
-		numParam, err := countParametersFromSource(p.source)
+		numParam, err := CountParametersFromSource(p.source)
 		if err != nil {
 			return fmt.Errorf("error counting parameters for '%s': %v", p.sym, err)
 		}
@@ -273,7 +271,7 @@ func (lib *Library[T]) addExtendedBatch(pending []pendingExtendedFunc) error {
 	}
 
 	// ---- Phase 3: check for cycles in the call graph
-	if err := checkForCycles(lib, involvedFunCodes); err != nil {
+	if err := CheckForCycles(lib, involvedFunCodes); err != nil {
 		return err
 	}
 
@@ -326,7 +324,7 @@ func (lib *Library[T]) isPendingSym(sym string) bool {
 // and appends them to the pending batch for later processing by CommitUpdate.
 // Validates against both the library and the current pendingBatch to detect duplicates.
 func (lib *Library[T]) IntroduceUpdateMany(source string) error {
-	parsed, err := parseFunctions(source)
+	parsed, err := ParseFunctions(source)
 	if err != nil {
 		return err
 	}
@@ -487,7 +485,7 @@ func (lib *Library[T]) existsFunction(sym string, localScript ...*LocalScript[T]
 	return found
 }
 
-func (lib *Library[T]) functionByName(sym string, localScript ...*LocalScript[T]) (*funInfo, error) {
+func (lib *Library[T]) FunctionByName(sym string, localScript ...*LocalScript[T]) (*funInfo, error) {
 	fd, found := lib.funByName[sym]
 	ret := &funInfo{
 		Sym: sym,
@@ -583,7 +581,7 @@ func (fi *funInfo) callPrefix(numArgs byte) ([]byte, error) {
 }
 
 func (lib *Library[T]) FunctionCallPrefixByName(sym string, numArgs byte) ([]byte, error) {
-	fi, err := lib.functionByName(sym)
+	fi, err := lib.FunctionByName(sym)
 	if err != nil {
 		return nil, err
 	}
@@ -592,6 +590,18 @@ func (lib *Library[T]) FunctionCallPrefixByName(sym string, numArgs byte) ([]byt
 
 func (lib *Library[T]) NumFunctions() uint16 {
 	return lib.numEmbeddedShort + lib.numEmbeddedLong + lib.numExtended
+}
+
+// FunctionSymbols returns the symbols of every registered function in
+// declaration order (un-sorted; callers that need a specific order should
+// sort themselves). Intended for inspection / serialisation by code
+// outside the compose package (e.g. the top-level JSON serde helpers).
+func (lib *Library[T]) FunctionSymbols() []string {
+	ret := make([]string, 0, len(lib.funByName))
+	for sym := range lib.funByName {
+		ret = append(ret, sym)
+	}
+	return ret
 }
 
 // Clone creates a deep copy of the library. The cloned library can be independently modified

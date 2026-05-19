@@ -1,31 +1,38 @@
 package easyfl
 
+// JSON serialisation helpers — kept at the easyfl facade rather than
+// inside easyfl/compose so the compose sub-package doesn't drag in
+// encoding/json. Wallets that want to round-trip lock scripts without
+// JSON should import compose directly and skip this file entirely.
+
 import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sort"
+
+	"github.com/lunfardo314/easyfl/compose"
 )
 
-// ToJSON serializes the library to JSON.
+// ToJSON serialises a library to JSON.
 //   - compiled=true emits funCode/bytecode fields and the top-level hash.
 //   - indent=true emits human-readable indented JSON with a trailing newline.
 //     indent=false emits compact JSON (canonical for storage and on-the-wire);
 //     no trailing newline.
-func (lib *Library[T]) ToJSON(compiled, indent bool) []byte {
-	out := LibraryFromJSON{
+func ToJSON[T any](lib *compose.Library[T], compiled, indent bool) []byte {
+	syms := lib.FunctionSymbols()
+	out := compose.LibraryFromJSON{
 		VersionData: string(lib.VersionData),
-		Functions:   make([]FuncDescriptorJSON, 0, len(lib.funByName)),
+		Functions:   make([]compose.FuncDescriptorJSON, 0, len(syms)),
 	}
 	if compiled {
 		h := lib.LibraryHash()
 		out.Hash = hex.EncodeToString(h[:])
 	}
 
-	for sym := range lib.funByName {
-		d := *lib.mustFuncDescriptor(sym)
+	for _, sym := range syms {
+		d := *lib.MustFuncDescriptor(sym)
 		if !compiled {
-			// non-compiled output: drop funCode and bytecode (they are runtime artifacts)
 			d.FunCode = 0
 			d.Bytecode = ""
 		}
@@ -60,34 +67,35 @@ func (lib *Library[T]) ToJSON(compiled, indent bool) []byte {
 	return data
 }
 
-// ReadLibraryFromJSON parses JSON into a *LibraryFromJSON.
-func ReadLibraryFromJSON(data []byte) (*LibraryFromJSON, error) {
-	ret := &LibraryFromJSON{}
+// ReadLibraryFromJSON parses JSON into a *compose.LibraryFromJSON.
+func ReadLibraryFromJSON(data []byte) (*compose.LibraryFromJSON, error) {
+	ret := &compose.LibraryFromJSON{}
 	if err := json.Unmarshal(data, ret); err != nil {
 		return nil, err
 	}
 	return ret, nil
 }
 
-// IntroduceUpdateJSON parses raw JSON data and stages extended functions for
-// later processing by CommitUpdate. Embedded functions are processed immediately.
-func (lib *Library[T]) IntroduceUpdateJSON(jsonData []byte, embed ...func(sym string) EmbeddedFunction[T]) error {
+// IntroduceUpdateJSON parses raw JSON data and stages extended functions
+// for later processing by lib.CommitUpdate. Embedded functions are
+// processed immediately.
+func IntroduceUpdateJSON[T any](lib *compose.Library[T], jsonData []byte, embed ...func(sym string) compose.EmbeddedFunction[T]) error {
 	fromJSON, err := ReadLibraryFromJSON(jsonData)
 	if err != nil {
 		return err
 	}
-	return lib.introduceFromParsed(fromJSON, embed...)
+	return lib.IntroduceUpdate(fromJSON, embed...)
 }
 
 // IntroduceUpdateJSONMulti is the variadic form of IntroduceUpdateJSON.
-func (lib *Library[T]) IntroduceUpdateJSONMulti(embed func(sym string) EmbeddedFunction[T], jsonDatas ...[]byte) error {
+func IntroduceUpdateJSONMulti[T any](lib *compose.Library[T], embed func(sym string) compose.EmbeddedFunction[T], jsonDatas ...[]byte) error {
 	for _, jsonData := range jsonDatas {
 		if embed != nil {
-			if err := lib.IntroduceUpdateJSON(jsonData, embed); err != nil {
+			if err := IntroduceUpdateJSON(lib, jsonData, embed); err != nil {
 				return err
 			}
 		} else {
-			if err := lib.IntroduceUpdateJSON(jsonData); err != nil {
+			if err := IntroduceUpdateJSON(lib, jsonData); err != nil {
 				return err
 			}
 		}
@@ -97,7 +105,7 @@ func (lib *Library[T]) IntroduceUpdateJSONMulti(embed func(sym string) EmbeddedF
 
 // UpgradeFromJSON parses JSON and applies it as a single Upgrade
 // (introduce + CommitUpdate).
-func (lib *Library[T]) UpgradeFromJSON(jsonData []byte, embed ...func(sym string) EmbeddedFunction[T]) error {
+func UpgradeFromJSON[T any](lib *compose.Library[T], jsonData []byte, embed ...func(sym string) compose.EmbeddedFunction[T]) error {
 	fromJSON, err := ReadLibraryFromJSON(jsonData)
 	if err != nil {
 		return err
@@ -106,10 +114,10 @@ func (lib *Library[T]) UpgradeFromJSON(jsonData []byte, embed ...func(sym string
 }
 
 // NewLibraryFromJSON constructs a fresh library and upgrades it from JSON.
-// If the JSON contains a non-empty "hash" field (i.e. compiled library), the
-// computed hash is checked against it.
-func NewLibraryFromJSON[T any](jsonData []byte, embedFun ...func(lib *Library[T]) func(sym string) EmbeddedFunction[T]) (*Library[T], error) {
-	lib := NewLibrary[T]()
+// If the JSON contains a non-empty "hash" field (i.e. compiled library),
+// the computed hash is checked against it.
+func NewLibraryFromJSON[T any](jsonData []byte, embedFun ...func(lib *compose.Library[T]) func(sym string) compose.EmbeddedFunction[T]) (*compose.Library[T], error) {
+	lib := compose.NewLibrary[T]()
 	fromJSON, err := ReadLibraryFromJSON(jsonData)
 	if err != nil {
 		return nil, err

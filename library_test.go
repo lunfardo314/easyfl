@@ -8,6 +8,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/lunfardo314/easyfl/compose"
 	"github.com/lunfardo314/easyfl/easyfl_util"
 	"github.com/lunfardo314/easyfl/easyfl_util/testutil"
 	"github.com/lunfardo314/easyfl/slicepool"
@@ -75,12 +76,12 @@ func TestLiterals(t *testing.T) {
 
 func TestCompile(t *testing.T) {
 	t.Run("1", func(t *testing.T) {
-		ret, err := parseFunctions(formula1)
+		ret, err := compose.ParseFunctions(formula1)
 		require.NoError(t, err)
 		require.NotNil(t, ret)
 	})
 	t.Run("3", func(t *testing.T) {
-		ret, err := parseFunctions(formula1)
+		ret, err := compose.ParseFunctions(formula1)
 		require.NoError(t, err)
 		require.EqualValues(t, 1, len(ret))
 
@@ -90,7 +91,7 @@ func TestCompile(t *testing.T) {
 		t.Logf("code len: %d", len(code))
 	})
 	t.Run("4", func(t *testing.T) {
-		parsed, err := parseFunctions(formula1)
+		parsed, err := compose.ParseFunctions(formula1)
 		require.NoError(t, err)
 		require.EqualValues(t, 1, len(parsed))
 
@@ -261,7 +262,7 @@ func TestEval(t *testing.T) {
 		require.EqualValues(t, b[:], ret)
 	})
 	var blake2bInvokedNum int
-	lib.embedLong("blake2b-test", 1, func(par *CallParams[any]) []byte {
+	lib.EmbedLong("blake2b-test", 1, func(par *CallParams[any]) []byte {
 		a0 := par.Arg(0)
 		h := blake2b.Sum256(a0)
 		blake2bInvokedNum++
@@ -503,7 +504,7 @@ func TestArgExpression(t *testing.T) {
 		}
 		return EmbeddedFunctions[any](lib)(sym)
 	}
-	require.NoError(t, lib.UpgradeFromJSON([]byte(jsonData), resolver))
+	require.NoError(t, UpgradeFromJSON(lib, []byte(jsonData), resolver))
 
 	t.Run("inline literal accepted", func(t *testing.T) {
 		ret, err := lib.EvalFromSource(nil, "requireLiteral0(0xdeadbeef)")
@@ -552,7 +553,7 @@ func TestGlobalData(t *testing.T) {
 		}
 		return EmbeddedFunctions[any](lib)(sym)
 	}
-	require.NoError(t, lib.UpgradeFromJSON([]byte(jsonData), resolver))
+	require.NoError(t, UpgradeFromJSON(lib, []byte(jsonData), resolver))
 
 	expectedNF := lib.NumFunctions()
 	ret, err := lib.EvalFromSource(lib.NewGlobalDataNoTrace(nil), "echoNumFunctions")

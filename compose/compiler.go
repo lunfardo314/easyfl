@@ -1,4 +1,4 @@
-package easyfl
+package compose
 
 import (
 	"bufio"
@@ -16,8 +16,8 @@ import (
 	"github.com/lunfardo314/easyfl/easyfl_util"
 )
 
-// funParsed is an interim representation of the source code
-type funParsed struct {
+// FunParsed is an interim representation of the source code
+type FunParsed struct {
 	Sym        string
 	SourceCode string
 	IsVararg   bool
@@ -30,7 +30,7 @@ type parsedExpression[T any] struct {
 }
 
 // parseFunctions parses many function definitions
-func parseFunctions(s string) ([]*funParsed, error) {
+func ParseFunctions(s string) ([]*FunParsed, error) {
 	lines, err := splitLinesStripComments(s)
 	if err != nil {
 		return nil, err
@@ -55,9 +55,9 @@ func splitLinesStripComments(s string) ([]string, error) {
 	return lines, nil
 }
 
-func parseDefs(lines []string) ([]*funParsed, error) {
-	ret := make([]*funParsed, 0)
-	var current *funParsed
+func parseDefs(lines []string) ([]*FunParsed, error) {
+	ret := make([]*FunParsed, 0)
+	var current *FunParsed
 	for lineno, line := range lines {
 		isVararg := false
 		var sym, body string
@@ -78,7 +78,7 @@ func parseDefs(lines []string) ([]*funParsed, error) {
 			if !found {
 				return nil, fmt.Errorf("':' expectected @ line %d", lineno)
 			}
-			current = &funParsed{
+			current = &FunParsed{
 				Sym:        strings.TrimSpace(sym),
 				SourceCode: body,
 				IsVararg:   isVararg,
@@ -128,7 +128,7 @@ func preprocessSource(source string) (string, error) {
 // of parameters by finding the maximum $N reference. Returns 0 if no parameters found.
 // This is used to set requiredNumParams before compilation so that #funcName references
 // in earlier sources can resolve the correct arity for functions defined in later sources.
-func countParametersFromSource(source string) (int, error) {
+func CountParametersFromSource(source string) (int, error) {
 	src, err := preprocessSource(source)
 	if err != nil {
 		return 0, err
@@ -263,7 +263,7 @@ func (f *parsedExpression[T]) bytecodeFromParsedExpression(lib *Library[T], w io
 	}
 	// either has arguments or not literal
 	// try if it is a short call
-	fi, err := lib.functionByName(f.sym, localScript...)
+	fi, err := lib.FunctionByName(f.sym, localScript...)
 	if err != nil {
 		return 0, err
 	}
@@ -481,7 +481,7 @@ func parseLiteral[T any](lib *Library[T], sym string, w io.Writer) (bool, int, e
 	case strings.HasPrefix(sym, "#"):
 		// function call prefix literal. Value for the functions calls is prefix with arity set to 0
 		funName := strings.TrimPrefix(sym, "#")
-		if fi, err = lib.functionByName(funName); err != nil {
+		if fi, err = lib.FunctionByName(funName); err != nil {
 			return false, 0, err
 		}
 		numArgs := fi.NumParams
@@ -505,7 +505,7 @@ func parseLiteral[T any](lib *Library[T], sym string, w io.Writer) (bool, int, e
 		if len(msgData) > 127 {
 			return false, 0, fmt.Errorf("fail message can't be longer than 127 bytes: '%s'", sym)
 		}
-		fi, err = lib.functionByName("fail")
+		fi, err = lib.FunctionByName("fail")
 		easyfl_util.AssertNoError(err)
 		funCallPrefix, err = fi.callPrefix(1)
 		easyfl_util.AssertNoError(err)
@@ -652,7 +652,7 @@ func (lib *Library[T]) expressionFromBytecode(bytecode []byte, localScript ...*L
 	maxParameterNumber := byte(0xff)
 
 	// function call expected
-	callPrefix, evalFun, arity, sym, err := lib.parseCallPrefix(bytecode, localScript...)
+	callPrefix, evalFun, arity, sym, err := lib.ParseCallPrefix(bytecode, localScript...)
 	if err != nil {
 		return nil, nil, 0xff, err
 	}
@@ -739,7 +739,7 @@ func dataFunction[T any](data []byte) (ret EvalFunction[T], err error) {
 // - call arity
 // - symbol
 // - error or nil
-func (lib *Library[T]) parseCallPrefix(code []byte, localScript ...*LocalScript[T]) ([]byte, EvalFunction[T], int, string, error) {
+func (lib *Library[T]) ParseCallPrefix(code []byte, localScript ...*LocalScript[T]) ([]byte, EvalFunction[T], int, string, error) {
 	if len(code) == 0 || HasInlineDataPrefix(code) {
 		return nil, EvalFunction[T]{}, 0, "", fmt.Errorf("parseCallPrefix: not a function call")
 	}
@@ -900,7 +900,7 @@ func InlineDataBytecode(data []byte) []byte {
 // 2 bytes for the long calls
 // 3 bytes for local library call
 func (lib *Library[T]) ParsePrefixBytecode(code []byte) ([]byte, error) {
-	callPrefix, _, _, _, err := lib.parseCallPrefix(code)
+	callPrefix, _, _, _, err := lib.ParseCallPrefix(code)
 	if err != nil {
 		return nil, err
 	}

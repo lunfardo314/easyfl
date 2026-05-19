@@ -1,11 +1,11 @@
 // Probe entry point for measuring the easyfl WASM binary size under
-// TinyGo. Imports the top-level easyfl package so the baseline reflects
-// the current (unsplit) state — including embedded function bodies,
-// eval engine, JSON serde and LibraryHash.
+// TinyGo. Imports the top-level easyfl package and exercises the full
+// path — NewBaseLibrary (embedded function bodies registered) + a
+// trivial compile. This is the "everything wired" baseline; for a
+// wallet-style minimum, import easyfl/compose directly and use
+// NewLibrary + Upgrade(LibraryFromJSON). See claude/wasm_easyfl.md.
 //
 // Build: tinygo build -target=wasm -o /tmp/easyfl.wasm ./wasm/
-//
-// Phase A of claude/wasm_easyfl.md (lives in the proxima repo).
 package main
 
 import "github.com/lunfardo314/easyfl"

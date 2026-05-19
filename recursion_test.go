@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/lunfardo314/easyfl/compose"
 	"github.com/stretchr/testify/require"
 )
 
@@ -14,7 +15,7 @@ func TestUpgrade_ForwardRef_ReplaceCallsNew(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
 	// First add a function that we'll later replace
-	require.NoError(t, lib.UpgradeFromJSON([]byte(`{
+	require.NoError(t, UpgradeFromJSON(lib, []byte(`{
 	  "functions": [
 	    {"sym": "funcA", "numArgs": 2, "source": "add($0, $1)"}
 	  ]
@@ -22,7 +23,7 @@ func TestUpgrade_ForwardRef_ReplaceCallsNew(t *testing.T) {
 	lib.MustEqual("funcA(3, 5)", "uint8Bytes(8)")
 
 	// Now upgrade: replace funcA to call new funcD. funcA listed BEFORE funcD (forward ref).
-	require.NoError(t, lib.UpgradeFromJSON([]byte(`{
+	require.NoError(t, UpgradeFromJSON(lib, []byte(`{
 	  "functions": [
 	    {"sym": "funcA", "numArgs": 2, "replace": true, "source": "funcD($0, $1)"},
 	    {"sym": "funcD", "numArgs": 2, "source": "mul($0, $1)"}
@@ -40,7 +41,7 @@ func TestUpgrade_ForwardRef_NewCallsNew(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
 	// funcE calls funcF, but funcE is listed first
-	require.NoError(t, lib.UpgradeFromJSON([]byte(`{
+	require.NoError(t, UpgradeFromJSON(lib, []byte(`{
 	  "functions": [
 	    {"sym": "funcE", "numArgs": 2, "source": "funcF($0, $1)"},
 	    {"sym": "funcF", "numArgs": 2, "source": "add($0, $1)"}
@@ -55,7 +56,7 @@ func TestUpgrade_ForwardRef_NewCallsNew(t *testing.T) {
 func TestUpgrade_SelfRecursion(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
-	err := lib.UpgradeFromJSON([]byte(`{
+	err := UpgradeFromJSON(lib, []byte(`{
 	  "functions": [
 	    {"sym": "selfRec", "numArgs": 1, "source": "selfRec($0)"}
 	  ]
@@ -68,7 +69,7 @@ func TestUpgrade_SelfRecursion(t *testing.T) {
 func TestUpgrade_MutualRecursion(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
-	err := lib.UpgradeFromJSON([]byte(`{
+	err := UpgradeFromJSON(lib, []byte(`{
 	  "functions": [
 	    {"sym": "mutA", "numArgs": 1, "source": "mutB($0)"},
 	    {"sym": "mutB", "numArgs": 1, "source": "mutA($0)"}
@@ -82,7 +83,7 @@ func TestUpgrade_MutualRecursion(t *testing.T) {
 func TestUpgrade_IndirectCycle(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
-	err := lib.UpgradeFromJSON([]byte(`{
+	err := UpgradeFromJSON(lib, []byte(`{
 	  "functions": [
 	    {"sym": "cycA", "numArgs": 1, "source": "cycB($0)"},
 	    {"sym": "cycB", "numArgs": 1, "source": "cycC($0)"},
@@ -99,7 +100,7 @@ func TestUpgrade_ReplaceInducedCycle(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
 	// Add A that calls B
-	require.NoError(t, lib.UpgradeFromJSON([]byte(`{
+	require.NoError(t, UpgradeFromJSON(lib, []byte(`{
 	  "functions": [
 	    {"sym": "depB", "numArgs": 1, "source": "byte($0, 0)"},
 	    {"sym": "depA", "numArgs": 1, "source": "depB($0)"}
@@ -107,7 +108,7 @@ func TestUpgrade_ReplaceInducedCycle(t *testing.T) {
 	}`)))
 
 	// Now replace B to call A — creates cycle A→B→A
-	err := lib.UpgradeFromJSON([]byte(`{
+	err := UpgradeFromJSON(lib, []byte(`{
 	  "functions": [
 	    {"sym": "depB", "numArgs": 1, "replace": true, "source": "depA($0)"}
 	  ]
@@ -120,7 +121,7 @@ func TestUpgrade_ReplaceInducedCycle(t *testing.T) {
 func TestUpgrade_DiamondDependency(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
-	require.NoError(t, lib.UpgradeFromJSON([]byte(`{
+	require.NoError(t, UpgradeFromJSON(lib, []byte(`{
 	  "functions": [
 	    {"sym": "diamA", "numArgs": 1, "source": "add(diamB($0), diamC($0))"},
 	    {"sym": "diamB", "numArgs": 1, "source": "diamD($0)"},
@@ -141,7 +142,7 @@ func TestClone_Basic(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
 	// Add a function to the original
-	require.NoError(t, lib.UpgradeFromJSON([]byte(`{
+	require.NoError(t, UpgradeFromJSON(lib, []byte(`{
 	  "functions": [
 	    {"sym": "origFunc", "numArgs": 2, "source": "add($0, $1)"}
 	  ]
@@ -152,7 +153,7 @@ func TestClone_Basic(t *testing.T) {
 
 	// Clone and modify the clone
 	clone := lib.Clone()
-	require.NoError(t, clone.UpgradeFromJSON([]byte(`{
+	require.NoError(t, UpgradeFromJSON(clone, []byte(`{
 	  "functions": [
 	    {"sym": "cloneFunc", "numArgs": 2, "source": "mul($0, $1)"}
 	  ]
@@ -176,7 +177,7 @@ func TestClone_Basic(t *testing.T) {
 func TestClone_DiscardOnError(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
-	require.NoError(t, lib.UpgradeFromJSON([]byte(`{
+	require.NoError(t, UpgradeFromJSON(lib, []byte(`{
 	  "functions": [
 	    {"sym": "stableFunc", "numArgs": 1, "source": "byte($0, 0)"}
 	  ]
@@ -186,7 +187,7 @@ func TestClone_DiscardOnError(t *testing.T) {
 
 	// Clone and attempt upgrade with recursion
 	clone := lib.Clone()
-	err := clone.UpgradeFromJSON([]byte(`{
+	err := UpgradeFromJSON(clone, []byte(`{
 	  "functions": [
 	    {"sym": "badA", "numArgs": 1, "source": "badB($0)"},
 	    {"sym": "badB", "numArgs": 1, "source": "badA($0)"}
@@ -205,7 +206,7 @@ func TestUpgrade_BackwardCompatible_NoForwardRefs(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
 	// Sequential dependency: funcX uses base lib, funcY uses funcX
-	require.NoError(t, lib.UpgradeFromJSON([]byte(`{
+	require.NoError(t, UpgradeFromJSON(lib, []byte(`{
 	  "functions": [
 	    {"sym": "funcX", "numArgs": 2, "source": "add($0, $1)"},
 	    {"sym": "funcY", "numArgs": 2, "source": "funcX($0, $1)"}
@@ -222,7 +223,7 @@ func TestUpgrade_MixedEmbeddedAndExtended_ForwardRef(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
 	// Mix: one embedded replacement + two extended with forward ref
-	require.NoError(t, lib.UpgradeFromJSON([]byte(`{
+	require.NoError(t, UpgradeFromJSON(lib, []byte(`{
 	  "functions": [
 	    {"sym": "add", "numArgs": 2, "embeddedAs": "evalAddUint", "short": true, "replace": true},
 	    {"sym": "fwdCaller", "numArgs": 2, "source": "fwdTarget($0, $1)"},
@@ -242,12 +243,12 @@ func TestExtractReferencedFunCodes(t *testing.T) {
 	_, _, bytecode, err := lib.CompileExpression("add($0, $1)")
 	require.NoError(t, err)
 
-	refs, err := extractReferencedFunCodes(bytecode)
+	refs, err := compose.ExtractReferencedFunCodes(bytecode)
 	require.NoError(t, err)
 	require.NotEmpty(t, refs)
 
 	// "add" should be among the references
-	addFi, err := lib.functionByName("add")
+	addFi, err := lib.FunctionByName("add")
 	require.NoError(t, err)
 	found := false
 	for _, r := range refs {
@@ -264,7 +265,7 @@ func TestCheckForCycles_NoExtended(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
 	// No extended functions to check — should be fine
-	err := checkForCycles(lib, nil)
+	err := compose.CheckForCycles(lib, nil)
 	require.NoError(t, err)
 }
 
@@ -272,7 +273,7 @@ func TestCheckForCycles_NoExtended(t *testing.T) {
 func TestUpgrade_VarargForwardRef(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
-	require.NoError(t, lib.UpgradeFromJSON([]byte(`{
+	require.NoError(t, UpgradeFromJSON(lib, []byte(`{
 	  "functions": [
 	    {"sym": "varCaller", "numArgs": 2, "source": "varTarget($0, $1)"},
 	    {"sym": "varTarget", "numArgs": -1, "source": "add($0, $1)"}
@@ -315,7 +316,7 @@ func TestIntroduceCommit_CrossSourceForwardRef(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
 	// JSON adds funcA that calls funcB (which doesn't exist yet)
-	err := lib.IntroduceUpdateJSON([]byte(`{
+	err := IntroduceUpdateJSON(lib, []byte(`{
 	  "functions": [
 	    {"sym": "funcA", "numArgs": 2, "source": "funcB($0, $1)"}
 	  ]
@@ -341,7 +342,7 @@ func TestIntroduceCommit_CrossSourceCycle(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
 	// JSON adds funcA→funcB
-	err := lib.IntroduceUpdateJSON([]byte(`{
+	err := IntroduceUpdateJSON(lib, []byte(`{
 	  "functions": [
 	    {"sym": "funcA", "numArgs": 1, "source": "funcB($0)"}
 	  ]
@@ -366,7 +367,7 @@ func TestIntroduceCommit_DuplicateAcrossBatches(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
 	// JSON adds funcDup
-	err := lib.IntroduceUpdateJSON([]byte(`{
+	err := IntroduceUpdateJSON(lib, []byte(`{
 	  "functions": [
 	    {"sym": "funcDup", "numArgs": 1, "source": "byte($0, 0)"}
 	  ]
@@ -405,7 +406,7 @@ func TestIntroduceMulti_JSONAndSources(t *testing.T) {
 	}`)
 
 	// Introduce two JSON sources at once (nil resolver — no embedded)
-	err := lib.IntroduceUpdateJSONMulti(nil, json1, json2)
+	err := IntroduceUpdateJSONMulti(lib, nil, json1, json2)
 	require.NoError(t, err)
 
 	// Introduce two plain EasyFL sources at once
@@ -653,7 +654,7 @@ func TestCountParametersFromSource(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.source, func(t *testing.T) {
-			n, err := countParametersFromSource(tt.source)
+			n, err := compose.CountParametersFromSource(tt.source)
 			require.NoError(t, err)
 			require.Equal(t, tt.expected, n, "source: %s", tt.source)
 		})

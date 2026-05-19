@@ -172,25 +172,25 @@ func TestEmbed(t *testing.T) {
 		lib.MustTrue("not(lessThan(2,1))")
 		lib.MustTrue("not(lessThan(2,2))")
 		// bitwise
-		//lib.embedShort("bitwiseOR", 2, evalBitwiseOR)
+		//lib.EmbedShort("bitwiseOR", 2, evalBitwiseOR)
 		lib.MustEqual("bitwiseOR(0x01, 0x80)", "0x81")
-		//lib.embedShort("bitwiseAND", 2, evalBitwiseAND)
+		//lib.EmbedShort("bitwiseAND", 2, evalBitwiseAND)
 		lib.MustEqual("bitwiseAND(0x03, 0xf2)", "0x02")
 		lib.MustEqual("bitwiseAND(0x0102, 0xff00)", "0x0100")
-		//lib.embedShort("bitwiseNOT", 1, evalBitwiseNOT)
+		//lib.EmbedShort("bitwiseNOT", 1, evalBitwiseNOT)
 		lib.MustEqual("bitwiseNOT(0x00ff)", "0xff00")
-		//lib.embedShort("bitwiseXOR", 2, evalBitwiseXOR)
+		//lib.EmbedShort("bitwiseXOR", 2, evalBitwiseXOR)
 		lib.MustEqual("bitwiseXOR(0x1234, 0x1234)", "0x0000")
 		lib.MustEqual("bitwiseXOR(0x1234, 0xffff)", "bitwiseNOT(0x1234)")
 		// other
 
-		//lib.embedLong("lshift64", 2, evalLShift64)
+		//lib.EmbedLong("lshift64", 2, evalLShift64)
 		lib.MustEqual("lshift64(u64/3, u64/2)", "u64/12")
 		lib.MustTrue("isZero(lshift64(u64/2001, u64/64))")
 		lib.MustTrue("equal(lshift64(u64/2001, u64/4), mul(u64/2001, u16/16))")
 		lib.MustEqual("lshift64(u64/2001, nil)", "u64/2001")
 
-		//lib.embedLong("rshift64", 2, evalRShift64)
+		//lib.EmbedLong("rshift64", 2, evalRShift64)
 		lib.MustEqual("rshift64(u64/15, u64/2)", "u64/3")
 		lib.MustTrue("isZero(rshift64(0xffffffffffffffff, u64/64))")
 		lib.MustTrue("equal(rshift64(u64/2001, u64/3), div(u64/2001, 8))")
@@ -224,7 +224,7 @@ func TestArityLiteral(t *testing.T) {
 	t.Run("$$ in fixed-arg extended function", func(t *testing.T) {
 		// Define an extended function that uses $$ but also references $0
 		// This makes it a 1-arg function
-		lib.extend("arityPlus", "concat($$, $0)")
+		lib.Extend("arityPlus", "concat($$, $0)")
 
 		// Call with 1 argument - $$ should return 1
 		ret, err := lib.EvalFromSource(nil, "arityPlus(0x42)")
@@ -234,7 +234,7 @@ func TestArityLiteral(t *testing.T) {
 
 	t.Run("$$ in extended function with 2 args", func(t *testing.T) {
 		// Define an extended function with 2 args
-		lib.extend("arityConcat", "concat($$, $0, $1)")
+		lib.Extend("arityConcat", "concat($$, $0, $1)")
 
 		// Call with 2 arguments - $$ should return 2
 		ret, err := lib.EvalFromSource(nil, "arityConcat(0x01, 0x02)")
@@ -244,7 +244,7 @@ func TestArityLiteral(t *testing.T) {
 
 	t.Run("$$ in extended function with 3 args nested", func(t *testing.T) {
 		// Define an extended function with 3 args
-		lib.extend("arityConcat3", "concat($$, $0, concat($1, $2))")
+		lib.Extend("arityConcat3", "concat($$, $0, concat($1, $2))")
 
 		// Call with 3 arguments - $$ should return 3
 		ret, err := lib.EvalFromSource(nil, "arityConcat3(1, 2, 3)")
@@ -254,7 +254,7 @@ func TestArityLiteral(t *testing.T) {
 
 	t.Run("$$ in extended function with 2 args nested", func(t *testing.T) {
 		// Define an extended function with 2 args
-		lib.extend("arityConcat2nested", "concat($$, $0, concat($1, $1))")
+		lib.Extend("arityConcat2nested", "concat($$, $0, concat($1, $1))")
 
 		// Call with 2 arguments - $$ should return 2
 		ret, err := lib.EvalFromSource(nil, "arityConcat2nested(1, 2)")

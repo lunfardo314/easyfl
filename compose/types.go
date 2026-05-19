@@ -1,4 +1,4 @@
-package easyfl
+package compose
 
 import (
 	"bufio"
