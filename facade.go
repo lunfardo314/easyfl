@@ -1,61 +1,67 @@
 // Package easyfl is the top-level facade for the easyfl library.
 //
-// The compose sub-package holds the minimal compile / decompile / library
-// registry surface (no fmt-on-hot-paths, no encoding/json, no embedded
-// function bodies). The embed sub-package holds the base library's
-// embedded function bodies. The top-level easyfl package wires both
-// together (via NewBaseLibrary), provides the JSON serde helpers, and
-// re-exports everything as type aliases for backward compatibility
-// with existing imports of github.com/lunfardo314/easyfl.
+// The engine sub-package holds Library, Expression, CallParams, the
+// eval engine, the source compiler, the decompiler, and library
+// construction primitives — i.e. everything except the embedded
+// function bodies and the JSON serde. The embed sub-package holds
+// the base library's embedded function bodies. The top-level easyfl
+// package wires both together (via NewBaseLibrary), provides the JSON
+// serde helpers, and re-exports the engine types as aliases so the
+// existing easyfl.<Type> imports keep compiling.
+//
+// Wallet-style callers that want a minimal wasm binary should import
+// easyfl/engine directly: they avoid the embedded library.json blob
+// and the JSON serde / library-hash machinery.
 package easyfl
 
 import (
-	"github.com/lunfardo314/easyfl/compose"
 	"github.com/lunfardo314/easyfl/easyfl_util"
 	"github.com/lunfardo314/easyfl/embed"
+	"github.com/lunfardo314/easyfl/engine"
+	"github.com/lunfardo314/easyfl/slicepool"
 )
 
-// Type aliases re-export the compose types so existing
+// Type aliases re-export the engine types so existing
 // easyfl.<Type> imports keep working unchanged.
 type (
-	Library[T any]            = compose.Library[T]
-	Expression[T any]         = compose.Expression[T]
-	EmbeddedFunction[T any]   = compose.EmbeddedFunction[T]
-	EvalFunction[T any]       = compose.EvalFunction[T]
-	CallParams[T any]         = compose.CallParams[T]
-	GlobalData[T any]         = compose.GlobalData[T]
-	GlobalDataNoTrace[T any]  = compose.GlobalDataNoTrace[T]
-	LocalScript[T any]        = compose.LocalScript[T]
-	LocalScriptBin            = compose.LocalScriptBin
-	LocalScriptCallSiteCheck[T any] = compose.LocalScriptCallSiteCheck[T]
-	LibraryFromJSON           = compose.LibraryFromJSON
-	FuncDescriptorJSON        = compose.FuncDescriptorJSON
+	Library[T any]                  = engine.Library[T]
+	Expression[T any]               = engine.Expression[T]
+	EmbeddedFunction[T any]         = engine.EmbeddedFunction[T]
+	EvalFunction[T any]             = engine.EvalFunction[T]
+	CallParams[T any]               = engine.CallParams[T]
+	GlobalData[T any]               = engine.GlobalData[T]
+	GlobalDataNoTrace[T any]        = engine.GlobalDataNoTrace[T]
+	LocalScript[T any]              = engine.LocalScript[T]
+	LocalScriptBin                  = engine.LocalScriptBin
+	LocalScriptCallSiteCheck[T any] = engine.LocalScriptCallSiteCheck[T]
+	LibraryFromJSON                 = engine.LibraryFromJSON
+	FuncDescriptorJSON              = engine.FuncDescriptorJSON
 )
 
-// Re-exported constants and free functions from compose.
+// Re-exported constants from engine.
 const (
-	MaxSourceSize                 = compose.MaxSourceSize
-	MaxDataSize                   = compose.MaxDataSize
-	MaxParameters                 = compose.MaxParameters
-	FirstEmbeddedReserved         = compose.FirstEmbeddedReserved
-	LastEmbeddedReserved          = compose.LastEmbeddedReserved
-	FirstEmbeddedShort            = compose.FirstEmbeddedShort
-	LastEmbeddedShort             = compose.LastEmbeddedShort
-	MaxNumEmbeddedAndReservedShort = compose.MaxNumEmbeddedAndReservedShort
-	FirstEmbeddedLong             = compose.FirstEmbeddedLong
-	MaxNumEmbeddedLong            = compose.MaxNumEmbeddedLong
-	LastEmbeddedLong              = compose.LastEmbeddedLong
-	FirstExtended                 = compose.FirstExtended
-	LastGlobalFunCode             = compose.LastGlobalFunCode
-	MaxNumExtendedGlobal          = compose.MaxNumExtendedGlobal
-	FirstLocalFunCode             = compose.FirstLocalFunCode
+	MaxSourceSize                  = engine.MaxSourceSize
+	MaxDataSize                    = engine.MaxDataSize
+	MaxParameters                  = engine.MaxParameters
+	FirstEmbeddedReserved          = engine.FirstEmbeddedReserved
+	LastEmbeddedReserved           = engine.LastEmbeddedReserved
+	FirstEmbeddedShort             = engine.FirstEmbeddedShort
+	LastEmbeddedShort              = engine.LastEmbeddedShort
+	MaxNumEmbeddedAndReservedShort = engine.MaxNumEmbeddedAndReservedShort
+	FirstEmbeddedLong              = engine.FirstEmbeddedLong
+	MaxNumEmbeddedLong             = engine.MaxNumEmbeddedLong
+	LastEmbeddedLong               = engine.LastEmbeddedLong
+	FirstExtended                  = engine.FirstExtended
+	LastGlobalFunCode              = engine.LastGlobalFunCode
+	MaxNumExtendedGlobal           = engine.MaxNumExtendedGlobal
+	FirstLocalFunCode              = engine.FirstLocalFunCode
 )
 
 // NewLibrary returns an empty library. Wallet-style callers that want
 // to avoid pulling base embedded function bodies into the build use
-// this directly. See package doc for the recommended pattern.
+// this directly (or, equivalently, engine.NewLibrary).
 func NewLibrary[T any]() *Library[T] {
-	return compose.NewLibrary[T]()
+	return engine.NewLibrary[T]()
 }
 
 // NewBaseLibrary returns the canonical base library: empty library
@@ -64,7 +70,7 @@ func NewLibrary[T any]() *Library[T] {
 // `ledger` library; the wasm wallet should prefer NewLibrary.
 func NewBaseLibrary[T any]() *Library[T] {
 	lib, err := NewLibraryFromJSON[T]([]byte(baseLibraryDefinitions),
-		func(lib *compose.Library[T]) func(sym string) compose.EmbeddedFunction[T] {
+		func(lib *engine.Library[T]) func(sym string) engine.EmbeddedFunction[T] {
 			return embed.Resolver[T](lib)
 		})
 	easyfl_util.AssertNoError(err)
@@ -77,19 +83,35 @@ func EmbeddedFunctions[T any](targetLib *Library[T]) func(sym string) EmbeddedFu
 	return embed.Resolver[T](targetLib)
 }
 
-// HasInlineDataPrefix mirrors compose.HasInlineDataPrefix.
-func HasInlineDataPrefix(data []byte) bool { return compose.HasInlineDataPrefix(data) }
+// HasInlineDataPrefix mirrors engine.HasInlineDataPrefix.
+func HasInlineDataPrefix(data []byte) bool { return engine.HasInlineDataPrefix(data) }
 
-// StripDataPrefix mirrors compose.StripDataPrefix.
-func StripDataPrefix(data []byte) []byte { return compose.StripDataPrefix(data) }
+// StripDataPrefix mirrors engine.StripDataPrefix.
+func StripDataPrefix(data []byte) []byte { return engine.StripDataPrefix(data) }
 
-// ExpressionToBytecode mirrors compose.ExpressionToBytecode.
+// InlineDataBytecode mirrors engine.InlineDataBytecode.
+func InlineDataBytecode(data []byte) []byte { return engine.InlineDataBytecode(data) }
+
+// ExpressionToBytecode mirrors engine.ExpressionToBytecode.
 func ExpressionToBytecode[T any](f *Expression[T]) []byte {
-	return compose.ExpressionToBytecode(f)
+	return engine.ExpressionToBytecode(f)
 }
 
-// EvalExpression / EvalExpressionWithSlicePool / EvalExpressionInPool
-// are re-exported for callers that import easyfl directly.
+// EvalExpression mirrors engine.EvalExpression.
 func EvalExpression[T any](glb GlobalData[T], f *Expression[T], args ...[]byte) []byte {
-	return compose.EvalExpression(glb, f, args...)
+	return engine.EvalExpression(glb, f, args...)
+}
+
+// EvalExpressionWithSlicePool mirrors engine.EvalExpressionWithSlicePool.
+// The caller's pool is reused for the eval; the result is copied to the
+// Go heap before return so it outlives the pool's Dispose.
+func EvalExpressionWithSlicePool[T any](glb GlobalData[T], spool *slicepool.SlicePool, f *Expression[T], args ...[]byte) []byte {
+	return engine.EvalExpressionWithSlicePool(glb, spool, f, args...)
+}
+
+// EvalExpressionInPool mirrors engine.EvalExpressionInPool. Result is
+// allocated inside spool; caller must keep the pool alive while reading
+// the returned slice.
+func EvalExpressionInPool[T any](glb GlobalData[T], spool *slicepool.SlicePool, f *Expression[T], args ...[]byte) []byte {
+	return engine.EvalExpressionInPool(glb, spool, f, args...)
 }

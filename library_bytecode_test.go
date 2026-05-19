@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lunfardo314/easyfl/compose"
+	"github.com/lunfardo314/easyfl/engine"
 	"github.com/lunfardo314/easyfl/easyfl_util"
 	"github.com/lunfardo314/easyfl/easyfl_util/testutil"
 	"github.com/stretchr/testify/require"
@@ -259,7 +259,7 @@ func TestDecompile(t *testing.T) {
 		sym, _, args, err := lib.ParseBytecodeOneLevel(bin)
 		require.NoError(t, err)
 
-		formulaBack2 := compose.ComposeBytecodeOneLevel(sym, args)
+		formulaBack2 := engine.ComposeBytecodeOneLevel(sym, args)
 		t.Logf("decompiled by level 1: '%s'", formulaBack2)
 
 		_, _, binBack2, err := lib.CompileExpression(formulaBack)
@@ -285,7 +285,7 @@ func TestDecompile(t *testing.T) {
 		sym, _, args, err := lib.ParseBytecodeOneLevel(bin)
 		require.NoError(t, err)
 
-		formulaBack2 := compose.ComposeBytecodeOneLevel(sym, args)
+		formulaBack2 := engine.ComposeBytecodeOneLevel(sym, args)
 		t.Logf("decompiled by level 1: '%s'", formulaBack2)
 
 		_, _, binBack2, err := lib.CompileExpression(formulaBack)
@@ -311,7 +311,7 @@ func TestDecompile(t *testing.T) {
 		sym, _, args, err := lib.ParseBytecodeOneLevel(bin)
 		require.NoError(t, err)
 
-		formulaBack2 := compose.ComposeBytecodeOneLevel(sym, args)
+		formulaBack2 := engine.ComposeBytecodeOneLevel(sym, args)
 		t.Logf("decompiled by level 1: '%s'", formulaBack2)
 
 		_, _, binBack2, err := lib.CompileExpression(formulaBack)
@@ -339,7 +339,7 @@ func TestDecompile(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, 1337, binary.BigEndian.Uint64(StripDataPrefix(args[0])))
 
-		formulaBack2 := compose.ComposeBytecodeOneLevel(sym, args)
+		formulaBack2 := engine.ComposeBytecodeOneLevel(sym, args)
 		t.Logf("decompiled by level 1: '%s'", formulaBack2)
 
 		_, _, binBack2, err := lib.CompileExpression(formulaBack)
@@ -367,7 +367,7 @@ func TestDecompile(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, 1337, binary.BigEndian.Uint64(StripDataPrefix(args[0])))
 
-		formulaBack2 := compose.ComposeBytecodeOneLevel(sym, args)
+		formulaBack2 := engine.ComposeBytecodeOneLevel(sym, args)
 		t.Logf("decompiled by level 1: '%s'", formulaBack2)
 
 		_, _, binBack2, err := lib.CompileExpression(formulaBack)

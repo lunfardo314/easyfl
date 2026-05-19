@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"math"
 
-	"github.com/lunfardo314/easyfl/compose"
+	"github.com/lunfardo314/easyfl/engine"
 	"github.com/lunfardo314/easyfl/easyfl_util"
 	"github.com/lunfardo314/easyfl/slicepool"
 	"github.com/lunfardo314/easyfl/tuples"
@@ -16,8 +16,8 @@ import (
 //  - certain function could be optimized.
 //  - do we need short end long embedding?
 
-func unboundEmbeddedFunctions[T any]() map[string]compose.EmbeddedFunction[T] {
-	return map[string]compose.EmbeddedFunction[T]{
+func unboundEmbeddedFunctions[T any]() map[string]engine.EmbeddedFunction[T] {
+	return map[string]engine.EmbeddedFunction[T]{
 		// short base
 		"evalArity":     evalArity[T],
 		"evalFail":      evalFail[T],
@@ -59,9 +59,9 @@ func unboundEmbeddedFunctions[T any]() map[string]compose.EmbeddedFunction[T] {
 		"evalTupleLen": evalNumElementsOfTuple[T],
 	}
 }
-func Resolver[T any](targetLib *compose.Library[T]) func(sym string) compose.EmbeddedFunction[T] {
+func Resolver[T any](targetLib *engine.Library[T]) func(sym string) engine.EmbeddedFunction[T] {
 	embTyped := unboundEmbeddedFunctions[T]()
-	return func(sym string) compose.EmbeddedFunction[T] {
+	return func(sym string) engine.EmbeddedFunction[T] {
 		if ret, found := embTyped[sym]; found {
 			return ret
 		}
@@ -84,12 +84,12 @@ func Resolver[T any](targetLib *compose.Library[T]) func(sym string) compose.Emb
 
 // evalArity returns the number of arguments in the enclosing function's var scope.
 // This is the embedded function for the $$ literal.
-func evalArity[T any](par *compose.CallParams[T]) []byte {
+func evalArity[T any](par *engine.CallParams[T]) []byte {
 	arity := par.VarScopeArity()
 	return par.AllocData(arity)
 }
 
-func evalFail[T any](par *compose.CallParams[T]) []byte {
+func evalFail[T any](par *engine.CallParams[T]) []byte {
 	c := par.Arg(0)
 	if len(c) == 1 {
 		par.TracePanic("SCRIPT FAIL: error #%d", c[0])
@@ -99,7 +99,7 @@ func evalFail[T any](par *compose.CallParams[T]) []byte {
 }
 
 // slices first argument 'from' 'to' inclusive 'to'
-func evalSlice[T any](par *compose.CallParams[T]) []byte {
+func evalSlice[T any](par *engine.CallParams[T]) []byte {
 	data := par.Arg(0)
 	from := par.Arg(1)
 	to := par.Arg(2)
@@ -117,7 +117,7 @@ func evalSlice[T any](par *compose.CallParams[T]) []byte {
 	return ret
 }
 
-func evalByte[T any](par *compose.CallParams[T]) []byte {
+func evalByte[T any](par *engine.CallParams[T]) []byte {
 	data := par.Arg(0)
 	idx := par.Arg(1)
 	if len(idx) != 1 || int(idx[0]) >= len(data) {
@@ -127,7 +127,7 @@ func evalByte[T any](par *compose.CallParams[T]) []byte {
 	return ret
 }
 
-func evalTail[T any](par *compose.CallParams[T]) []byte {
+func evalTail[T any](par *engine.CallParams[T]) []byte {
 	data := par.Arg(0)
 	from := par.Arg(1)
 	if len(from) != 1 || int(from[0]) >= len(data) {
@@ -137,7 +137,7 @@ func evalTail[T any](par *compose.CallParams[T]) []byte {
 	return ret
 }
 
-func evalEqual[T any](par *compose.CallParams[T]) []byte {
+func evalEqual[T any](par *engine.CallParams[T]) []byte {
 	var ret []byte
 	p0 := par.Arg(0)
 	p1 := par.Arg(1)
@@ -147,7 +147,7 @@ func evalEqual[T any](par *compose.CallParams[T]) []byte {
 	return ret
 }
 
-func evalHasPrefix[T any](par *compose.CallParams[T]) []byte {
+func evalHasPrefix[T any](par *engine.CallParams[T]) []byte {
 	var ret []byte
 	data := par.Arg(0)
 	prefix := par.Arg(1)
@@ -157,7 +157,7 @@ func evalHasPrefix[T any](par *compose.CallParams[T]) []byte {
 	return ret
 }
 
-func evalRepeat[T any](par *compose.CallParams[T]) []byte {
+func evalRepeat[T any](par *engine.CallParams[T]) []byte {
 	fragment := par.Arg(0)
 	n := par.Arg(1)
 	if len(n) != 1 {
@@ -167,14 +167,14 @@ func evalRepeat[T any](par *compose.CallParams[T]) []byte {
 	return ret
 }
 
-func evalLen[T any](par *compose.CallParams[T]) []byte {
+func evalLen[T any](par *engine.CallParams[T]) []byte {
 	data := par.Arg(0)
 	ret := par.Alloc(8)
 	binary.BigEndian.PutUint64(ret, uint64(len(data)))
 	return ret
 }
 
-func evalIf[T any](par *compose.CallParams[T]) []byte {
+func evalIf[T any](par *engine.CallParams[T]) []byte {
 	cond := par.Arg(0)
 	if len(cond) != 0 {
 		yes := par.Arg(1)
@@ -185,7 +185,7 @@ func evalIf[T any](par *compose.CallParams[T]) []byte {
 }
 
 // evalFirstCaseIndex evaluates and returns first argument with not-nil value
-func evalFirstCaseIndex[T any](par *compose.CallParams[T]) []byte {
+func evalFirstCaseIndex[T any](par *engine.CallParams[T]) []byte {
 	for i := byte(0); i < par.Arity(); i++ {
 		if c := par.Arg(i); len(c) > 0 {
 			return par.AllocData(i)
@@ -194,7 +194,7 @@ func evalFirstCaseIndex[T any](par *compose.CallParams[T]) []byte {
 	return nil
 }
 
-func evalFirstEqualIndex[T any](par *compose.CallParams[T]) []byte {
+func evalFirstEqualIndex[T any](par *engine.CallParams[T]) []byte {
 	if par.Arity() == 0 {
 		return nil
 	}
@@ -208,7 +208,7 @@ func evalFirstEqualIndex[T any](par *compose.CallParams[T]) []byte {
 	return nil
 }
 
-func evalSelectCaseByIndex[T any](par *compose.CallParams[T]) []byte {
+func evalSelectCaseByIndex[T any](par *engine.CallParams[T]) []byte {
 	if par.Arity() == 0 {
 		par.TracePanic("evalSelectCaseByIndex: must be at least 1 argument")
 	}
@@ -223,7 +223,7 @@ func evalSelectCaseByIndex[T any](par *compose.CallParams[T]) []byte {
 	return par.Arg(byte(idx) + 1)
 }
 
-func evalIsZero[T any](par *compose.CallParams[T]) []byte {
+func evalIsZero[T any](par *engine.CallParams[T]) []byte {
 	arg := par.Arg(0)
 	if easyfl_util.IsZero(arg) {
 		return par.AllocData(0xff)
@@ -231,7 +231,7 @@ func evalIsZero[T any](par *compose.CallParams[T]) []byte {
 	return nil
 }
 
-func evalNot[T any](par *compose.CallParams[T]) []byte {
+func evalNot[T any](par *engine.CallParams[T]) []byte {
 	arg := par.Arg(0)
 	if len(arg) == 0 {
 		return par.AllocData(0xff)
@@ -239,8 +239,8 @@ func evalNot[T any](par *compose.CallParams[T]) []byte {
 	return nil
 }
 
-func evalConcat[T any](par *compose.CallParams[T]) []byte {
-	var args [compose.MaxParameters][]byte
+func evalConcat[T any](par *engine.CallParams[T]) []byte {
+	var args [engine.MaxParameters][]byte
 	a := args[:par.Arity()]
 	totalSize := 0
 	for i := range a {
@@ -255,7 +255,7 @@ func evalConcat[T any](par *compose.CallParams[T]) []byte {
 	return ret
 }
 
-func evalAnd[T any](par *compose.CallParams[T]) []byte {
+func evalAnd[T any](par *engine.CallParams[T]) []byte {
 	for i := byte(0); i < par.Arity(); i++ {
 		if len(par.Arg(i)) == 0 {
 			return nil
@@ -264,7 +264,7 @@ func evalAnd[T any](par *compose.CallParams[T]) []byte {
 	return par.AllocData(0xff)
 }
 
-func evalOr[T any](par *compose.CallParams[T]) []byte {
+func evalOr[T any](par *engine.CallParams[T]) []byte {
 	for i := byte(0); i < par.Arity(); i++ {
 		if len(par.Arg(i)) != 0 {
 			return par.AllocData(0xff)
@@ -287,7 +287,7 @@ func ensure8Bytes(spool *slicepool.SlicePool, data []byte) ([]byte, bool) {
 
 // Must2ArithmeticOperands makes uint64 from both params (big-endian)
 // Parameters must have with size <= 8. They are padded with 0 in upper bytes, if necessary
-func Must2ArithmeticOperands[T any](par *compose.CallParams[T], name string) (op0 uint64, op1 uint64) {
+func Must2ArithmeticOperands[T any](par *engine.CallParams[T], name string) (op0 uint64, op1 uint64) {
 	var err error
 	a0 := par.Arg(0)
 	if op0, err = easyfl_util.Uint64FromBytes(a0); err != nil {
@@ -302,7 +302,7 @@ func Must2ArithmeticOperands[T any](par *compose.CallParams[T], name string) (op
 	return
 }
 
-func evalAddUint[T any](par *compose.CallParams[T]) []byte {
+func evalAddUint[T any](par *engine.CallParams[T]) []byte {
 	a0, a1 := Must2ArithmeticOperands(par, "addUint")
 	if a0 > math.MaxUint64-a1 {
 		par.TracePanic("evalAddUint:: %d + %d -> overflow in addition", a0, a1)
@@ -312,7 +312,7 @@ func evalAddUint[T any](par *compose.CallParams[T]) []byte {
 	return ret
 }
 
-func evalSubUint[T any](par *compose.CallParams[T]) []byte {
+func evalSubUint[T any](par *engine.CallParams[T]) []byte {
 	a0, a1 := Must2ArithmeticOperands(par, "subUint")
 	if a0 < a1 {
 		par.TracePanic("evalSubUint:: %d - %d -> underflow in subtraction", a0, a1)
@@ -322,7 +322,7 @@ func evalSubUint[T any](par *compose.CallParams[T]) []byte {
 	return ret
 }
 
-func evalMulUint[T any](par *compose.CallParams[T]) []byte {
+func evalMulUint[T any](par *engine.CallParams[T]) []byte {
 	a0, a1 := Must2ArithmeticOperands(par, "mulUint")
 	if a0 == 0 || a1 == 0 {
 		return par.Alloc(8)
@@ -335,7 +335,7 @@ func evalMulUint[T any](par *compose.CallParams[T]) []byte {
 	return ret
 }
 
-func evalDivUint[T any](par *compose.CallParams[T]) []byte {
+func evalDivUint[T any](par *engine.CallParams[T]) []byte {
 	a0, a1 := Must2ArithmeticOperands(par, "divUint")
 	if a1 == 0 {
 		par.TracePanic("evalDivUint:: %d / %d -> divide by zero", a0, a1)
@@ -345,7 +345,7 @@ func evalDivUint[T any](par *compose.CallParams[T]) []byte {
 	return ret
 }
 
-func evalModuloUint[T any](par *compose.CallParams[T]) []byte {
+func evalModuloUint[T any](par *engine.CallParams[T]) []byte {
 	a0, a1 := Must2ArithmeticOperands(par, "moduloUint")
 	if a1 == 0 {
 		par.TracePanic("evalModuloUint:: %d / %d -> divide by zero", a0, a1)
@@ -355,7 +355,7 @@ func evalModuloUint[T any](par *compose.CallParams[T]) []byte {
 	return ret
 }
 
-func evalUint8Bytes[T any](par *compose.CallParams[T]) []byte {
+func evalUint8Bytes[T any](par *engine.CallParams[T]) []byte {
 	ret, ok := ensure8Bytes(par.Spool(), par.Arg(0))
 	if !ok {
 		par.TracePanic("%s:: wrong size of parameter", "uint64Bytes")
@@ -364,7 +364,7 @@ func evalUint8Bytes[T any](par *compose.CallParams[T]) []byte {
 }
 
 // lexicographical comparison of two slices of equal length
-func evalLessThan[T any](par *compose.CallParams[T]) []byte {
+func evalLessThan[T any](par *engine.CallParams[T]) []byte {
 	a0 := par.Arg(0)
 	a1 := par.Arg(1)
 
@@ -382,7 +382,7 @@ func evalLessThan[T any](par *compose.CallParams[T]) []byte {
 	return nil // equal -> false
 }
 
-func evalBitwiseAND[T any](par *compose.CallParams[T]) []byte {
+func evalBitwiseAND[T any](par *engine.CallParams[T]) []byte {
 	a0 := par.Arg(0)
 	a1 := par.Arg(1)
 	if len(a0) != len(a1) {
@@ -396,7 +396,7 @@ func evalBitwiseAND[T any](par *compose.CallParams[T]) []byte {
 	return ret
 }
 
-func evalBitwiseOR[T any](par *compose.CallParams[T]) []byte {
+func evalBitwiseOR[T any](par *engine.CallParams[T]) []byte {
 	a0 := par.Arg(0)
 	a1 := par.Arg(1)
 	if len(a0) != len(a1) {
@@ -409,7 +409,7 @@ func evalBitwiseOR[T any](par *compose.CallParams[T]) []byte {
 	return ret
 }
 
-func evalBitwiseXOR[T any](par *compose.CallParams[T]) []byte {
+func evalBitwiseXOR[T any](par *engine.CallParams[T]) []byte {
 	a0 := par.Arg(0)
 	a1 := par.Arg(1)
 	if len(a0) != len(a1) {
@@ -422,7 +422,7 @@ func evalBitwiseXOR[T any](par *compose.CallParams[T]) []byte {
 	return ret
 }
 
-func evalBitwiseNOT[T any](par *compose.CallParams[T]) []byte {
+func evalBitwiseNOT[T any](par *engine.CallParams[T]) []byte {
 	a0 := par.Arg(0)
 	ret := par.Alloc(uint16(len(a0))) // true
 	for i := range a0 {
@@ -431,21 +431,21 @@ func evalBitwiseNOT[T any](par *compose.CallParams[T]) []byte {
 	return ret
 }
 
-func evalLShift64[T any](par *compose.CallParams[T]) []byte {
+func evalLShift64[T any](par *engine.CallParams[T]) []byte {
 	a0, a1 := Must2ArithmeticOperands(par, "lshift64")
 	ret := par.Alloc(8) // true
 	binary.BigEndian.PutUint64(ret, a0<<a1)
 	return ret
 }
 
-func evalRShift64[T any](par *compose.CallParams[T]) []byte {
+func evalRShift64[T any](par *engine.CallParams[T]) []byte {
 	a0, a1 := Must2ArithmeticOperands(par, "lshift64")
 	ret := par.Alloc(8) // true
 	binary.BigEndian.PutUint64(ret, a0>>a1)
 	return ret
 }
 
-func evalAtTuple8[T any](par *compose.CallParams[T]) []byte {
+func evalAtTuple8[T any](par *engine.CallParams[T]) []byte {
 	arr, err := tuples.TupleFromBytes(par.Arg(0))
 	if err != nil {
 		par.TracePanic("evalAtTuple8: %v", err)
@@ -461,7 +461,7 @@ func evalAtTuple8[T any](par *compose.CallParams[T]) []byte {
 	return ret
 }
 
-func evalNumElementsOfTuple[T any](par *compose.CallParams[T]) []byte {
+func evalNumElementsOfTuple[T any](par *engine.CallParams[T]) []byte {
 	arr, err := tuples.TupleFromBytes(par.Arg(0))
 	if err != nil {
 		par.TracePanic("evalNumElementsOfTuple: %v", err)

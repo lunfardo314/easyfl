@@ -8,7 +8,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/lunfardo314/easyfl/compose"
+	"github.com/lunfardo314/easyfl/engine"
 	"github.com/lunfardo314/easyfl/easyfl_util"
 	"github.com/lunfardo314/easyfl/easyfl_util/testutil"
 	"github.com/lunfardo314/easyfl/slicepool"
@@ -76,12 +76,12 @@ func TestLiterals(t *testing.T) {
 
 func TestCompile(t *testing.T) {
 	t.Run("1", func(t *testing.T) {
-		ret, err := compose.ParseFunctions(formula1)
+		ret, err := engine.ParseFunctions(formula1)
 		require.NoError(t, err)
 		require.NotNil(t, ret)
 	})
 	t.Run("3", func(t *testing.T) {
-		ret, err := compose.ParseFunctions(formula1)
+		ret, err := engine.ParseFunctions(formula1)
 		require.NoError(t, err)
 		require.EqualValues(t, 1, len(ret))
 
@@ -91,7 +91,7 @@ func TestCompile(t *testing.T) {
 		t.Logf("code len: %d", len(code))
 	})
 	t.Run("4", func(t *testing.T) {
-		parsed, err := compose.ParseFunctions(formula1)
+		parsed, err := engine.ParseFunctions(formula1)
 		require.NoError(t, err)
 		require.EqualValues(t, 1, len(parsed))
 

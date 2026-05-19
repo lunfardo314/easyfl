@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/lunfardo314/easyfl/compose"
+	"github.com/lunfardo314/easyfl/engine"
 	"github.com/stretchr/testify/require"
 )
 
@@ -243,7 +243,7 @@ func TestExtractReferencedFunCodes(t *testing.T) {
 	_, _, bytecode, err := lib.CompileExpression("add($0, $1)")
 	require.NoError(t, err)
 
-	refs, err := compose.ExtractReferencedFunCodes(bytecode)
+	refs, err := engine.ExtractReferencedFunCodes(bytecode)
 	require.NoError(t, err)
 	require.NotEmpty(t, refs)
 
@@ -265,7 +265,7 @@ func TestCheckForCycles_NoExtended(t *testing.T) {
 	lib := NewBaseLibrary[any]()
 
 	// No extended functions to check — should be fine
-	err := compose.CheckForCycles(lib, nil)
+	err := engine.CheckForCycles(lib, nil)
 	require.NoError(t, err)
 }
 
@@ -654,7 +654,7 @@ func TestCountParametersFromSource(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.source, func(t *testing.T) {
-			n, err := compose.CountParametersFromSource(tt.source)
+			n, err := engine.CountParametersFromSource(tt.source)
 			require.NoError(t, err)
 			require.Equal(t, tt.expected, n, "source: %s", tt.source)
 		})

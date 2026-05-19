@@ -1,9 +1,9 @@
-package compose
+package engine
 
 // Library-bound embedded function implementations. These differ from the
 // rest of the embedded built-ins (which live in easyfl/embed) by needing
 // access to library-internal state (function lookup, bytecode parsing,
-// prefix matching). They live in compose alongside Library so they can
+// prefix matching). They live in engine alongside Library so they can
 // reach unexported helpers like matchesPrefixes.
 //
 // The names are exported (EvalParse*) so easyfl/embed's resolver can wire

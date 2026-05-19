@@ -3,11 +3,11 @@ package easyfl
 import (
 	"testing"
 
-	"github.com/lunfardo314/easyfl/compose"
+	"github.com/lunfardo314/easyfl/engine"
 	"github.com/stretchr/testify/require"
 )
 
-// TestLibrary_ValidateCompiled exercises compose.ValidateCompiled on the round-tripped
+// TestLibrary_ValidateCompiled exercises engine.ValidateCompiled on the round-tripped
 // base library JSON: parse → re-build → assert hash + bytecodes match.
 func TestLibrary_ValidateCompiled(t *testing.T) {
 	lib := NewBaseLibrary[any]()
@@ -15,7 +15,7 @@ func TestLibrary_ValidateCompiled(t *testing.T) {
 
 	compiled, err := ReadLibraryFromJSON(jsonData)
 	require.NoError(t, err)
-	require.NoError(t, compose.ValidateCompiled[any](compiled))
+	require.NoError(t, engine.ValidateCompiled[any](compiled))
 }
 
 // TestLibrary_Upgrade_Mixed exercises a multi-function upgrade.

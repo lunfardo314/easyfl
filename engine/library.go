@@ -1,4 +1,4 @@
-package compose
+package engine
 
 import (
 	"encoding/binary"
@@ -595,7 +595,7 @@ func (lib *Library[T]) NumFunctions() uint16 {
 // FunctionSymbols returns the symbols of every registered function in
 // declaration order (un-sorted; callers that need a specific order should
 // sort themselves). Intended for inspection / serialisation by code
-// outside the compose package (e.g. the top-level JSON serde helpers).
+// outside the engine package (e.g. the top-level JSON serde helpers).
 func (lib *Library[T]) FunctionSymbols() []string {
 	ret := make([]string, 0, len(lib.funByName))
 	for sym := range lib.funByName {
