@@ -67,16 +67,16 @@ func (lib *Library[T]) EmbedShort(sym string, requiredNumPar int, embeddedFun Em
 
 func (lib *Library[T]) embedShortErr(sym string, requiredNumPar int, embeddedFun EmbeddedFunction[T], embeddedAs string, description ...string) (byte, error) {
 	if lib.numEmbeddedShort >= MaxNumEmbeddedAndReservedShort {
-		return 0, fmt.Errorf("EasyFL: too many embedded short functions")
+		return 0, fmt.Errorf("EasyFL: too many embedded short functions: '%s'", sym)
 	}
 	if lib.existsFunction(sym) {
 		return 0, fmt.Errorf("EasyFL: repeating function '%s'", sym)
 	}
 	if requiredNumPar > 15 {
-		return 0, fmt.Errorf("EasyFL: can't be more than 15 parameters")
+		return 0, fmt.Errorf("EasyFL: can't be more than 15 parameters: '%s'", sym)
 	}
 	if requiredNumPar < 0 {
-		return 0, fmt.Errorf("EasyFL: short embedded vararg functions are not allowed")
+		return 0, fmt.Errorf("EasyFL: short embedded vararg functions are not allowed: '%s", sym)
 	}
 	dscr := &funDescriptor[T]{
 		sym:               sym,
