@@ -350,13 +350,18 @@ func (lib *Library[T]) LocalScriptFromBytesWithCheck(bin LocalScriptBin, check L
 // names aren't on the wire), but per-fn privacy survives serialisation via
 // the flags[n] header array — see compileLocalScript for the encoding.
 func (lib *Library[T]) LocalScriptFromBytes(bin LocalScriptBin) (*LocalScript[T], error) {
-	arities, flags, bodies, err := parseLocalScriptHeader(bin)
+	// Parse the copy, not the caller's slice: the expression trees below
+	// reference the bytes they were built from (inline data literals point
+	// straight into them), so a decoded script that outlives the caller's
+	// buffer must own every byte it refers to — not just the wire form.
+	own := append(LocalScriptBin(nil), bin...)
+	arities, flags, bodies, err := parseLocalScriptHeader(own)
 	if err != nil {
 		return nil, err
 	}
 	n := len(arities)
 	ret := &LocalScript[T]{
-		bin:          append(LocalScriptBin(nil), bin...),
+		bin:          own,
 		funByName:    make(map[string]*funDescriptor[T], n),
 		funByFunCode: make([]*funDescriptor[T], 0, n),
 		expressions:  make([]*Expression[T], 0, n),
@@ -435,12 +440,15 @@ func (s *LocalScript[T]) Function(idx int) (*Expression[T], error) {
 // starts with '_') return an error before any evaluation runs. Hosts that
 // dispatch into a script — most notably callRedeemer in proxima — surface
 // this as a script-validation failure on the consuming transaction.
-func (s *LocalScript[T]) Eval(glb GlobalData[T], idx int, args ...[]byte) ([]byte, error) {
-	expr, err := s.checkAndGetExpression(idx, len(args))
-	if err != nil {
+// Results are named on purpose: the deferred recover below assigns to err,
+// which only reaches the caller if the result is named. With unnamed results
+// a panic in the script body was swallowed and the call returned (nil, nil),
+// silently turning every in-script failure into an empty value.
+func (s *LocalScript[T]) Eval(glb GlobalData[T], idx int, args ...[]byte) (ret []byte, err error) {
+	var expr *Expression[T]
+	if expr, err = s.checkAndGetExpression(idx, len(args)); err != nil {
 		return nil, err
 	}
-	var ret []byte
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("local script: eval #%d: %v", idx, r)
@@ -460,12 +468,12 @@ func (s *LocalScript[T]) Eval(glb GlobalData[T], idx int, args ...[]byte) ([]byt
 // into the redeemed script, eliminating per-redeemer pool creation and
 // result copy-out — which dominate allocations in deeply nested covenant
 // validators.
-func (s *LocalScript[T]) EvalInPool(glb GlobalData[T], spool *slicepool.SlicePool, idx int, args ...[]byte) ([]byte, error) {
-	expr, err := s.checkAndGetExpression(idx, len(args))
-	if err != nil {
+// Results are named for the same reason as Eval — see the note there.
+func (s *LocalScript[T]) EvalInPool(glb GlobalData[T], spool *slicepool.SlicePool, idx int, args ...[]byte) (ret []byte, err error) {
+	var expr *Expression[T]
+	if expr, err = s.checkAndGetExpression(idx, len(args)); err != nil {
 		return nil, err
 	}
-	var ret []byte
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("local script: eval #%d: %v", idx, r)

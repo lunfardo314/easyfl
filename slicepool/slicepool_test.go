@@ -67,3 +67,25 @@ func StringWithCharset(length int, charset string) string {
 func String(length int) string {
 	return StringWithCharset(length, charset)
 }
+
+// AllocData must refuse an oversize request rather than wrap the uint16 size
+// argument of Alloc and hand back a short buffer. The wrapped case was a
+// silently wrong value: copy() filled only the truncated prefix and the
+// caller saw a plausible, shorter slice.
+func TestAllocDataOversizePanics(t *testing.T) {
+	p := New()
+	defer p.Dispose()
+
+	atMax := make([]byte, MaxAllocSize)
+	require.Len(t, p.AllocData(atMax...), MaxAllocSize, "the maximum itself must still be allocatable")
+
+	require.Panics(t, func() {
+		p.AllocData(make([]byte, MaxAllocSize+1)...)
+	})
+
+	// A nil pool takes the same path, so it must refuse too.
+	var nilPool *SlicePool
+	require.Panics(t, func() {
+		nilPool.AllocData(make([]byte, MaxAllocSize+1)...)
+	})
+}

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lunfardo314/easyfl/slicepool"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/blake2b"
 )
@@ -881,4 +882,58 @@ func BenchmarkLocalScriptDeepCall(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+}
+
+// =============================================================================
+// Error propagation and buffer ownership
+// =============================================================================
+
+// A panic raised inside a script body must reach the caller as an error.
+// Before the results of Eval / EvalInPool were named, the deferred recover
+// assigned to a variable the caller never saw, so the call returned
+// (nil, nil) and every in-script failure looked like an empty value.
+func TestLocalScriptEval_PanicSurfacesAsError(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+	// slice(x, 5, 6) on a 1-byte argument panics inside the script body.
+	bin, err := lib.CompileLocalScript(`func boom : slice($0, 5, 6)`)
+	require.NoError(t, err)
+	s, err := lib.LocalScriptFromBytes(bin)
+	require.NoError(t, err)
+
+	glb := lib.NewGlobalDataNoTrace(nil)
+
+	res, err := s.Eval(glb, 0, []byte{0x01})
+	require.Error(t, err, "Eval must report the in-script panic")
+	require.Nil(t, res)
+
+	spool := slicepool.New()
+	defer spool.Dispose()
+	res, err = s.EvalInPool(glb, spool, 0, []byte{0x01})
+	require.Error(t, err, "EvalInPool must report the in-script panic")
+	require.Nil(t, res)
+}
+
+// A decoded script must own every byte its expression trees reference, not
+// just the wire form. Only s.bin used to be cloned, while the trees were
+// built over the caller's slice — so a caller that reused its buffer
+// corrupted an already-decoded script.
+func TestLocalScriptFromBytes_OwnsItsBytes(t *testing.T) {
+	lib := NewBaseLibrary[any]()
+	// A body carrying an inline literal, which is what the trees point into.
+	bin, err := lib.CompileLocalScript(`func lit : concat($0, 0xdeadbeef)`)
+	require.NoError(t, err)
+
+	caller := append(LocalScriptBin(nil), bin...)
+	s, err := lib.LocalScriptFromBytes(caller)
+	require.NoError(t, err)
+
+	// Scribble over the caller's buffer, as a pooled or reused one would be.
+	for i := range caller {
+		caller[i] = 0xAA
+	}
+
+	res, err := s.Eval(lib.NewGlobalDataNoTrace(nil), 0, []byte{0x01})
+	require.NoError(t, err)
+	require.Equal(t, []byte{0x01, 0xde, 0xad, 0xbe, 0xef}, res)
+	require.Equal(t, []byte(bin), []byte(s.Bytes()))
 }

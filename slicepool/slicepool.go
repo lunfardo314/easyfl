@@ -9,7 +9,15 @@
 // the slice allocated with make([]byte, ..) and whole pool is disposed in one operation
 package slicepool
 
-import "sync"
+import (
+	"fmt"
+	"math"
+	"sync"
+)
+
+// MaxAllocSize is the largest slice a pool can hand out, imposed by the
+// uint16 size argument of Alloc.
+const MaxAllocSize = math.MaxUint16
 
 // segmentSize is the per-segment payload size; combined with the 2-byte
 // allocAt field below it keeps each segment at exactly 2 KiB (2048 bytes).
@@ -101,7 +109,17 @@ func (p *SlicePool) Alloc(size uint16) (ret []byte) {
 	return
 }
 
+// AllocData allocates a slice of len(data) and copies data into it.
+//
+// Panics above MaxAllocSize rather than truncating. The size argument of
+// Alloc is a uint16, so the conversion used to wrap silently and hand back a
+// short buffer that copy() then filled only partway — a wrong value, not an
+// error. `repeat` is the reachable case: it builds its result on the heap
+// first, so a large enough count produced a quietly truncated answer.
 func (p *SlicePool) AllocData(data ...byte) (ret []byte) {
+	if len(data) > MaxAllocSize {
+		panic(fmt.Sprintf("slicepool: allocation of %d bytes exceeds the %d-byte maximum", len(data), MaxAllocSize))
+	}
 	ret = p.Alloc(uint16(len(data)))
 	copy(ret, data)
 	return
