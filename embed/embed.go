@@ -439,7 +439,7 @@ func evalLShift64[T any](par *engine.CallParams[T]) []byte {
 }
 
 func evalRShift64[T any](par *engine.CallParams[T]) []byte {
-	a0, a1 := Must2ArithmeticOperands(par, "lshift64")
+	a0, a1 := Must2ArithmeticOperands(par, "rshift64")
 	ret := par.Alloc(8) // true
 	binary.BigEndian.PutUint64(ret, a0>>a1)
 	return ret

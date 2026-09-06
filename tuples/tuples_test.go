@@ -369,3 +369,39 @@ func BenchmarkAtPath(b *testing.B) {
 		_, _ = tree.BytesAtPath(randomPath(8))
 	}
 }
+
+// TestForEachReverse guards the direction of ForEachReverse: it must visit
+// indices from NumElements()-1 down to 0. A regression once incremented the
+// loop variable, so any non-empty tuple ran the index past the end and
+// panicked in MustAt instead of iterating in reverse.
+func TestForEachReverse(t *testing.T) {
+	ls := EmptyTupleEditable()
+	ls.MustPush([]byte("a"))
+	ls.MustPush([]byte("b"))
+	ls.MustPush([]byte("c"))
+	tpl, err := TupleFromBytes(ls.Bytes())
+	require.NoError(t, err)
+
+	var order []int
+	var vals []string
+	tpl.ForEachReverse(func(i int, data []byte) bool {
+		order = append(order, i)
+		vals = append(vals, string(data))
+		return true
+	})
+	require.Equal(t, []int{2, 1, 0}, order)
+	require.Equal(t, []string{"c", "b", "a"}, vals)
+
+	// early stop after the first element visited
+	var visited int
+	tpl.ForEachReverse(func(i int, _ []byte) bool {
+		visited++
+		return false
+	})
+	require.Equal(t, 1, visited)
+
+	// empty tuple: no iteration, no panic
+	empty, err := TupleFromBytes(EmptyTupleEditable().Bytes())
+	require.NoError(t, err)
+	empty.ForEachReverse(func(int, []byte) bool { t.Fatal("must not be called"); return true })
+}

@@ -212,7 +212,7 @@ func (a *Tuple) ForEachReverse(fun func(i int, data []byte) bool) {
 	if n == 0 {
 		return
 	}
-	for i := n - 1; i >= 0; i++ {
+	for i := n - 1; i >= 0; i-- {
 		if !fun(i, a.MustAt(i)) {
 			return
 		}
