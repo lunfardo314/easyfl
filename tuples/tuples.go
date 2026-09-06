@@ -372,6 +372,13 @@ func decodeData(data []byte, numDataLenBytes int, n int) ([]_slice, error) {
 	var sz, to uint32
 
 	for i := range ret {
+		// bounds-check the length prefix itself BEFORE reading it: a truncated
+		// body must produce an error, never an out-of-range panic. This decoder
+		// runs on untrusted bytes (a transaction arriving over gossip/API), so a
+		// missing check here is a remote node crash, not a local bug.
+		if uint64(from)+uint64(numDataLenBytes) > uint64(len(data)) {
+			return nil, errors.New("serialization error: unexpected EOF (length prefix)")
+		}
 		switch numDataLenBytes {
 		case 1:
 			sz = uint32(data[from])
@@ -383,10 +390,11 @@ func decodeData(data []byte, numDataLenBytes int, n int) ([]_slice, error) {
 			panic("wrong lenPrefixType value")
 		}
 		from += uint32(numDataLenBytes)
-		to = from + sz
-		if to > uint32(len(data)) {
+		// uint64 arithmetic so a huge declared size cannot wrap uint32 and slip past the bound
+		if uint64(from)+uint64(sz) > uint64(len(data)) {
 			return nil, errors.New("serialization error: unexpected EOF")
 		}
+		to = from + sz
 		ret[i] = _slice{
 			from: from,
 			to:   to,

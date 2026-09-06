@@ -92,6 +92,16 @@ func StripDataPrefix(data []byte) []byte { return engine.StripDataPrefix(data) }
 // InlineDataBytecode mirrors engine.InlineDataBytecode.
 func InlineDataBytecode(data []byte) []byte { return engine.InlineDataBytecode(data) }
 
+// DefaultMaxEvalResultSize mirrors engine.DefaultMaxEvalResultSize.
+const DefaultMaxEvalResultSize = engine.DefaultMaxEvalResultSize
+
+// SetMaxEvalResultSize mirrors engine.SetMaxEvalResultSize. Call once at
+// startup, before the first evaluation (see the engine doc for the contract).
+func SetMaxEvalResultSize(n int) { engine.SetMaxEvalResultSize(n) }
+
+// MaxEvalResultSize mirrors engine.MaxEvalResultSize.
+func MaxEvalResultSize() int { return engine.MaxEvalResultSize() }
+
 // ExpressionToBytecode mirrors engine.ExpressionToBytecode.
 func ExpressionToBytecode[T any](f *Expression[T]) []byte {
 	return engine.ExpressionToBytecode(f)

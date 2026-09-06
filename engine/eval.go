@@ -10,6 +10,33 @@ import (
 	"github.com/lunfardo314/easyfl/slicepool"
 )
 
+// DefaultMaxEvalResultSize is the default per-evaluation result-size limit in
+// bytes. It is generous relative to any legitimate constraint result (larger
+// than a whole transaction) yet far below what would threaten memory, so hosts
+// need not set it explicitly.
+const DefaultMaxEvalResultSize = 128 * 1024
+
+// maxEvalResultSize bounds the size of any single evaluation result. It is a
+// package-wide guard against amplification turning one small program into a
+// huge allocation and a fatal OOM. Enforced in call.Eval.
+//
+// Deliberately a plain int, not an atomic: it is configuration, set once at
+// startup before any evaluation runs and only read thereafter, so no
+// synchronization is needed. Keeping it a plain int also avoids sync/atomic,
+// which matters for the TinyGo/wasm builds of the wallet.
+var maxEvalResultSize = DefaultMaxEvalResultSize
+
+// SetMaxEvalResultSize sets the package-wide per-evaluation result-size limit in
+// bytes. A value <= 0 disables the check.
+//
+// Not safe to call concurrently with evaluation: it writes a plain package
+// variable with no locking (see maxEvalResultSize). Call it once at startup,
+// before the first eval, and never while evaluations may be running.
+func SetMaxEvalResultSize(n int) { maxEvalResultSize = n }
+
+// MaxEvalResultSize returns the current per-evaluation result-size limit.
+func MaxEvalResultSize() int { return maxEvalResultSize }
+
 // GlobalData represents the data to be evaluated.
 // Type parameter T is type of data provided in the eval context.
 type GlobalData[T any] interface {
@@ -109,12 +136,21 @@ func disposeVarScope[T any](vs []*call[T]) {
 	varScopePool[len(vs)-1].Put(vs)
 }
 
-// Eval evaluates the expression by calling it eval function with the parameter
+// Eval evaluates the expression by calling it eval function with the parameter.
+// Every embedded-function result in the whole evaluation flows through here, so
+// this is the one place the per-evaluation result-size limit is enforced: it
+// bounds amplification (e.g. a local script composing concat into a
+// double-exponential blow-up) that would otherwise reach a fatal, unrecoverable
+// Go OOM. The panic is caught by the host's CatchPanicOrError and turns into a
+// clean rejection of the offending program.
 func (c *call[T]) Eval() []byte {
 	if c.cached {
 		return c.cache
 	}
 	c.cache = c.f.EmbeddedFunction(c.params)
+	if maxEvalResultSize > 0 && len(c.cache) > maxEvalResultSize {
+		panic(fmt.Errorf("easyfl eval: result size %d exceeds limit %d", len(c.cache), maxEvalResultSize))
+	}
 	c.cached = true
 	return c.cache
 }
