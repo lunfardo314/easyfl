@@ -88,15 +88,17 @@ func newEvalContext[T any](varScope []*call[T], glb GlobalData[T], spool *slicep
 	}
 }
 
+// The pools are shared by every instantiation of T, so an object taken from one
+// may belong to a library of another context type; such an object is dropped
+// and a fresh one allocated.
 var (
 	callPool     sync.Pool
 	varScopePool [MaxParameters + 1]sync.Pool
 )
 
 func newCall[T any](f EvalFunction[T], args []*Expression[T], ctx *evalContext[T]) (ret *call[T]) {
-	if retAny := callPool.Get(); retAny != nil {
-		ret = retAny.(*call[T])
-	} else {
+	var ok bool
+	if ret, ok = callPool.Get().(*call[T]); !ok {
 		ret = &call[T]{}
 	}
 	*ret = call[T]{
@@ -119,8 +121,8 @@ func newVarScope[T any](sz int) []*call[T] {
 		return nil
 	}
 	easyfl_util.Assertf(sz <= MaxParameters, "sz <= MaxParameters")
-	if retAny := varScopePool[sz-1].Get(); retAny != nil {
-		return retAny.([]*call[T])
+	if ret, ok := varScopePool[sz-1].Get().([]*call[T]); ok {
+		return ret
 	}
 	return make([]*call[T], sz)
 }

@@ -108,6 +108,7 @@ type (
 	}
 )
 
+// Shared by every instantiation of T: see the note on callPool.
 var (
 	expressionArrayPool [MaxParameters + 1]sync.Pool
 	expressionPool      sync.Pool
@@ -116,9 +117,8 @@ var (
 func newArgArray[T any](argNum int) (ret []*Expression[T]) {
 	easyfl_util.Assertf(argNum <= MaxParameters, "size<=MaxParameters")
 	if argNum > 0 {
-		if retAny := expressionArrayPool[argNum].Get(); retAny != nil {
-			ret = retAny.([]*Expression[T])
-		} else {
+		var ok bool
+		if ret, ok = expressionArrayPool[argNum].Get().([]*Expression[T]); !ok {
 			ret = make([]*Expression[T], argNum)
 		}
 	}
@@ -134,9 +134,8 @@ func disposeArgArray[T any](argArr []*Expression[T]) {
 }
 
 func newExpression[T any](funName string, callPrefix []byte, numArg int) (ret *Expression[T]) {
-	if retAny := expressionPool.Get(); retAny != nil {
-		ret = retAny.(*Expression[T])
-	} else {
+	var ok bool
+	if ret, ok = expressionPool.Get().(*Expression[T]); !ok {
 		ret = &Expression[T]{}
 	}
 	ret.FunctionName = funName
