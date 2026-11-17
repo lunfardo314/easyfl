@@ -239,6 +239,16 @@ func evalNot[T any](par *engine.CallParams[T]) []byte {
 	return nil
 }
 
+// allocChecked allocates n bytes from the pool. The size is checked before the uint16
+// conversion of Alloc, which would otherwise wrap: a short buffer that append writes past,
+// into memory later allocations of the shared pool receive.
+func allocChecked[T any](par *engine.CallParams[T], n int, fun string) []byte {
+	if n > slicepool.MaxAllocSize {
+		par.TracePanic("%s: result size %d exceeds limit %d", fun, n, slicepool.MaxAllocSize)
+	}
+	return par.Alloc(uint16(n))
+}
+
 func evalConcat[T any](par *engine.CallParams[T]) []byte {
 	var args [engine.MaxParameters][]byte
 	a := args[:par.Arity()]
@@ -248,12 +258,7 @@ func evalConcat[T any](par *engine.CallParams[T]) []byte {
 		totalSize += len(a[i])
 	}
 
-	// Checked before the uint16 conversion of Alloc, which would otherwise wrap
-	// and leave append to write past the allocation into the shared slice pool.
-	if totalSize > slicepool.MaxAllocSize {
-		par.TracePanic("evalConcat: result size %d exceeds limit %d", totalSize, slicepool.MaxAllocSize)
-	}
-	ret := par.Alloc(uint16(totalSize))[:0]
+	ret := allocChecked(par, totalSize, "evalConcat")[:0]
 	for i := range a {
 		ret = append(ret, a[i]...)
 	}
@@ -393,7 +398,7 @@ func evalBitwiseAND[T any](par *engine.CallParams[T]) []byte {
 	if len(a0) != len(a1) {
 		par.TracePanic("evalBitwiseAND: equal length arguments expected: %s -- %s", easyfl_util.FmtLazy(a0), easyfl_util.FmtLazy(a1))
 	}
-	ret := par.Alloc(uint16(len(a0))) // true
+	ret := allocChecked(par, len(a0), "evalBitwiseAND")
 
 	for i := range a0 {
 		ret[i] = a0[i] & a1[i]
@@ -407,7 +412,7 @@ func evalBitwiseOR[T any](par *engine.CallParams[T]) []byte {
 	if len(a0) != len(a1) {
 		par.TracePanic("evalBitwiseOR: equal length arguments expected: %s -- %s", easyfl_util.FmtLazy(a0), easyfl_util.FmtLazy(a1))
 	}
-	ret := par.Alloc(uint16(len(a0))) // true
+	ret := allocChecked(par, len(a0), "evalBitwiseOR")
 	for i := range a0 {
 		ret[i] = a0[i] | a1[i]
 	}
@@ -420,7 +425,7 @@ func evalBitwiseXOR[T any](par *engine.CallParams[T]) []byte {
 	if len(a0) != len(a1) {
 		par.TracePanic("evalBitwiseXOR: equal length arguments expected: %s -- %s", easyfl_util.FmtLazy(a0), easyfl_util.FmtLazy(a1))
 	}
-	ret := par.Alloc(uint16(len(a0))) // true
+	ret := allocChecked(par, len(a0), "evalBitwiseXOR")
 	for i := range a0 {
 		ret[i] = a0[i] ^ a1[i]
 	}
@@ -429,7 +434,7 @@ func evalBitwiseXOR[T any](par *engine.CallParams[T]) []byte {
 
 func evalBitwiseNOT[T any](par *engine.CallParams[T]) []byte {
 	a0 := par.Arg(0)
-	ret := par.Alloc(uint16(len(a0))) // true
+	ret := allocChecked(par, len(a0), "evalBitwiseNOT")
 	for i := range a0 {
 		ret[i] = ^a0[i]
 	}
