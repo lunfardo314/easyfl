@@ -104,7 +104,9 @@ func (p *SlicePool) Alloc(size uint16) (ret []byte) {
 		}
 		p.segs = append(p.segs, seg)
 	}
-	ret = seg.array[seg.allocAt : seg.allocAt+size]
+	// Capacity capped at the size: an append past the allocation reallocates
+	// instead of writing into memory later allocations assume to be zero.
+	ret = seg.array[seg.allocAt : seg.allocAt+size : seg.allocAt+size]
 	seg.allocAt += size
 	return
 }

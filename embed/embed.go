@@ -248,6 +248,11 @@ func evalConcat[T any](par *engine.CallParams[T]) []byte {
 		totalSize += len(a[i])
 	}
 
+	// Checked before the uint16 conversion of Alloc, which would otherwise wrap
+	// and leave append to write past the allocation into the shared slice pool.
+	if totalSize > slicepool.MaxAllocSize {
+		par.TracePanic("evalConcat: result size %d exceeds limit %d", totalSize, slicepool.MaxAllocSize)
+	}
 	ret := par.Alloc(uint16(totalSize))[:0]
 	for i := range a {
 		ret = append(ret, a[i]...)
