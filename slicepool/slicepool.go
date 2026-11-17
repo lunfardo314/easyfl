@@ -108,6 +108,9 @@ func (p *SlicePool) Alloc(size uint16) (ret []byte) {
 	// instead of writing into memory later allocations assume to be zero.
 	ret = seg.array[seg.allocAt : seg.allocAt+size : seg.allocAt+size]
 	seg.allocAt += size
+	// Callers rely on fresh memory being zero (uint8Bytes copies a short value into the low
+	// bytes). Clearing here makes that hold whatever was written into the segment before.
+	clear(ret)
 	return
 }
 

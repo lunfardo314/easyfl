@@ -2,6 +2,7 @@ package embed_test
 
 import (
 	"testing"
+	"unsafe"
 
 	"github.com/lunfardo314/easyfl"
 	"github.com/lunfardo314/easyfl/slicepool"
@@ -52,4 +53,21 @@ func TestSlicePoolAllocIsCapped(t *testing.T) {
 	_ = append(buf, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff)
 
 	require.Equal(t, make([]byte, 8), spool.Alloc(8))
+}
+
+// TestSlicePoolAllocIsZeroed checks that the pool hands out zeroed memory even when the
+// segment past the last allocation was written into, as a builtin writing past its own
+// allocation did before the slices were capped. The write is simulated with unsafe.
+func TestSlicePoolAllocIsZeroed(t *testing.T) {
+	spool := slicepool.New()
+	defer spool.Dispose()
+
+	buf := spool.Alloc(8)
+	beyond := unsafe.Slice(&buf[0], 64)
+	for i := range beyond {
+		beyond[i] = 0xff
+	}
+
+	require.Equal(t, make([]byte, 8), spool.Alloc(8))
+	require.Equal(t, make([]byte, 16), spool.Alloc(16))
 }
