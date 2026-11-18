@@ -616,6 +616,7 @@ func (lib *Library[T]) Clone() *Library[T] {
 		numEmbeddedShort: lib.numEmbeddedShort,
 		numEmbeddedLong:  lib.numEmbeddedLong,
 		numExtended:      lib.numExtended,
+		rules:            lib.rules,
 	}
 	if lib.VersionData != nil {
 		ret.VersionData = make([]byte, len(lib.VersionData))
@@ -648,6 +649,17 @@ func (lib *Library[T]) Clone() *Library[T] {
 }
 
 func (lib *Library[T]) FunctionNameByCallPrefix(prefix []byte, localScript ...*LocalScript[T]) (sym string, err error) {
+	if len(prefix) == 0 {
+		err = io.ErrUnexpectedEOF
+		return
+	}
+	// The first byte of inline data of 64 bytes or more also carries the
+	// long-call bit, so without this check its first two bytes read as a
+	// function code.
+	if lib.rules.Strict && prefix[0]&FirstByteDataMask != 0 {
+		err = fmt.Errorf("inline data is not a call prefix")
+		return
+	}
 	if prefix[0]&FirstByteLongCallMask == 0 {
 		// short call
 		if prefix[0] <= LastEmbeddedReserved {

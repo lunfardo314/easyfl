@@ -89,12 +89,13 @@ func (p *SlicePool) Alloc(size uint16) (ret []byte) {
 	if size > segmentSize {
 		return make([]byte, size)
 	}
+	// Only the last segment is tried: scanning all of them made each allocation
+	// cost the number of segments, quadratic over one evaluation, which a
+	// program making millions of small allocations turned into a CPU attack.
+	// The space left in earlier segments is given up.
 	var seg *segment
-	for i := range p.segs {
-		if p.segs[i].allocAt+size < segmentSize {
-			seg = p.segs[i]
-			break
-		}
+	if n := len(p.segs); n > 0 && p.segs[n-1].allocAt+size < segmentSize {
+		seg = p.segs[n-1]
 	}
 	if seg == nil {
 		if s := segments.Get(); s != nil {

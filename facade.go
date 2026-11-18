@@ -36,6 +36,7 @@ type (
 	LocalScriptCallSiteCheck[T any] = engine.LocalScriptCallSiteCheck[T]
 	LibraryFromJSON                 = engine.LibraryFromJSON
 	FuncDescriptorJSON              = engine.FuncDescriptorJSON
+	EngineRules                     = engine.EngineRules
 )
 
 // Re-exported constants from engine.

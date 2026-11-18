@@ -105,6 +105,8 @@ type (
 		// pendingBatch is a staging area for extended functions collected by
 		// IntroduceUpdateJSON / IntroduceUpdateMany, finalized by CommitUpdate
 		pendingBatch []pendingExtendedFunc
+		// rules are the host-enabled evaluation rules, see EngineRules
+		rules EngineRules
 	}
 )
 

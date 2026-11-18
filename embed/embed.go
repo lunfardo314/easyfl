@@ -123,6 +123,10 @@ func evalByte[T any](par *engine.CallParams[T]) []byte {
 	if len(idx) != 1 || int(idx[0]) >= len(data) {
 		par.TracePanic("byte:: data: %s, idx: %s -- wrong index value", easyfl_util.FmtLazy(data), easyfl_util.FmtLazy(idx))
 	}
+	if par.Strict() {
+		// idx[0]+1 in byte arithmetic wraps to 0 at 255
+		return data[idx[0] : int(idx[0])+1]
+	}
 	ret := data[idx[0] : idx[0]+1]
 	return ret
 }
@@ -216,6 +220,13 @@ func evalSelectCaseByIndex[T any](par *engine.CallParams[T]) []byte {
 	if err != nil {
 		par.TracePanic("evalSelectCaseByIndex: invalid argument")
 		return nil
+	}
+	if par.Strict() {
+		// the whole index, not its low byte
+		if idx >= uint64(par.Arity())-1 {
+			return nil
+		}
+		return par.Arg(byte(idx) + 1)
 	}
 	if byte(idx)+1 >= par.Arity() {
 		return nil
@@ -455,8 +466,16 @@ func evalRShift64[T any](par *engine.CallParams[T]) []byte {
 	return ret
 }
 
+// tupleParseUnits is what parsing a tuple charges per byte of its data: the
+// decoder allocates per element, at roughly one call's cost per 32 bytes.
+func tupleParseUnits(data []byte) int {
+	return len(data) / 32
+}
+
 func evalAtTuple8[T any](par *engine.CallParams[T]) []byte {
-	arr, err := tuples.TupleFromBytes(par.Arg(0))
+	data := par.Arg(0)
+	par.Charge(tupleParseUnits(data))
+	arr, err := tuples.TupleFromBytes(data)
 	if err != nil {
 		par.TracePanic("evalAtTuple8: %v", err)
 	}
@@ -472,7 +491,9 @@ func evalAtTuple8[T any](par *engine.CallParams[T]) []byte {
 }
 
 func evalNumElementsOfTuple[T any](par *engine.CallParams[T]) []byte {
-	arr, err := tuples.TupleFromBytes(par.Arg(0))
+	data := par.Arg(0)
+	par.Charge(tupleParseUnits(data))
+	arr, err := tuples.TupleFromBytes(data)
 	if err != nil {
 		par.TracePanic("evalNumElementsOfTuple: %v", err)
 	}

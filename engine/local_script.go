@@ -483,6 +483,26 @@ func (s *LocalScript[T]) EvalInPool(glb GlobalData[T], spool *slicepool.SlicePoo
 	return ret, err
 }
 
+// EvalNested evaluates function idx inside the evaluation par belongs to:
+// same data context, slice pool and budget, so the call depth and call count
+// of a nested script add to its caller's (see EngineRules). With a fresh
+// budget per dispatch, a chain of scripts would multiply the limits. Hosts
+// dispatching into a script from a builtin, such as proxima's callRedeemer,
+// use this instead of EvalInPool.
+func (s *LocalScript[T]) EvalNested(par *CallParams[T], idx int, args ...[]byte) (ret []byte, err error) {
+	var expr *Expression[T]
+	if expr, err = s.checkAndGetExpression(idx, len(args)); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("local script: eval #%d: %v", idx, r)
+		}
+	}()
+	ret = evalExpressionWithBudget(par.glb, par.spool, par.budget, expr, args...)
+	return ret, err
+}
+
 // checkAndGetExpression validates idx (range + privacy + arity) and
 // returns the expression tree to evaluate. Shared between Eval and
 // EvalInPool so dispatch rules stay in one place.

@@ -634,6 +634,12 @@ func (lib *Library[T]) expressionFromBytecode(bytecode []byte, localScript ...*L
 	if dataSize >= 127 {
 		prefixSize = 3
 	}
+	// The long form under 127 bytes was decoded with a 1-byte prefix, so its
+	// length bytes became part of the value, while InlineData and the
+	// decompiler read it differently.
+	if itIsData && lib.rules.Strict && bytecode[0] == 0xff && dataSize < 127 {
+		return nil, nil, 0xff, fmt.Errorf("non-canonical inline data: long form for %d bytes", dataSize)
+	}
 	if itIsData {
 		var sym string
 		data := dataWithPrefix[prefixSize : prefixSize+dataSize]
@@ -985,7 +991,7 @@ func makeEmbeddedFunForExpression[T any](sym string, expr *Expression[T]) Embedd
 		}
 		defer disposeVarScope(varScope)
 
-		ret := evalExpression(par.glb, par.spool, expr, varScope)
+		ret := evalExpression(par.glb, par.spool, par.budget, expr, varScope)
 
 		return ret
 	}

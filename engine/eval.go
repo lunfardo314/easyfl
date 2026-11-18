@@ -64,6 +64,7 @@ type evalContext[T any] struct {
 	glb      GlobalData[T]
 	spool    *slicepool.SlicePool
 	varScope []*call[T]
+	budget   *evalBudget
 }
 
 // CallParams is a structure through which the function accesses its evaluation context and call arguments
@@ -80,11 +81,12 @@ type call[T any] struct {
 	cached bool
 }
 
-func newEvalContext[T any](varScope []*call[T], glb GlobalData[T], spool *slicepool.SlicePool) *evalContext[T] {
+func newEvalContext[T any](varScope []*call[T], glb GlobalData[T], spool *slicepool.SlicePool, budget *evalBudget) *evalContext[T] {
 	return &evalContext[T]{
 		varScope: varScope,
 		spool:    spool,
 		glb:      glb,
+		budget:   budget,
 	}
 }
 
@@ -176,6 +178,9 @@ func (p *CallParams[T]) Arity() byte {
 }
 
 func (ctx *evalContext[T]) eval(f *Expression[T]) []byte {
+	ctx.budget.enter()
+	defer ctx.budget.leave()
+
 	c := newCall(f.EvalFunc, f.Args, ctx)
 	defer disposeCall(c)
 
@@ -221,6 +226,17 @@ func (p *CallParams[T]) RequireNoError(err error) {
 	p.TracePanic("error occurred: %v", err)
 }
 
+// Charge adds units to the call count of the evaluation, for a builtin whose
+// work grows with its input rather than being one call's worth.
+func (p *CallParams[T]) Charge(units int) {
+	p.budget.charge(units)
+}
+
+// Strict reports whether the library's Strict engine rule is on.
+func (p *CallParams[T]) Strict() bool {
+	return p.budget.rules.Strict
+}
+
 func (p *CallParams[T]) Alloc(size uint16) []byte {
 	return p.spool.Alloc(size)
 }
@@ -252,8 +268,8 @@ func (p *CallParams[T]) GetBytecode(paramNr byte) []byte {
 	return p.varScope[paramNr].f.bytecode
 }
 
-func evalExpression[T any](glb GlobalData[T], spool *slicepool.SlicePool, f *Expression[T], varScope []*call[T]) []byte {
-	return newEvalContext(varScope, glb, spool).eval(f)
+func evalExpression[T any](glb GlobalData[T], spool *slicepool.SlicePool, budget *evalBudget, f *Expression[T], varScope []*call[T]) []byte {
+	return newEvalContext(varScope, glb, spool, budget).eval(f)
 }
 
 // EvalExpression evaluates the expression in the context of any data
@@ -285,15 +301,19 @@ func EvalExpression[T any](glb GlobalData[T], f *Expression[T], args ...[]byte) 
 // of the pool's lifetime (so the pool can be disposed straight after) use
 // EvalExpressionWithSlicePool instead.
 func EvalExpressionInPool[T any](glb GlobalData[T], spool *slicepool.SlicePool, f *Expression[T], args ...[]byte) []byte {
+	return evalExpressionWithBudget(glb, spool, newEvalBudget(glb), f, args...)
+}
+
+func evalExpressionWithBudget[T any](glb GlobalData[T], spool *slicepool.SlicePool, budget *evalBudget, f *Expression[T], args ...[]byte) []byte {
 	argsForData := make([]*call[T], len(args))
 
-	ctx := newEvalContext(nil, glb, spool)
+	ctx := newEvalContext(nil, glb, spool, budget)
 	for i, d := range args {
 		dfun, err := dataFunction[T](d)
 		easyfl_util.AssertNoError(err)
 		argsForData[i] = newCall[T](dfun, nil, ctx)
 	}
-	return evalExpression(glb, spool, f, argsForData)
+	return evalExpression(glb, spool, budget, f, argsForData)
 }
 
 // EvalExpressionWithSlicePool evaluates an expression using the supplied

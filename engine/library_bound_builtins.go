@@ -42,6 +42,8 @@ func (lib *Library[T]) EvalParseInlineData(par *CallParams[T]) []byte {
 func (lib *Library[T]) EvalParseBytecode(par *CallParams[T]) (ret []byte) {
 	par.Require(par.Arity() >= 2, "evalParseBytecode: wrong number of arguments")
 	a0 := par.Arg(0)
+	// parsing costs in proportion to the bytecode, not one call
+	par.Charge(len(a0))
 	sym, prefix, args, err := lib.ParseBytecodeOneLevel(a0)
 	if err != nil {
 		err = fmt.Errorf("evalParseBytecode: %v", err)
